@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: qlcv_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: qlcv_db
+      POSTGRES_USER: qlcv_app
+      POSTGRES_PASSWORD: QLCV@2026Strong!
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "5432:5432"
+    volumes:
+      - qlcv_postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qlcv_app -d qlcv_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: qlcv_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - qlcv_redis_data:/data
+
+  adminer:
+    image: adminer:latest
+    container_name: qlcv_adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+
+volumes:
+  qlcv_postgres_data:
+  qlcv_redis_data:

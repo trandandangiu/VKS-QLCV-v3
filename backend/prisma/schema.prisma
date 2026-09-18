@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USERS
+// ============================================
+model User {
+  id            String    @id @default(uuid())
+  username      String    @unique
+  passwordHash  String    @map("password_hash")
+  fullName      String    @map("full_name")
+  role          String
+  roomCode      String    @map("room_code")
+  pvtManagerId  String?   @map("pvt_manager_id")
+  phone         String?
+  email         String?
+  active        Boolean   @default(true)
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([role])
+  @@index([roomCode])
+  @@map("users")
+}
+
+// ============================================
+// DISPATCHES
+// ============================================
+model Dispatch {
+  id              String    @id @default(uuid())
+  soCongVan       String    @map("so_cong_van")
+  ngayGui         DateTime  @map("ngay_gui") @db.Date
+  ngayPhatHanh    DateTime? @map("ngay_phat_hanh") @db.Date
+  tenCongVan      String    @map("ten_cong_van")
+  hanBaoCaoXuLy   DateTime  @map("han_bao_cao_xu_ly") @db.Date
+  thoiHanXuLy     String?   @map("thoi_han_xu_ly")
+  donViBanHanh    String    @map("don_vi_ban_hanh")
+  nguoiThucHien   String?   @map("nguoi_thuc_hien")
+  ghiChu          String?
+  trangThai       String    @default("DANG_XU_LY") @map("trang_thai")
+  mucDoKhan       String    @default("THUONG") @map("muc_do_khan")
+  tienDo          Int       @default(0) @map("tien_do")
+  customFields    Json?     @map("custom_fields")
+
+  assignedPvtId   String?   @map("assigned_pvt_id")
+  assignedPvtName String?   @map("assigned_pvt_name")
+  vtChiDao        String?   @map("vt_chi_dao")
+  assignedTpId    String?   @map("assigned_tp_id")
+  assignedTpName  String?   @map("assigned_tp_name")
+  pvtChiDao       String?   @map("pvt_chi_dao")
+  baoCaoTienDo    String?   @map("bao_cao_tien_do")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  assignments     Assignment[]
+
+  @@index([trangThai])
+  @@index([hanBaoCaoXuLy])
+  @@index([assignedPvtId])
+  @@index([assignedTpId])
+  @@map("dispatches")
+}
+
+// ============================================
+// ASSIGNMENTS
+// ============================================
+model Assignment {
+  id            String    @id @default(uuid())
+  dispatchId    String    @map("dispatch_id")
+  fromUserId    String    @map("from_user_id")
+  fromUserName  String    @map("from_user_name")
+  toUserId      String    @map("to_user_id")
+  toUserName    String    @map("to_user_name")
+  assignLevel   String    @map("assign_level")
+  chiDao        String?
+  hanXuLy       DateTime? @map("han_xu_ly") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  dispatch      Dispatch  @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+
+  @@index([dispatchId])
+  @@map("assignments")
+}
+
+// ============================================
+// COLUMNS
+// ============================================
+model Column {
+  id          String  @id @default(uuid())
+  label       String
+  type        String
+  required    Boolean @default(false)
+  visible     Boolean @default(true)
+  isCustom    Boolean @default(false) @map("is_custom")
+  order       Int     @default(0)
+  width       String?
+  options     Json?
+  description String?
+
+  @@map("columns")
+}
+
+// ============================================
+// SYSTEM_SETTINGS
+// ============================================
+model SystemSetting {
+  key         String   @id
+  value       String
+  type        String   @default("string")
+  category    String   @default("SYSTEM")
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================
+// AUDIT_LOGS
+// ============================================
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  action      String
+  entityType  String?  @map("entity_type")
+  entityId    String?  @map("entity_id")
+  oldValue    Json?    @map("old_value")
+  newValue    Json?    @map("new_value")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
