@@ -79,126 +79,101 @@ export const Header: React.FC = () => {
               <h1 
                 className="text-base sm:text-xl font-black tracking-wide uppercase text-white"
               >
-                Quản lý công việc
+                Hệ thống báo cáo công việc
               </h1>
             </div>
           </Link>
 
           {/* User Menu & Navigation */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Direct Role Spaces Shortcuts */}
-            <div className="hidden md:flex items-center gap-1 text-xs">
-              <Link
-                to="/vt"
-                className="px-2.5 py-1 font-bold text-amber-200 hover:text-white hover:bg-white/10 rounded-lg transition"
-              >
-                Viện Trưởng
-              </Link>
-              <Link
-                to="/admin"
-                className="px-2.5 py-1 font-bold text-slate-200 hover:text-white hover:bg-white/10 rounded-lg transition"
-              >
-                Quản Trị
-              </Link>
-            </div>
-
+          <div className="flex items-center gap-3">
             {/* Current User Pill & Switch Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setIsDropdownOpen(prev => !prev)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 transition cursor-pointer text-xs"
+                className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 transition cursor-pointer text-xs shadow-xs"
               >
                 <div className="text-left hidden sm:block">
-                  <div className="text-[10px] text-amber-300 font-semibold leading-tight">
+                  <div className="text-[10px] text-amber-300 font-medium tracking-wide">
                     {currentUser ? currentUser.fullName : 'Chưa đăng nhập'}
                   </div>
-                  <div className="font-bold truncate max-w-[130px]">
+                  <div className="font-semibold truncate max-w-[140px] mt-0.5">
                     {getRoleBadge()}
                   </div>
                 </div>
                 <div className="sm:hidden">
                   {getRoleBadge()}
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-white/70" />
+                <ChevronDown className="w-3.5 h-3.5 text-white/80 transition-transform duration-150" />
               </button>
 
               {/* Dropdown Menu */}
               {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 text-slate-800 z-50 animate-fadeIn">
-                  <div className="px-4 py-2 border-b border-slate-100">
-                    <div className="text-[11px] text-slate-400 font-semibold uppercase">Đang đăng nhập:</div>
-                    <div className="font-bold text-xs text-slate-900 mt-0.5">
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 text-slate-800 z-50 animate-fadeIn font-sans">
+                  <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70 rounded-t-2xl">
+                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Tài khoản đang đăng nhập</div>
+                    <div className="font-bold text-sm text-slate-900 mt-0.5">
                       {currentUser?.fullName || 'Khách'}
                     </div>
-                    <div className="text-[11px] text-red-700 font-mono">
-                      {currentUser?.role} ({currentUser?.roomCode})
+                    <div className="text-xs text-red-700 font-semibold mt-0.5 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-red-600" />
+                      <span>{currentUser?.role} ({currentUser?.roomCode})</span>
                     </div>
                   </div>
 
                   <div className="py-1">
                     <Link
-                      to="/login"
+                      to="/"
                       onClick={() => setIsDropdownOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-100 transition"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 hover:text-blue-700 transition font-medium"
                     >
-                      <UserCog className="w-4 h-4 text-red-700" />
-                      <span>Đổi tài khoản / Đăng nhập vai trò khác</span>
+                      <Eye className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Trang hiển thị công khai toàn viện</span>
                     </Link>
 
                     <Link
                       to="/vt"
                       onClick={() => setIsDropdownOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-100 transition"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 hover:text-amber-700 transition font-medium"
                     >
-                      <Crown className="w-4 h-4 text-amber-600" />
-                      <span>Bàn làm việc Viện Trưởng (/vt)</span>
+                      <Crown className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Bàn làm việc Viện Trưởng</span>
                     </Link>
 
                     <Link
                       to="/admin"
                       onClick={() => setIsDropdownOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-100 transition"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 hover:text-red-700 transition font-medium"
                     >
-                      <Shield className="w-4 h-4 text-blue-600" />
-                      <span>Bàn Quản Trị Hệ Thống (/admin)</span>
+                      <LayoutDashboard className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>Trang Quản Trị Hệ Thống (Admin)</span>
                     </Link>
 
                     <Link
-                      to="/"
+                      to="/login"
                       onClick={() => setIsDropdownOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-100 transition"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 hover:text-purple-700 transition font-medium"
                     >
-                      <Eye className="w-4 h-4 text-emerald-600" />
-                      <span>Xem Bảng Công Khai</span>
+                      <UserCog className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span>Đổi tài khoản / Vai trò khác</span>
                     </Link>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-1">
+                  <div className="border-t border-slate-100 pt-1 mt-1">
                     <button
                       onClick={() => {
                         logout();
                         setIsDropdownOpen(false);
                         navigate('/login');
                       }}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 transition cursor-pointer text-left font-semibold"
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 transition cursor-pointer text-left font-semibold"
                     >
-                      <LogOut className="w-4 h-4" />
-                      <span>Đăng xuất</span>
+                      <LogOut className="w-4 h-4 shrink-0" />
+                      <span>Đăng xuất hệ thống</span>
                     </button>
                   </div>
                 </div>
               )}
             </div>
-
-            {/* Quick Link to Public Page */}
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/25 transition shadow-xs whitespace-nowrap"
-              title="Chuyển sang trang bảng hiển thị cho cơ quan"
-            >
-              <Eye className="w-4 h-4" />
-              <span className="hidden sm:inline">Trang hiển thị</span>
-            </Link>
           </div>
         </div>
       </div>

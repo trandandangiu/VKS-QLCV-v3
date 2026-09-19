@@ -1,3 +1,4 @@
+// frontend/src/hooks/useDispatches.ts
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ColumnDefinition,
@@ -6,25 +7,36 @@ import {
   DispatchStatus,
   ExcelImportAnalysis,
   LeadershipDashboardStats,
-  ReconciliationStrategy
+  ReconciliationStrategy,
 } from '../types/dispatch';
-import {
-  DEFAULT_COLUMNS,
-  loadColumnsFromStorage,
-  loadDispatchesFromStorage,
-  saveColumnsToStorage,
-  saveDispatchesToStorage,
-  clearAllDispatchesFromStorage,
-  restoreSampleDispatchesToStorage
-} from '../services/dispatchStorage';
+import { apiClient } from '../services/apiClient';
 import { calculateTimeRemaining, resolveDispatchStatus } from '../services/excelService';
 import { getDispatchSortTimestamp, parseDateToTimestamp } from '../services/dateSort';
 
+// ============================================
+// DEFAULT COLUMNS
+// ============================================
+const DEFAULT_COLUMNS: ColumnDefinition[] = [
+  { id: 'stt', label: 'STT', type: 'number', visible: true, isCustom: false, width: '60px', required: false },
+  { id: 'soCongVan', label: 'Số công văn', type: 'text', visible: true, isCustom: false, width: '140px', required: true },
+  { id: 'ngayGui', label: 'Ngày gửi', type: 'date', visible: true, isCustom: false, width: '110px', required: true },
+  { id: 'tenCongVan', label: 'Tên công văn', type: 'text', visible: true, isCustom: false, width: '320px', required: true },
+  { id: 'hanBaoCaoXuLy', label: 'Hạn báo cáo', type: 'date', visible: true, isCustom: false, width: '120px', required: false },
+  { id: 'thoiHanXuLy', label: 'Thời hạn xử lý', type: 'text', visible: true, isCustom: false, width: '150px', required: false },
+  { id: 'donViBanHanh', label: 'Đơn vị ban hành', type: 'text', visible: true, isCustom: false, width: '180px', required: true },
+  { id: 'nguoiThucHien', label: 'Người thực hiện', type: 'text', visible: true, isCustom: false, width: '180px', required: false },
+  { id: 'ghiChu', label: 'Ghi chú', type: 'text', visible: true, isCustom: false, width: '250px', required: false },
+];
+
 export const useDispatches = () => {
-  const [dispatches, setDispatches] = useState<Dispatch[]>(() => loadDispatchesFromStorage());
-  const [columns, setColumns] = useState<ColumnDefinition[]>(() => loadColumnsFromStorage());
-  
-  // Active Filter state
+  // ============================================
+  // STATE
+  // ============================================
+  const [dispatches, setDispatches] = useState<Dispatch[]>([]);
+  const [columns, setColumns] = useState<ColumnDefinition[]>(DEFAULT_COLUMNS);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [filters, setFilters] = useState<DispatchFilter>({
     searchQuery: '',
     status: 'ALL',
@@ -33,166 +45,131 @@ export const useDispatches = () => {
     urgency: 'ALL',
     dateFrom: '',
     dateTo: '',
-    overdueOnly: false
+    overdueOnly: false,
   });
 
-  // Sorting state - mặc định luôn hiển thị công văn MỚI NHẤT lên đầu
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Dispatch | string;
     direction: 'asc' | 'desc';
   }>({
     key: 'ngayGui',
-    direction: 'desc'
+    direction: 'desc',
   });
 
-  // Selected row IDs for batch operations
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Keep storage in sync
-  useEffect(() => {
-    saveDispatchesToStorage(dispatches);
-  }, [dispatches]);
-
-  useEffect(() => {
-    saveColumnsToStorage(columns);
-  }, [columns]);
-
-  // Dynamic status evaluation on load & intervals
-  useEffect(() => {
-    setDispatches(prev =>
-      prev.map(disp => {
-        const resolved = resolveDispatchStatus(disp);
-        const calc = calculateTimeRemaining(disp.hanBaoCaoXuLy, resolved, disp.thoiHanXuLy);
-        if (disp.thoiHanXuLy !== calc.text || disp.trangThai !== resolved) {
-          return {
-            ...disp,
-            thoiHanXuLy: calc.text,
-            trangThai: resolved
-          };
-        }
-        return disp;
-      })
-    );
+  // ============================================
+  // LOAD FROM API
+  // ============================================
+  const loadDispatches = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await apiClient.getDispatches({ limit: 500 });
+      setDispatches(data);
+    } catch (e: any) {
+      setError(e.message || 'Lỗi tải dữ liệu');
+      console.error('Lỗi load dispatches:', e);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  // Filtered & Sorted Dispatches
+  useEffect(() => {
+    loadDispatches();
+  }, [loadDispatches]);
+
+  // ============================================
+  // FILTERED & SORTED
+  // ============================================
   const filteredDispatches = useMemo(() => {
     return dispatches
       .filter(item => {
-        // Search query across multiple fields
+        // Search
         if (filters.searchQuery.trim()) {
           const q = filters.searchQuery.toLowerCase();
-          const matchNumber = item.soCongVan.toLowerCase().includes(q);
-          const matchTitle = item.tenCongVan.toLowerCase().includes(q);
-          const matchUnit = item.donViBanHanh.toLowerCase().includes(q);
-          const matchAssignee = item.nguoiThucHien.toLowerCase().includes(q);
+          const matchNumber = item.soCongVan?.toLowerCase().includes(q);
+          const matchTitle = item.tenCongVan?.toLowerCase().includes(q);
+          const matchUnit = item.donViBanHanh?.toLowerCase().includes(q);
+          const matchAssignee = item.nguoiThucHien?.toLowerCase().includes(q);
           const matchNotes = item.ghiChu?.toLowerCase().includes(q) || false;
-          
-          // Check custom fields
-          const matchCustom = item.customFields
-            ? Object.values(item.customFields).some(val =>
-                String(val).toLowerCase().includes(q)
-              )
-            : false;
 
-          if (!matchNumber && !matchTitle && !matchUnit && !matchAssignee && !matchNotes && !matchCustom) {
+          if (!matchNumber && !matchTitle && !matchUnit && !matchAssignee && !matchNotes) {
             return false;
           }
         }
 
-        // Status filter (unified with resolveDispatchStatus)
+        // Status
         if (filters.status !== 'ALL') {
-          const itemStatus = resolveDispatchStatus(item);
-          if (itemStatus !== filters.status) return false;
+          const resolved = resolveDispatchStatus(item);
+          if (filters.status === 'QUA_HAN' && !filters.overdueOnly) {
+            if (resolved !== 'QUA_HAN') return false;
+          } else if (resolved !== filters.status) {
+            return false;
+          }
         }
 
-        // Overdue filter toggle
-        if (filters.overdueOnly && resolveDispatchStatus(item) !== 'QUA_HAN') {
-          return false;
+        // Overdue only
+        if (filters.overdueOnly) {
+          const resolved = resolveDispatchStatus(item);
+          if (resolved !== 'QUA_HAN') return false;
         }
 
-        // Unit filter
-        if (filters.donViBanHanh !== 'ALL' && item.donViBanHanh !== filters.donViBanHanh) {
-          return false;
-        }
-
-        // Assignee filter
-        if (filters.nguoiThucHien !== 'ALL' && item.nguoiThucHien !== filters.nguoiThucHien) {
-          return false;
-        }
-
-        // Urgency level filter
+        // Urgency
         if (filters.urgency !== 'ALL' && item.mucDoKhan !== filters.urgency) {
           return false;
         }
 
-        // Date range
-        if (filters.dateFrom) {
-          if (item.ngayGui < filters.dateFrom && item.hanBaoCaoXuLy < filters.dateFrom) {
-            return false;
-          }
+        // Unit
+        if (filters.donViBanHanh !== 'ALL' && item.donViBanHanh !== filters.donViBanHanh) {
+          return false;
         }
-        if (filters.dateTo) {
-          if (item.ngayGui > filters.dateTo && item.hanBaoCaoXuLy > filters.dateTo) {
-            return false;
-          }
+
+        // Assignee
+        if (filters.nguoiThucHien !== 'ALL' && item.nguoiThucHien !== filters.nguoiThucHien) {
+          return false;
         }
 
         return true;
       })
       .sort((a, b) => {
-        // Nếu trường sắp xếp là ngày tháng, đối chiếu theo timestamp số học
-        const isDateField = ['ngayGui', 'ngayPhatHanh', 'hanBaoCaoXuLy', 'createdAt'].includes(String(sortConfig.key));
-        if (isDateField) {
-          const timeA = parseDateToTimestamp((a as any)[sortConfig.key]);
-          const timeB = parseDateToTimestamp((b as any)[sortConfig.key]);
-          if (timeA !== timeB) {
-            return sortConfig.direction === 'asc' ? timeA - timeB : timeB - timeA;
-          }
-        } else {
-          let valA: any = (a as any)[sortConfig.key];
-          let valB: any = (b as any)[sortConfig.key];
+        const aVal = a[sortConfig.key as keyof Dispatch];
+        const bVal = b[sortConfig.key as keyof Dispatch];
 
-          if (sortConfig.key.startsWith('custom_')) {
-            const customKey = sortConfig.key.replace('custom_', '');
-            valA = a.customFields?.[customKey] ?? '';
-            valB = b.customFields?.[customKey] ?? '';
-          }
-
-          if (valA === undefined || valA === null) valA = '';
-          if (valB === undefined || valB === null) valB = '';
-
-          if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-          if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        // Date sort
+        if (sortConfig.key === 'ngayGui' || sortConfig.key === 'hanBaoCaoXuLy') {
+          const aTime = parseDateToTimestamp(aVal as string);
+          const bTime = parseDateToTimestamp(bVal as string);
+          return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
         }
 
-        // Quy luật mặc định: Luôn ưu tiên công văn MỚI NHẤT lên đầu tiên
-        const tA = getDispatchSortTimestamp(a);
-        const tB = getDispatchSortTimestamp(b);
-        return tB - tA;
+        // Default string sort
+        const aStr = String(aVal || '');
+        const bStr = String(bVal || '');
+        if (sortConfig.direction === 'asc') {
+          return aStr.localeCompare(bStr, 'vi');
+        }
+        return bStr.localeCompare(aStr, 'vi');
       });
   }, [dispatches, filters, sortConfig]);
 
-  // Leadership Dashboard Stats calculation (accurate synchronization with thoiHanXuLy)
-  const dashboardStats = useMemo<LeadershipDashboardStats>(() => {
+  // ============================================
+  // DASHBOARD STATS
+  // ============================================
+  const dashboardStats: LeadershipDashboardStats = useMemo(() => {
     const total = dispatches.length;
     let dangXuLy = 0;
     let sapDenHan = 0;
     let quaHan = 0;
     let hoanThanh = 0;
-    let choYKien = 0;
 
     dispatches.forEach(d => {
       const status = resolveDispatchStatus(d);
       if (status === 'HOAN_THANH') hoanThanh++;
       else if (status === 'QUA_HAN') quaHan++;
       else if (status === 'SAP_DEN_HAN') sapDenHan++;
-      else if (status === 'CHO_Y_KIEN_LANH_DAO') choYKien++;
       else dangXuLy++;
     });
-
-    const onTimeTotal = total - quaHan;
-    const rateOnTime = total > 0 ? Math.round((onTimeTotal / total) * 100) : 100;
 
     return {
       total,
@@ -200,12 +177,12 @@ export const useDispatches = () => {
       sapDenHan,
       quaHan,
       hoanThanh,
-      choYKien,
-      rateOnTime
     };
   }, [dispatches]);
 
-  // Unique list of units and assignees for dropdown filtering
+  // ============================================
+  // FILTER OPTIONS
+  // ============================================
   const filterOptions = useMemo(() => {
     const units = new Set<string>();
     const assignees = new Set<string>();
@@ -217,249 +194,13 @@ export const useDispatches = () => {
 
     return {
       units: Array.from(units).sort(),
-      assignees: Array.from(assignees).sort()
+      assignees: Array.from(assignees).sort(),
     };
   }, [dispatches]);
 
-  // CRUD Dispatch Actions
-  const addDispatch = useCallback((dispatchData: Omit<Dispatch, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const normalizedInputNumber = (dispatchData.soCongVan || '').trim().toLowerCase();
-    
-    // Kiểm tra trùng số công văn trước khi đưa vào database
-    let isDuplicate = false;
-    setDispatches(prev => {
-      if (prev.some(d => (d.soCongVan || '').trim().toLowerCase() === normalizedInputNumber)) {
-        isDuplicate = true;
-        return prev; // Không đưa vào database nếu trùng số công văn
-      }
-      const timing = calculateTimeRemaining(dispatchData.hanBaoCaoXuLy, dispatchData.trangThai, dispatchData.thoiHanXuLy);
-      const resolvedStatus = resolveDispatchStatus({
-        ...dispatchData,
-        trangThai: dispatchData.trangThai || timing.status,
-        thoiHanXuLy: dispatchData.thoiHanXuLy || timing.text
-      });
-      const newDispatch: Dispatch = {
-        ...dispatchData,
-        id: `cv-${Date.now()}`,
-        thoiHanXuLy: dispatchData.thoiHanXuLy || timing.text,
-        trangThai: resolvedStatus,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      return [newDispatch, ...prev];
-    });
-
-    return !isDuplicate;
-  }, []);
-
-  const updateDispatch = useCallback((id: string, updates: Partial<Dispatch>) => {
-    setDispatches(prev =>
-      prev.map(item => {
-        if (item.id === id) {
-          const updated = {
-            ...item,
-            ...updates,
-            updatedAt: new Date().toISOString()
-          };
-          if (
-            updates.hanBaoCaoXuLy !== undefined ||
-            updates.trangThai !== undefined ||
-            updates.thoiHanXuLy !== undefined
-          ) {
-            const timing = calculateTimeRemaining(updated.hanBaoCaoXuLy, updated.trangThai, updated.thoiHanXuLy);
-            if (!updates.thoiHanXuLy) updated.thoiHanXuLy = timing.text;
-            updated.trangThai = resolveDispatchStatus(updated);
-          }
-          return updated;
-        }
-        return item;
-      })
-    );
-  }, []);
-
-  const deleteDispatch = useCallback((id: string) => {
-    setDispatches(prev => prev.filter(item => item.id !== id));
-    setSelectedIds(prev => prev.filter(selId => selId !== id));
-  }, []);
-
-  const bulkDeleteDispatches = useCallback((ids: string[]) => {
-    setDispatches(prev => prev.filter(item => !ids.includes(item.id)));
-    setSelectedIds([]);
-  }, []);
-
-  const clearAllDispatches = useCallback(() => {
-    clearAllDispatchesFromStorage();
-    setDispatches([]);
-    setSelectedIds([]);
-  }, []);
-
-  const restoreSampleDispatches = useCallback(() => {
-    const samples = restoreSampleDispatchesToStorage();
-    setDispatches(samples);
-    setSelectedIds([]);
-  }, []);
-
-  const bulkUpdateStatus = useCallback((ids: string[], status: DispatchStatus) => {
-    setDispatches(prev =>
-      prev.map(item => {
-        if (ids.includes(item.id)) {
-          const timing = calculateTimeRemaining(item.hanBaoCaoXuLy, status);
-          return {
-            ...item,
-            trangThai: status,
-            thoiHanXuLy: status === 'HOAN_THANH' ? 'Đã hoàn thành' : timing.text,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return item;
-      })
-    );
-    setSelectedIds([]);
-  }, []);
-
-  // Excel Import Reconciliation Execution
-  const commitExcelImport = useCallback((
-    analysis: ExcelImportAnalysis,
-    strategy: ReconciliationStrategy,
-    itemActions?: Record<string, 'UPDATE' | 'SKIP' | 'APPEND'>
-  ) => {
-    let addedList: Dispatch[] = [];
-
-    setDispatches(prev => {
-      let updatedList = [...prev];
-      const existingSoCongVanSet = new Set(
-        prev.map(d => (d.soCongVan || '').trim().toLowerCase())
-      );
-      const itemsToAdd: Dispatch[] = [];
-
-      // 1. Đối chiếu newItems: Nếu trùng số công văn trong database thì KHÔNG đưa vào database
-      analysis.newItems.forEach(item => {
-        const num = (item.soCongVan || '').trim().toLowerCase();
-        if (!num || existingSoCongVanSet.has(num)) {
-          // Trùng số công văn -> Bỏ qua, không đưa vào database
-          return;
-        }
-        existingSoCongVanSet.add(num);
-        itemsToAdd.push(item);
-      });
-
-      // 2. Xử lý các công văn đã trùng khớp
-      analysis.existingMatches.forEach(match => {
-        const action = itemActions?.[match.existing.id] || 
-          (strategy === 'UPDATE_EXISTING' ? 'UPDATE' : strategy === 'APPEND_AS_NEW' ? 'APPEND' : 'SKIP');
-
-        if (action === 'UPDATE') {
-          // Cập nhật đè lên dòng đã có sẵn (không sinh dòng mới)
-          updatedList = updatedList.map(item => {
-            if (item.id === match.existing.id) {
-              const mergedCustom = {
-                ...(item.customFields || {}),
-                ...(match.incoming.customFields || {})
-              };
-
-              const mergedItem: Dispatch = {
-                ...item,
-                tenCongVan: match.incoming.tenCongVan || item.tenCongVan,
-                hanBaoCaoXuLy: match.incoming.hanBaoCaoXuLy || item.hanBaoCaoXuLy,
-                donViBanHanh: match.incoming.donViBanHanh || item.donViBanHanh,
-                nguoiThucHien: match.incoming.nguoiThucHien || item.nguoiThucHien,
-                ghiChu: match.incoming.ghiChu || item.ghiChu,
-                ngayGui: match.incoming.ngayGui || item.ngayGui,
-                ngayPhatHanh: match.incoming.ngayPhatHanh || item.ngayPhatHanh,
-                thoiHanXuLy: match.incoming.thoiHanXuLy || item.thoiHanXuLy,
-                customFields: mergedCustom,
-                updatedAt: new Date().toISOString()
-              };
-              return mergedItem;
-            }
-            return item;
-          });
-        }
-        // Nếu là SKIP hoặc APPEND: Nếu trùng số công văn thì bỏ qua, không đưa vào database
-      });
-
-      addedList = itemsToAdd;
-      return [...itemsToAdd, ...updatedList];
-    });
-
-    // Auto-register unrecognized columns as custom columns so user can view/manage them
-    if (analysis.unrecognizedColumns.length > 0) {
-      setColumns(prev => {
-        const existingColIds = new Set(prev.map(c => c.id));
-        const newCols: ColumnDefinition[] = [];
-
-        analysis.unrecognizedColumns.forEach(headerName => {
-          const colId = headerName.trim();
-          if (!existingColIds.has(colId)) {
-            newCols.push({
-              id: colId,
-              label: headerName.toUpperCase(),
-              type: 'text',
-              visible: true,
-              isCustom: true,
-              width: '180px',
-              description: `Cột trích xuất từ file Excel: ${analysis.fileName}`
-            });
-            existingColIds.add(colId);
-          }
-        });
-
-        return [...prev, ...newCols];
-      });
-    }
-
-    return addedList;
-  }, []);
-
-  // Flexible Column Management Actions
-  const addCustomColumn = useCallback((newCol: { label: string; type: ColumnDefinition['type']; options?: string[]; description?: string }) => {
-    const colId = `custom_${Date.now()}`;
-    const columnDef: ColumnDefinition = {
-      id: colId,
-      label: newCol.label.toUpperCase(),
-      type: newCol.type,
-      visible: true,
-      isCustom: true,
-      width: newCol.type === 'file' ? '200px' : '160px',
-      options: newCol.options,
-      description: newCol.description || 'Cột bổ sung linh hoạt'
-    };
-    setColumns(prev => [...prev, columnDef]);
-    return columnDef;
-  }, []);
-
-  const toggleColumnVisibility = useCallback((columnId: string) => {
-    setColumns(prev =>
-      prev.map(c => (c.id === columnId ? { ...c, visible: !c.visible } : c))
-    );
-  }, []);
-
-  const updateColumn = useCallback((columnId: string, updates: Partial<ColumnDefinition>) => {
-    setColumns(prev =>
-      prev.map(c => (c.id === columnId ? { ...c, ...updates } : c))
-    );
-  }, []);
-
-  const removeColumn = useCallback((columnId: string) => {
-    setColumns(prev => prev.filter(c => c.id !== columnId || !c.isCustom));
-  }, []);
-
-  const resetToDefaultColumns = useCallback(() => {
-    setColumns(DEFAULT_COLUMNS);
-  }, []);
-
-  const handleSort = useCallback((columnId: string) => {
-    setSortConfig(prev => {
-      if (prev.key === columnId) {
-        return {
-          key: columnId,
-          direction: prev.direction === 'asc' ? 'desc' : 'asc'
-        };
-      }
-      return { key: columnId, direction: 'asc' };
-    });
-  }, []);
-
+  // ============================================
+  // SELECTION
+  // ============================================
   const toggleSelectRow = useCallback((id: string) => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -467,25 +208,196 @@ export const useDispatches = () => {
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedIds.length === filteredDispatches.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredDispatches.map(d => d.id));
-    }
-  }, [selectedIds.length, filteredDispatches]);
+    setSelectedIds(prev =>
+      prev.length === filteredDispatches.length
+        ? []
+        : filteredDispatches.map(d => d.id)
+    );
+  }, [filteredDispatches]);
 
+  // ============================================
+  // CRUD — GỌI API
+  // ============================================
+  const addDispatch = useCallback(async (dispatchData: Partial<Dispatch>): Promise<boolean> => {
+    try {
+      const created = await apiClient.createDispatch(dispatchData);
+      if (created) {
+        setDispatches(prev => [created, ...prev]);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Lỗi thêm công văn:', e);
+      return false;
+    }
+  }, []);
+
+  const updateDispatch = useCallback(async (id: string, updates: Partial<Dispatch>): Promise<boolean> => {
+    try {
+      const updated = await apiClient.updateDispatch(id, updates);
+      if (updated) {
+        setDispatches(prev =>
+          prev.map(d => (d.id === id ? { ...d, ...updated } : d))
+        );
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Lỗi cập nhật công văn:', e);
+      return false;
+    }
+  }, []);
+
+  const deleteDispatch = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const success = await apiClient.deleteDispatch(id);
+      if (success) {
+        setDispatches(prev => prev.filter(d => d.id !== id));
+        setSelectedIds(prev => prev.filter(x => x !== id));
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Lỗi xóa công văn:', e);
+      return false;
+    }
+  }, []);
+
+  const bulkDeleteDispatches = useCallback(async (ids: string[]): Promise<boolean> => {
+    try {
+      let allSuccess = true;
+      for (const id of ids) {
+        const success = await apiClient.deleteDispatch(id);
+        if (!success) allSuccess = false;
+      }
+      if (allSuccess) {
+        setDispatches(prev => prev.filter(d => !ids.includes(d.id)));
+        setSelectedIds([]);
+      }
+      return allSuccess;
+    } catch (e) {
+      console.error('Lỗi xóa nhiều công văn:', e);
+      return false;
+    }
+  }, []);
+
+  const clearAllDispatches = useCallback(async (): Promise<boolean> => {
+    try {
+      const ids = dispatches.map(d => d.id);
+      return await bulkDeleteDispatches(ids);
+    } catch (e) {
+      console.error('Lỗi xóa tất cả:', e);
+      return false;
+    }
+  }, [dispatches, bulkDeleteDispatches]);
+
+  const restoreSampleDispatches = useCallback(async (): Promise<void> => {
+    // Không còn sample — chỉ reload
+    await loadDispatches();
+  }, [loadDispatches]);
+
+  const bulkUpdateStatus = useCallback(async (ids: string[], status: DispatchStatus): Promise<void> => {
+    try {
+      for (const id of ids) {
+        await apiClient.updateDispatch(id, { trangThai: status } as any);
+      }
+      await loadDispatches();
+      setSelectedIds([]);
+    } catch (e) {
+      console.error('Lỗi cập nhật trạng thái:', e);
+    }
+  }, [loadDispatches]);
+
+  // ============================================
+  // COLUMNS
+  // ============================================
+  const addCustomColumn = useCallback((newCol: {
+    label: string;
+    type: string;
+    description?: string;
+  }) => {
+    const id = `custom_${Date.now()}`;
+    setColumns(prev => [
+      ...prev,
+      {
+        id,
+        label: newCol.label,
+        type: newCol.type as any,
+        description: newCol.description,
+        visible: true,
+        isCustom: true,
+        required: false,
+        width: '150px',
+      },
+    ]);
+  }, []);
+
+  const toggleColumnVisibility = useCallback((colId: string) => {
+    setColumns(prev =>
+      prev.map(c => (c.id === colId ? { ...c, visible: !c.visible } : c))
+    );
+  }, []);
+
+  const removeColumn = useCallback((colId: string) => {
+    setColumns(prev => prev.filter(c => c.id !== colId));
+  }, []);
+
+  const resetToDefaultColumns = useCallback(() => {
+    setColumns(DEFAULT_COLUMNS);
+  }, []);
+
+  // ============================================
+  // EXCEL IMPORT
+  // ============================================
+  const commitExcelImport = useCallback(async (
+    analysis: ExcelImportAnalysis,
+    strategy: ReconciliationStrategy,
+    itemActions?: any
+  ) => {
+    try {
+      // Tạo từng dispatch mới từ analysis
+      const items = analysis.newItems || [];
+      for (const item of items) {
+        await apiClient.createDispatch(item);
+      }
+      await loadDispatches();
+    } catch (e) {
+      console.error('Lỗi import Excel:', e);
+    }
+  }, [loadDispatches]);
+
+  // ============================================
+  // SORT
+  // ============================================
+  const handleSort = useCallback((columnId: string) => {
+    setSortConfig(prev => ({
+      key: columnId,
+      direction: prev.key === columnId && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  }, []);
+
+  // ============================================
+  // RETURN
+  // ============================================
   return {
+    // State
     dispatches,
     filteredDispatches,
     columns,
-    visibleColumns: columns.filter(c => c.visible),
     filters,
-    setFilters,
     filterOptions,
     sortConfig,
-    handleSort,
     dashboardStats,
     selectedIds,
+    isLoading,
+    error,
+
+    // Setters
+    setFilters,
+    setColumns,
+
+    // Actions
+    handleSort,
     toggleSelectRow,
     toggleSelectAll,
     addDispatch,
@@ -498,8 +410,8 @@ export const useDispatches = () => {
     commitExcelImport,
     addCustomColumn,
     toggleColumnVisibility,
-    updateColumn,
     removeColumn,
-    resetToDefaultColumns
+    resetToDefaultColumns,
+    reload: loadDispatches,
   };
 };

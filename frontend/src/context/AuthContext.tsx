@@ -1,5 +1,6 @@
+// frontend/src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, UserRole } from '../types/auth';
+import { User } from '../types/auth';
 import { apiClient } from '../services/apiClient';
 
 interface AuthContextType {
@@ -7,64 +8,96 @@ interface AuthContextType {
   allUsers: User[];
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  logout: () => void;
-  switchUser: (user: User) => void;
+  logout: () => Promise<void>;
   reloadUsers: () => Promise<void>;
+  refreshCurrentUser: () => Promise<void>;
   isAdmin: boolean;
   isVienTruong: boolean;
   isPhoVienTruong: boolean;
   isTruongPhong: boolean;
+  hasPermission: (perm: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => apiClient.getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const reloadUsers = async () => {
-    const users = await apiClient.getAllUsers();
-    setAllUsers(users);
-  };
-
+  // Load user khi app khởi động
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
-      await reloadUsers();
-      // If no current user, default to Viện Trưởng for immediate ease of use or prompt login
-      const savedUser = apiClient.getCurrentUser();
-      if (savedUser) {
-        setCurrentUser(savedUser);
+
+      const token = apiClient.getToken();
+
+      if (token) {
+        // Có token → fetch user mới nhất từ server
+        const user = await apiClient.fetchCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          // Load danh sách users nếu có quyền
+          await reloadUsers();
+        }
       }
+
       setIsLoading(false);
     };
+
     init();
   }, []);
 
+  const reloadUsers = async () => {
+    try {
+      const users = await apiClient.getAllUsers({ limit: 100 });
+      setAllUsers(users);
+    } catch (e) {
+      console.error('Lỗi khi load users:', e);
+    }
+  };
+
   const login = async (username: string, password: string) => {
     const result = await apiClient.login(username, password);
+    
     if (result.success && result.user) {
       setCurrentUser(result.user);
+      // Load danh sách users
+      await reloadUsers();
       return { success: true };
     }
+    
     return { success: false, message: result.message || 'Đăng nhập thất bại' };
   };
 
-  const logout = () => {
-    apiClient.setCurrentUser(null);
+  const logout = async () => {
+    await apiClient.logout();
     setCurrentUser(null);
+    setAllUsers([]);
   };
 
-  const switchUser = (user: User) => {
-    apiClient.setCurrentUser(user);
-    setCurrentUser(user);
+  const refreshCurrentUser = async () => {
+    const user = await apiClient.fetchCurrentUser();
+    if (user) setCurrentUser(user);
   };
 
-  const isAdmin = currentUser?.role === 'ADMIN';
-  const isVienTruong = currentUser?.role === 'VIEN_TRUONG';
-  const isPhoVienTruong = currentUser?.role === 'PHO_VIEN_TRUONG';
-  const isTruongPhong = currentUser?.role === 'TRUONG_PHONG';
+  // Role checks — dựa trên roles[] (mới) hoặc role (cũ)
+  const getRoleCode = (): string | null => {
+    if (!currentUser) return null;
+    if (currentUser.roles && currentUser.roles.length > 0) {
+      return currentUser.roles[0].code;
+    }
+    return currentUser.role || null;
+  };
+
+  const isAdmin = getRoleCode() === 'ADMIN';
+  const isVienTruong = getRoleCode() === 'VIEN_TRUONG';
+  const isPhoVienTruong = getRoleCode() === 'PHO_VIEN_TRUONG';
+  const isTruongPhong = getRoleCode() === 'TRUONG_PHONG';
+
+  const hasPermission = (perm: string): boolean => {
+    return currentUser?.permissions?.includes(perm) || false;
+  };
 
   return (
     <AuthContext.Provider
@@ -74,12 +107,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         logout,
-        switchUser,
         reloadUsers,
+        refreshCurrentUser,
         isAdmin,
         isVienTruong,
         isPhoVienTruong,
-        isTruongPhong
+        isTruongPhong,
+        hasPermission,
       }}
     >
       {children}

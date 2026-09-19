@@ -9,19 +9,20 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { apiClient } from '../services/apiClient';
 import { Dispatch, UrgencyLevel, DispatchStatus } from '../types/dispatch';
 import { VTDashboardStatsResponse, User } from '../types/auth';
-import { DEFAULT_COLUMNS } from '../services/dispatchStorage';
+import { DEFAULT_COLUMNS } from '../constants/columns';
+
 import { exportDispatchesToExcel } from '../services/excelService';
-import { 
-  Crown, 
-  UserCheck, 
-  Clock, 
-  AlertTriangle, 
-  CheckCircle2, 
-  FileText, 
-  Plus, 
-  Download, 
-  Filter, 
-  Search, 
+import {
+  Crown,
+  UserCheck,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  FileText,
+  Plus,
+  Download,
+  Filter,
+  Search,
   RefreshCw,
   Sparkles,
   Edit,
@@ -31,8 +32,8 @@ import {
 } from 'lucide-react';
 
 const PVT_COLORS = [
-  '#2563EB', '#3B82F6', '#60A5FA', '#0284C7', 
-  '#0EA5E9', '#38BDF8', '#0D9488', '#14B8A6', 
+  '#2563EB', '#3B82F6', '#60A5FA', '#0284C7',
+  '#0EA5E9', '#38BDF8', '#0D9488', '#14B8A6',
   '#059669', '#10B981', '#65A30D', '#84CC16'
 ];
 
@@ -435,9 +436,8 @@ export const VienTruongDashboard: React.FC = () => {
                       <td className="py-3 px-3.5 font-mono font-bold text-slate-900">
                         {disp.soCongVan}
                         {disp.mucDoKhan && disp.mucDoKhan !== 'THUONG' && (
-                          <span className={`block text-[10px] font-sans font-extrabold mt-0.5 ${
-                            disp.mucDoKhan === 'HOA_TOC' ? 'text-rose-600' : 'text-amber-600'
-                          }`}>
+                          <span className={`block text-[10px] font-sans font-extrabold mt-0.5 ${disp.mucDoKhan === 'HOA_TOC' ? 'text-rose-600' : 'text-amber-600'
+                            }`}>
                             [{disp.mucDoKhan}]
                           </span>
                         )}
@@ -508,9 +508,8 @@ export const VienTruongDashboard: React.FC = () => {
                       <td className="py-3 px-3.5 whitespace-nowrap">
                         <span className="font-medium">{disp.hanBaoCaoXuLy || '—'}</span>
                         {disp.thoiHanXuLy && (
-                          <span className={`block text-[10px] font-semibold ${
-                            disp.thoiHanXuLy.includes('Quá hạn') ? 'text-rose-600' : 'text-slate-500'
-                          }`}>
+                          <span className={`block text-[10px] font-semibold ${disp.thoiHanXuLy.includes('Quá hạn') ? 'text-rose-600' : 'text-slate-500'
+                            }`}>
                             {disp.thoiHanXuLy}
                           </span>
                         )}
@@ -524,13 +523,12 @@ export const VienTruongDashboard: React.FC = () => {
                           </div>
                           <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full ${
-                                (disp.tienDo || 0) === 100
+                              className={`h-full rounded-full ${(disp.tienDo || 0) === 100
                                   ? 'bg-emerald-500'
                                   : (disp.tienDo || 0) >= 50
-                                  ? 'bg-blue-500'
-                                  : 'bg-amber-500'
-                              }`}
+                                    ? 'bg-blue-500'
+                                    : 'bg-amber-500'
+                                }`}
                               style={{ width: `${disp.tienDo || 0}%` }}
                             />
                           </div>
@@ -540,23 +538,22 @@ export const VienTruongDashboard: React.FC = () => {
                       {/* Trạng Thái */}
                       <td className="py-3 px-3.5 text-center whitespace-nowrap">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                            disp.trangThai === 'HOAN_THANH'
+                          className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold ${disp.trangThai === 'HOAN_THANH'
                               ? 'bg-emerald-100 text-emerald-800'
                               : disp.trangThai === 'QUA_HAN'
-                              ? 'bg-rose-100 text-rose-800'
-                              : disp.trangThai === 'SAP_DEN_HAN'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-blue-100 text-blue-800'
-                          }`}
+                                ? 'bg-rose-100 text-rose-800'
+                                : disp.trangThai === 'SAP_DEN_HAN'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-blue-100 text-blue-800'
+                            }`}
                         >
                           {disp.trangThai === 'HOAN_THANH'
                             ? 'Hoàn thành'
                             : disp.trangThai === 'QUA_HAN'
-                            ? 'Quá hạn'
-                            : disp.trangThai === 'SAP_DEN_HAN'
-                            ? 'Sắp đến hạn'
-                            : 'Đang xử lý'}
+                              ? 'Quá hạn'
+                              : disp.trangThai === 'SAP_DEN_HAN'
+                                ? 'Sắp đến hạn'
+                                : 'Đang xử lý'}
                         </span>
                       </td>
 

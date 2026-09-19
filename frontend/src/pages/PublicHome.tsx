@@ -1,47 +1,43 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  FileStack, 
-  Clock, 
-  AlertTriangle, 
-  CheckCircle2, 
-  AlertCircle, 
+import {
+  FileStack,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
   Flame
 } from 'lucide-react';
 import { Dispatch, UrgencyLevel } from '../types/dispatch';
-import { loadDispatchesFromStorage } from '../services/dispatchStorage';
+import { apiClient } from '../services/apiClient';
 import { resolveDispatchStatus } from '../services/excelService';
 import { Pagination } from '../components/Pagination';
 import { sortDispatchesNewestFirst } from '../services/dateSort';
 import { autoSyncFromGoogleSheet } from '../services/googleSheetSync';
 
 export const PublicHome: React.FC = () => {
-  const [dispatches, setDispatches] = useState<Dispatch[]>(() => loadDispatchesFromStorage());
+  const [dispatches, setDispatches] = useState<Dispatch[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [currentTime, setCurrentTime] = useState<string>('');
 
   // Background auto-sync from Google Sheet if data exists
+  // Load dispatches từ API
   useEffect(() => {
-    let isMounted = true;
-    const runAutoSync = async () => {
+    const loadData = async () => {
       try {
-        await autoSyncFromGoogleSheet(dispatches, () => {
-          if (isMounted) {
-            setDispatches(loadDispatchesFromStorage());
-          }
-        });
+        const data = await apiClient.getDispatches({ limit: 500 });
+        setDispatches(data);
       } catch (err) {
-        // Silent error handling
+        console.error('Lỗi load dispatches:', err);
       }
     };
-    const timer = setTimeout(runAutoSync, 1500);
-    const interval = setInterval(runAutoSync, 60000);
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-      clearInterval(interval);
-    };
-  }, [dispatches.length]);
+    loadData();
+
+    // Refresh mỗi 60 giây
+    const interval = setInterval(loadData, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-refresh when localStorage updates (e.g. from /admin tab)
   const refreshData = () => {
@@ -53,14 +49,14 @@ export const PublicHome: React.FC = () => {
       refreshData();
     };
     window.addEventListener('storage', handleStorageChange);
-    
+
     // Live clock
     const updateClock = () => {
       const now = new Date();
-      const options: Intl.DateTimeFormatOptions = { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
+      const options: Intl.DateTimeFormatOptions = {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
@@ -212,7 +208,7 @@ export const PublicHome: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col text-slate-900" style={{ backgroundColor: '#F5F5F0' }}>
       {/* Top Banner / Navigation */}
-      <header 
+      <header
         className="text-white sticky top-0 z-20 shadow-md border-b-2"
         style={{ backgroundColor: '#B71C1C', borderColor: '#7F0E0E' }}
       >
@@ -226,7 +222,7 @@ export const PublicHome: React.FC = () => {
                 referrerPolicy="no-referrer"
               />
               <div className="space-y-0.5">
-                <div 
+                <div
                   className="text-xs sm:text-sm font-bold tracking-wider uppercase"
                   style={{ color: '#FFD700' }}
                 >
@@ -265,13 +261,12 @@ export const PublicHome: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
         {/* KPI Cards (Read-only summary) - vừa đủ nhìn, gọn gàng */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-          <div 
+          <div
             onClick={() => setSelectedStatus('ALL')}
-            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${
-              selectedStatus === 'ALL' 
-                ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-500/20' 
+            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${selectedStatus === 'ALL'
+                ? 'bg-blue-50/80 border-blue-300 ring-2 ring-blue-500/20'
                 : 'bg-white border-slate-200 hover:border-slate-300'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Tổng công văn</span>
@@ -280,13 +275,12 @@ export const PublicHome: React.FC = () => {
             <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900 leading-tight">{stats.total}</p>
           </div>
 
-          <div 
+          <div
             onClick={() => setSelectedStatus(selectedStatus === 'DANG_XU_LY' ? 'ALL' : 'DANG_XU_LY')}
-            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${
-              selectedStatus === 'DANG_XU_LY' 
-                ? 'bg-sky-50/80 border-sky-300 ring-2 ring-sky-500/20' 
+            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${selectedStatus === 'DANG_XU_LY'
+                ? 'bg-sky-50/80 border-sky-300 ring-2 ring-sky-500/20'
                 : 'bg-white border-slate-200 hover:border-slate-300'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-sky-700 uppercase tracking-wider">Đang xử lý</span>
@@ -295,13 +289,12 @@ export const PublicHome: React.FC = () => {
             <p className="mt-1 text-xl sm:text-2xl font-bold text-sky-950 leading-tight">{stats.dangXuLy}</p>
           </div>
 
-          <div 
+          <div
             onClick={() => setSelectedStatus(selectedStatus === 'SAP_DEN_HAN' ? 'ALL' : 'SAP_DEN_HAN')}
-            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${
-              selectedStatus === 'SAP_DEN_HAN' 
-                ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-500/20' 
+            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${selectedStatus === 'SAP_DEN_HAN'
+                ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-500/20'
                 : 'bg-white border-slate-200 hover:border-slate-300'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Sắp đến hạn</span>
@@ -310,13 +303,12 @@ export const PublicHome: React.FC = () => {
             <p className="mt-1 text-xl sm:text-2xl font-bold text-amber-950 leading-tight">{stats.sapDenHan}</p>
           </div>
 
-          <div 
+          <div
             onClick={() => setSelectedStatus(selectedStatus === 'QUA_HAN' ? 'ALL' : 'QUA_HAN')}
-            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${
-              selectedStatus === 'QUA_HAN' 
-                ? 'bg-rose-50/80 border-rose-300 ring-2 ring-rose-500/20' 
+            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${selectedStatus === 'QUA_HAN'
+                ? 'bg-rose-50/80 border-rose-300 ring-2 ring-rose-500/20'
                 : 'bg-white border-slate-200 hover:border-slate-300'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider">Quá hạn xử lý</span>
@@ -325,13 +317,12 @@ export const PublicHome: React.FC = () => {
             <p className="mt-1 text-xl sm:text-2xl font-bold text-rose-700 leading-tight">{stats.quaHan}</p>
           </div>
 
-          <div 
+          <div
             onClick={() => setSelectedStatus(selectedStatus === 'HOAN_THANH' ? 'ALL' : 'HOAN_THANH')}
-            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${
-              selectedStatus === 'HOAN_THANH' 
-                ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/20' 
+            className={`px-3 py-2 rounded-lg border cursor-pointer transition ${selectedStatus === 'HOAN_THANH'
+                ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/20'
                 : 'bg-white border-slate-200 hover:border-slate-300'
-            }`}
+              }`}
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Đã hoàn thành</span>
@@ -344,7 +335,7 @@ export const PublicHome: React.FC = () => {
         {/* Read-Only Dispatch Table */}
         <div id="public-table-section" className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
           {/* Leadership Table Title Banner matching admin template */}
-          <div 
+          <div
             className="text-white text-center py-2.5 px-4 border-b shadow-xs"
             style={{ backgroundColor: '#B71C1C', borderColor: '#7F0E0E' }}
           >
@@ -400,17 +391,16 @@ export const PublicHome: React.FC = () => {
                     const isCompleted = status === 'HOAN_THANH';
 
                     return (
-                      <tr 
+                      <tr
                         key={disp.id || idx}
-                        className={`transition-colors ${
-                          isOverdue 
-                            ? 'bg-rose-50/30 hover:bg-rose-50/60' 
-                            : isCompleted 
-                            ? 'bg-emerald-50/20 hover:bg-emerald-50/40' 
-                            : idx % 2 === 0 
-                            ? 'bg-white hover:bg-slate-50' 
-                            : 'bg-slate-50/40 hover:bg-slate-100/60'
-                        }`}
+                        className={`transition-colors ${isOverdue
+                            ? 'bg-rose-50/30 hover:bg-rose-50/60'
+                            : isCompleted
+                              ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
+                              : idx % 2 === 0
+                                ? 'bg-white hover:bg-slate-50'
+                                : 'bg-slate-50/40 hover:bg-slate-100/60'
+                          }`}
                       >
                         {/* STT */}
                         <td className="px-3 py-5 sm:py-6 text-center border-r border-slate-100 text-slate-600 font-semibold text-sm">

@@ -6,7 +6,7 @@ import { ReportProgressModal } from '../components/ReportProgressModal';
 import { DispatchDetailDrawer } from '../components/DispatchDetailDrawer';
 import { apiClient } from '../services/apiClient';
 import { Dispatch, DispatchStatus } from '../types/dispatch';
-import { DEFAULT_COLUMNS } from '../services/dispatchStorage';
+import { DEFAULT_COLUMNS } from '../constants/columns';
 import { exportDispatchesToExcel } from '../services/excelService';
 import { 
   Briefcase, 

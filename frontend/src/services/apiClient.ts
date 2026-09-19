@@ -1,48 +1,153 @@
+// frontend/src/services/apiClient.ts
 import { Dispatch } from '../types/dispatch';
-import { User, VTDashboardStatsResponse } from '../types/auth';
+import { User, LoginResponse, VTDashboardStatsResponse } from '../types/auth';
 
 const API_BASE = '/api';
 
+// Token keys
+const TOKEN_KEY = 'access_token';
+const USER_KEY = 'current_user';
+
+// ============================================
+// HELPER — Fetch với token
+// ============================================
+async function request<T>(
+  url: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = localStorage.getItem(TOKEN_KEY);
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...((options.headers as Record<string, string>) || {}),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${url}`, {
+    ...options,
+    headers,
+  });
+
+  // Handle 401 — token hết hạn
+  if (res.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  }
+
+  // Check content-type
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await res.text();
+    console.error(`Backend trả về không phải JSON (${res.status}):`, text.substring(0, 200));
+    throw new Error(`Server trả về lỗi ${res.status}`);
+  }
+
+  return await res.json();
+}
+
+// ============================================
+// API CLIENT
+// ============================================
 export const apiClient = {
-  // 1. Auth & Users
-  async login(username: string, password: string):Promise<{ success: boolean; user?: User; token?: string; message?: string }> {
+  // ============================================
+  // 1. AUTH
+  // ============================================
+  async login(username: string, password: string): Promise<LoginResponse> {
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password }),
       });
-      const data = await res.json();
-      if (data.success && data.user) {
-        localStorage.setItem('CURRENT_USER_SESSION', JSON.stringify(data.user));
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        return { success: false, message: `Lỗi server (${res.status})` };
       }
+
+      const data = await res.json();
+
+      if (data.success && data.user && data.token) {
+        localStorage.setItem(TOKEN_KEY, data.token);
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      }
+
       return data;
     } catch (e: any) {
+      console.error('Lỗi login:', e);
       return { success: false, message: e.message };
     }
   },
 
   getCurrentUser(): User | null {
     try {
-      const raw = localStorage.getItem('CURRENT_USER_SESSION');
+      const raw = localStorage.getItem(USER_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;
     }
   },
 
+  getToken(): string | null {
+    return localStorage.getItem(TOKEN_KEY);
+  },
+
   setCurrentUser(user: User | null): void {
     if (user) {
-      localStorage.setItem('CURRENT_USER_SESSION', JSON.stringify(user));
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
     } else {
-      localStorage.removeItem('CURRENT_USER_SESSION');
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(TOKEN_KEY);
     }
   },
 
-  async getAllUsers(): Promise<User[]> {
+  async fetchCurrentUser(): Promise<User | null> {
     try {
-      const res = await fetch(`${API_BASE}/users`);
-      const data = await res.json();
+      const data = await request<{ success: boolean; user: User }>('/auth/me');
+      if (data.success && data.user) {
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        return data.user;
+      }
+      return null;
+    } catch (e) {
+      console.error('Lỗi khi fetch current user:', e);
+      return null;
+    }
+  },
+
+  async logout(): Promise<void> {
+    try {
+      await request('/auth/logout', { method: 'POST' });
+    } catch (e) {
+      // Bỏ qua
+    } finally {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    }
+  },
+
+  // ============================================
+  // 2. USERS
+  // ============================================
+  async getAllUsers(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    role?: string;
+  }): Promise<User[]> {
+    try {
+      const query = new URLSearchParams();
+      if (params?.page) query.set('page', String(params.page));
+      if (params?.limit) query.set('limit', String(params.limit));
+      if (params?.search) query.set('search', params.search);
+      if (params?.role) query.set('role', params.role);
+
+      const data = await request<{ success: boolean; users: User[] }>(
+        `/users?${query.toString()}`
+      );
       return data.success ? data.users : [];
     } catch (e) {
       console.error('Lỗi khi lấy danh sách users:', e);
@@ -50,28 +155,28 @@ export const apiClient = {
     }
   },
 
-  async createUser(userData: Partial<User & { password?: string }>): Promise<{ success: boolean; user?: User; message?: string }> {
+  async createUser(
+    userData: Partial<User & { password?: string; roleIds?: number[] }>
+  ): Promise<{ success: boolean; user?: User; message?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/users`, {
+      return await request('/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData)
+        body: JSON.stringify(userData),
       });
-      return await res.json();
     } catch (e: any) {
-      console.error('Lỗi khi tạo user:', e);
       return { success: false, message: e.message };
     }
   },
 
-  async updateUser(id: string, updates: Partial<User & { password?: string }>): Promise<User | null> {
+  async updateUser(
+    id: string,
+    updates: Partial<User & { password?: string }>
+  ): Promise<User | null> {
     try {
-      const res = await fetch(`${API_BASE}/users/${id}`, {
+      const data = await request<{ success: boolean; user: User }>(`/users/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(updates),
       });
-      const data = await res.json();
       return data.success ? data.user : null;
     } catch (e) {
       console.error('Lỗi khi cập nhật user:', e);
@@ -81,24 +186,71 @@ export const apiClient = {
 
   async deleteUser(id: string): Promise<{ success: boolean; message?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/users/${id}`, { method: 'DELETE' });
-      return await res.json();
+      return await request(`/users/${id}`, { method: 'DELETE' });
     } catch (e: any) {
-      console.error('Lỗi khi xóa user:', e);
       return { success: false, message: e.message };
     }
   },
 
-  // 2. Dispatches
-  async getDispatches(params?: { role?: string; userId?: string; roomCode?: string }): Promise<Dispatch[]> {
+  async resetPassword(
+    id: string,
+    newPassword?: string
+  ): Promise<{ success: boolean; message?: string; newPassword?: string }> {
+    try {
+      return await request(`/users/${id}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ newPassword }),
+      });
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  },
+
+  async assignRoles(
+    userId: string,
+    roleIds: number[]
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      return await request(`/users/${userId}/roles`, {
+        method: 'PUT',
+        body: JSON.stringify({ roleIds }),
+      });
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  },
+
+  async toggleActive(
+    userId: string
+  ): Promise<{ success: boolean; message?: string; active?: boolean }> {
+    try {
+      return await request(`/users/${userId}/toggle-active`, {
+        method: 'PATCH',
+      });
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  },
+
+  // ============================================
+  // 3. DISPATCHES
+  // ============================================
+  async getDispatches(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    trangThai?: string;
+  }): Promise<Dispatch[]> {
     try {
       const query = new URLSearchParams();
-      if (params?.role) query.set('role', params.role);
-      if (params?.userId) query.set('userId', params.userId);
-      if (params?.roomCode) query.set('roomCode', params.roomCode);
+      if (params?.page) query.set('page', String(params.page));
+      if (params?.limit) query.set('limit', String(params.limit));
+      if (params?.search) query.set('search', params.search);
+      if (params?.trangThai) query.set('trangThai', params.trangThai);
 
-      const res = await fetch(`${API_BASE}/dispatches?${query.toString()}`);
-      const data = await res.json();
+      const data = await request<{ success: boolean; dispatches: Dispatch[] }>(
+        `/dispatches?${query.toString()}`
+      );
       return data.success ? data.dispatches : [];
     } catch (e) {
       console.error('Lỗi khi tải danh sách công văn:', e);
@@ -106,14 +258,27 @@ export const apiClient = {
     }
   },
 
+  async getDispatchById(id: string): Promise<Dispatch | null> {
+    try {
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${id}`
+      );
+      return data.success ? data.dispatch : null;
+    } catch (e) {
+      console.error('Lỗi khi lấy chi tiết công văn:', e);
+      return null;
+    }
+  },
+
   async createDispatch(dispatchData: Partial<Dispatch>): Promise<Dispatch | null> {
     try {
-      const res = await fetch(`${API_BASE}/dispatches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dispatchData)
-      });
-      const data = await res.json();
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        '/dispatches',
+        {
+          method: 'POST',
+          body: JSON.stringify(dispatchData),
+        }
+      );
       return data.success ? data.dispatch : null;
     } catch (e) {
       console.error('Lỗi khi tạo công văn:', e);
@@ -121,14 +286,18 @@ export const apiClient = {
     }
   },
 
-  async updateDispatch(id: string, updates: Partial<Dispatch>): Promise<Dispatch | null> {
+  async updateDispatch(
+    id: string,
+    updates: Partial<Dispatch>
+  ): Promise<Dispatch | null> {
     try {
-      const res = await fetch(`${API_BASE}/dispatches/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      });
-      const data = await res.json();
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${id}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(updates),
+        }
+      );
       return data.success ? data.dispatch : null;
     } catch (e) {
       console.error('Lỗi khi cập nhật công văn:', e);
@@ -138,8 +307,9 @@ export const apiClient = {
 
   async deleteDispatch(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/dispatches/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await request<{ success: boolean }>(`/dispatches/${id}`, {
+        method: 'DELETE',
+      });
       return !!data.success;
     } catch (e) {
       console.error('Lỗi khi xóa công văn:', e);
@@ -147,61 +317,23 @@ export const apiClient = {
     }
   },
 
-  async bulkDeleteDispatches(ids: string[]): Promise<boolean> {
-    try {
-      const res = await fetch(`${API_BASE}/dispatches/bulk-delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids })
-      });
-      const data = await res.json();
-      return !!data.success;
-    } catch (e) {
-      console.error('Lỗi khi xóa nhiều công văn:', e);
-      return false;
-    }
-  },
-
-  async clearAllDispatches(): Promise<boolean> {
-    try {
-      const res = await fetch(`${API_BASE}/dispatches/clear-all`, { method: 'POST' });
-      const data = await res.json();
-      return !!data.success;
-    } catch (e) {
-      console.error('Lỗi khi xóa sạch công văn:', e);
-      return false;
-    }
-  },
-
-  async restoreSampleDispatches(): Promise<Dispatch[]> {
-    try {
-      const res = await fetch(`${API_BASE}/dispatches/restore-samples`, { method: 'POST' });
-      const data = await res.json();
-      return data.success ? data.dispatches : [];
-    } catch (e) {
-      console.error('Lỗi khi khôi phục dữ liệu mẫu:', e);
-      return [];
-    }
-  },
-
-  // 3. Phân công Viện Trưởng -> PVT
-  async assignToPvt(
+  // ============================================
+  // 4. ASSIGNMENTS
+  // ============================================
+  async assignToPvts(
     dispatchId: string,
     payload: {
-      pvtId: string;
-      pvtName: string;
-      vtChiDao: string;
+      pvts: { pvtId: string; pvtName: string; roomCode?: string; isPrimary?: boolean }[];
+      vtChiDao?: string;
       hanBaoCaoXuLy?: string;
       mucDoKhan?: string;
     }
   ): Promise<Dispatch | null> {
     try {
-      const res = await fetch(`${API_BASE}/dispatches/${dispatchId}/assign-pvt`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${dispatchId}/assign-pvts`,
+        { method: 'POST', body: JSON.stringify(payload) }
+      );
       return data.success ? data.dispatch : null;
     } catch (e) {
       console.error('Lỗi khi phân công PVT:', e);
@@ -209,80 +341,179 @@ export const apiClient = {
     }
   },
 
-  // 4. Phân công PVT -> Trưởng phòng
-  async assignToTp(
+  async assignToTps(
     dispatchId: string,
     payload: {
-      fromPvtId: string;
-      fromPvtName: string;
-      tpId: string;
-      tpName: string;
-      pvtChiDao: string;
+      tps: { tpId: string; tpName: string; roomCode?: string; isPrimary?: boolean }[];
+      pvtChiDao?: string;
       hanBaoCaoXuLy?: string;
     }
   ): Promise<Dispatch | null> {
     try {
-      const res = await fetch(`${API_BASE}/dispatches/${dispatchId}/assign-tp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${dispatchId}/assign-tps`,
+        { method: 'POST', body: JSON.stringify(payload) }
+      );
       return data.success ? data.dispatch : null;
     } catch (e) {
-      console.error('Lỗi khi phân công Trưởng phòng:', e);
+      console.error('Lỗi khi phân công TP:', e);
       return null;
     }
   },
 
-  // 5. Trưởng phòng báo cáo tiến độ & cán bộ thực hiện
-  async reportProgress(
+  async tpNumber(
     dispatchId: string,
-    payload: {
-      tienDo?: number;
-      trangThai?: string;
-      baoCaoTienDo?: string;
-      nguoiThucHien?: string;
-    }
+    payload: { soCongVanTP: string; ngayDanhSo?: string }
   ): Promise<Dispatch | null> {
     try {
-      const res = await fetch(`${API_BASE}/dispatches/${dispatchId}/report-progress`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${dispatchId}/tp-number`,
+        { method: 'POST', body: JSON.stringify(payload) }
+      );
       return data.success ? data.dispatch : null;
     } catch (e) {
-      console.error('Lỗi khi báo cáo tiến độ:', e);
+      console.error('Lỗi khi đánh số:', e);
       return null;
     }
   },
 
-  // 6. Thống kê Viện Trưởng Dashboard (Pie Charts)
+  async tpSubmit(
+    dispatchId: string,
+    payload: { baoCaoTienDo: string; tienDo?: number }
+  ): Promise<Dispatch | null> {
+    try {
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${dispatchId}/tp-submit`,
+        { method: 'POST', body: JSON.stringify(payload) }
+      );
+      return data.success ? data.dispatch : null;
+    } catch (e) {
+      console.error('Lỗi khi TP gửi PVT:', e);
+      return null;
+    }
+  },
+
+  async pvtSubmit(
+    dispatchId: string,
+    payload: { pvtChiDao: string }
+  ): Promise<Dispatch | null> {
+    try {
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${dispatchId}/pvt-submit`,
+        { method: 'POST', body: JSON.stringify(payload) }
+      );
+      return data.success ? data.dispatch : null;
+    } catch (e) {
+      console.error('Lỗi khi PVT trình VT:', e);
+      return null;
+    }
+  },
+
+  async vtAgree(dispatchId: string): Promise<Dispatch | null> {
+    try {
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${dispatchId}/vt-agree`,
+        { method: 'POST' }
+      );
+      return data.success ? data.dispatch : null;
+    } catch (e) {
+      console.error('Lỗi khi VT đồng ý:', e);
+      return null;
+    }
+  },
+
+  async vtDisagree(dispatchId: string, reason: string): Promise<Dispatch | null> {
+    try {
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${dispatchId}/vt-disagree`,
+        { method: 'POST', body: JSON.stringify({ reason }) }
+      );
+      return data.success ? data.dispatch : null;
+    } catch (e) {
+      console.error('Lỗi khi VT không đồng ý:', e);
+      return null;
+    }
+  },
+
+  async pvtDisagree(
+    dispatchId: string,
+    reason: string,
+    tpId?: string
+  ): Promise<Dispatch | null> {
+    try {
+      const data = await request<{ success: boolean; dispatch: Dispatch }>(
+        `/dispatches/${dispatchId}/pvt-disagree`,
+        { method: 'POST', body: JSON.stringify({ reason, tpId }) }
+      );
+      return data.success ? data.dispatch : null;
+    } catch (e) {
+      console.error('Lỗi khi PVT không đồng ý:', e);
+      return null;
+    }
+  },
+
+  async getHistory(dispatchId: string): Promise<any[]> {
+    try {
+      const data = await request<{ success: boolean; history: any[] }>(
+        `/dispatches/${dispatchId}/history`
+      );
+      return data.success ? data.history : [];
+    } catch (e) {
+      console.error('Lỗi khi lấy lịch sử:', e);
+      return [];
+    }
+  },
+
+  // ============================================
+  // 5. STATS
+  // ============================================
   async getVTDashboardStats(): Promise<VTDashboardStatsResponse | null> {
     try {
-      const res = await fetch(`${API_BASE}/stats/vt-dashboard`);
-      const data = await res.json();
+      const data = await request<VTDashboardStatsResponse>('/stats/vt-overview');
       return data.success ? data : null;
     } catch (e) {
-      console.error('Lỗi khi lấy thống kê VT Dashboard:', e);
+      console.error('Lỗi khi lấy thống kê VT:', e);
       return null;
     }
   },
 
-  // 7. Thông tin mạng Local Network
-  async getNetworkInfo(): Promise<{ success: boolean; networks: any[]; primaryUrl: string; hostname: string }> {
+  async getChartData(): Promise<any | null> {
     try {
-      const res = await fetch(`${API_BASE}/system/network-info`);
-      return await res.json();
+      const data = await request<any>('/stats/chart');
+      return data.success ? data : null;
     } catch (e) {
-      return {
-        success: false,
-        networks: [{ interface: 'Local', ip: 'localhost', url: 'http://localhost:3000' }],
-        primaryUrl: 'http://localhost:3000',
-        hostname: 'localhost'
-      };
+      console.error('Lỗi khi lấy chart data:', e);
+      return null;
     }
-  }
+  },
+
+  // ============================================
+  // 6. NOTIFICATIONS
+  // ============================================
+  async getNotifications(params?: { page?: number; isRead?: boolean }): Promise<any[]> {
+    try {
+      const query = new URLSearchParams();
+      if (params?.page) query.set('page', String(params.page));
+      if (params?.isRead !== undefined) query.set('isRead', String(params.isRead));
+
+      const data = await request<{ success: boolean; notifications: any[] }>(
+        `/notifications?${query.toString()}`
+      );
+      return data.success ? data.notifications : [];
+    } catch (e) {
+      console.error('Lỗi khi lấy thông báo:', e);
+      return [];
+    }
+  },
+
+  async getUnreadCount(): Promise<number> {
+    try {
+      const data = await request<{ success: boolean; unreadCount: number }>(
+        '/notifications/unread-count'
+      );
+      return data.success ? data.unreadCount : 0;
+    } catch (e) {
+      return 0;
+    }
+  },
 };

@@ -1,5 +1,7 @@
 export type DispatchStatus = 
   | 'DANG_XU_LY' 
+  | 'CHO_TP_XU_LY'
+  | 'CHO_TRINH_VT'
   | 'SAP_DEN_HAN' 
   | 'QUA_HAN' 
   | 'HOAN_THANH' 
