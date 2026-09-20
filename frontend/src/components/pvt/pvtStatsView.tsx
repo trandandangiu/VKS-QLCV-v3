@@ -1,10 +1,10 @@
 import React from 'react';
-import { 
-  TrendingUp, 
-  Building2, 
-  CheckCircle2, 
-  Clock, 
-  AlertTriangle, 
+import {
+  TrendingUp,
+  Building2,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
   FileText,
   BarChart3
 } from 'lucide-react';
@@ -22,8 +22,8 @@ export const PvtStatsView: React.FC<PvtStatsViewProps> = ({
 }) => {
   // Aggregate stats per department
   const statsByRoom = subordinateRooms.map((room, idx) => {
-    const list = allDispatches.filter(d => 
-      d.assignedTpId === room.id || 
+    const list = allDispatches.filter(d =>
+      d.assignedTpId === room.id ||
       (d.assignedTpName && d.assignedTpName.includes(room.roomCode))
     );
 
@@ -32,7 +32,7 @@ export const PvtStatsView: React.FC<PvtStatsViewProps> = ({
     let sapDenHan = list.filter(d => d.trangThai === 'SAP_DEN_HAN').length;
     let choTrinhVt = list.filter(d => d.trangThai === 'CHO_TRINH_VT').length;
     let dangXuLy = list.filter(d => d.trangThai === 'DANG_XU_LY' || d.trangThai === 'CHO_TP_XU_LY').length;
-    
+
     // Fallback baseline for clean display
     if (list.length === 0) {
       if (idx === 0) {
@@ -97,7 +97,7 @@ export const PvtStatsView: React.FC<PvtStatsViewProps> = ({
           <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Đã Hoàn Thành</div>
           <div className="text-2xl font-black text-emerald-700 mt-1">{hoanThanhAll}</div>
           <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-            Đạt {Math.round((hoanThanhAll / (totalAll || 1)) * 100)}% tổng số
+            {hoanThanhAll}/{totalAll} hồ sơ đã xong
           </div>
         </div>
 
@@ -132,23 +132,22 @@ export const PvtStatsView: React.FC<PvtStatsViewProps> = ({
                 </div>
               </div>
 
-              <span className={`text-base font-black px-3 py-1 rounded-xl border ${
-                item.rate >= 80 
-                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
-                  : 'bg-amber-100 text-amber-900 border-amber-300'
-              }`}>
-                {item.rate}%
+              <span className={`text-xs font-black px-3 py-1 rounded-xl border ${item.rate >= 80
+                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                : 'bg-amber-100 text-amber-900 border-amber-300'
+                }`}>
+                {item.hoanThanh}/{item.total}
               </span>
             </div>
 
             {/* Progress visual */}
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs font-semibold text-slate-700">
-                <span>Tiến độ thực hiện chung</span>
-                <span>{item.rate}%</span>
+                <span>Đã hoàn thành</span>
+                <span>{item.hoanThanh}/{item.total} hồ sơ</span>
               </div>
               <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
-                <div 
+                <div
                   className={`h-full ${item.rate >= 80 ? 'bg-emerald-600' : 'bg-amber-600'}`}
                   style={{ width: `${item.rate}%` }}
                 />

@@ -1,275 +1,445 @@
+// src/components/pvt/PvtAssignedDispatches.tsx
 import React, { useState, useMemo } from 'react';
-import { 
-  FileText, 
-  Search, 
-  Download, 
-  CornerDownRight, 
-  Eye, 
-  RefreshCw,
-  Filter,
-  CheckCircle2,
+import {
+  Search,
+  Send,
+  Eye,
+  AlertTriangle,
   Clock,
-  AlertTriangle
+  CheckCircle2,
+  Flame,
+  X,
+  RefreshCw,
+  FileText,
+  Inbox,
 } from 'lucide-react';
 import { Dispatch } from '../../types/dispatch';
-import { DEFAULT_COLUMNS } from '../../constants/columns';
-import { exportDispatchesToExcel } from '../../services/excelService';
 
 interface PvtAssignedDispatchesProps {
   dispatches: Dispatch[];
-  onOpenAssignTp: (disp: Dispatch) => void;
-  onOpenDetail: (disp: Dispatch) => void;
-  onRefresh: () => void;
-  isLoading: boolean;
+  onOpenAssignTp: (d: Dispatch) => void;
+  onOpenDetail: (d: Dispatch) => void;
+  onMarkComplete?: (d: Dispatch) => void;   // ← THÊM
+  onRefresh?: () => void;
+  isLoading?: boolean;
 }
+
+const formatDate = (dateStr?: string): string => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${d.getFullYear()}`;
+};
+
+const getStatusInfo = (d: Dispatch) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (d.trangThai === 'HOAN_THANH') {
+    return {
+      label: 'Hoàn thành',
+      color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      icon: CheckCircle2,
+    };
+  }
+
+  if (d.hanBaoCaoXuLy) {
+    const han = new Date(d.hanBaoCaoXuLy);
+    if (han < today) {
+      return {
+        label: 'Quá hạn',
+        color: 'bg-rose-100 text-rose-800 border-rose-200',
+        icon: AlertTriangle,
+      };
+    }
+  }
+
+  if (d.trangThai === 'CHO_PVT_DUYET') {
+    return {
+      label: 'Chờ trình VT',
+      color: 'bg-purple-100 text-purple-800 border-purple-200',
+      icon: Clock,
+    };
+  }
+
+  if (d.trangThai === 'CHO_TP_XU_LY') {
+    return {
+      label: 'Chờ TP xử lý',
+      color: 'bg-blue-100 text-blue-800 border-blue-200',
+      icon: Clock,
+    };
+  }
+
+  if (d.trangThai === 'CHO_VT_DUYET') {
+    return {
+      label: 'Chờ VT duyệt',
+      color: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      icon: Clock,
+    };
+  }
+
+  return {
+    label: 'Chưa giao TP',
+    color: 'bg-amber-100 text-amber-800 border-amber-200',
+    icon: Clock,
+  };
+};
 
 export const PvtAssignedDispatches: React.FC<PvtAssignedDispatchesProps> = ({
   dispatches,
   onOpenAssignTp,
   onOpenDetail,
+  onMarkComplete,
   onRefresh,
-  isLoading
+  isLoading,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('ALL');
-  const [selectedUrgency, setSelectedUrgency] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [urgencyFilter, setUrgencyFilter] = useState('ALL');
 
+  // KPI counts
+  const kpis = useMemo(() => {
+    const total = dispatches.length;
+    const chuaGiaoTp = dispatches.filter(d => !d.assignedTpId && d.trangThai !== 'HOAN_THANH').length;
+    const dangXuLy = dispatches.filter(d => d.assignedTpId && d.trangThai !== 'HOAN_THANH').length;
+    const hoanThanh = dispatches.filter(d => d.trangThai === 'HOAN_THANH').length;
+    return { total, chuaGiaoTp, dangXuLy, hoanThanh };
+  }, [dispatches]);
+
+  // Filtered
   const filtered = useMemo(() => {
     return dispatches.filter(d => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchNo = (d.soCongVan || '').toLowerCase().includes(q);
-        const matchTitle = (d.tenCongVan || '').toLowerCase().includes(q);
-        const matchTp = (d.assignedTpName || '').toLowerCase().includes(q);
-        const matchIssuer = (d.donViBanHanh || '').toLowerCase().includes(q);
-        if (!matchNo && !matchTitle && !matchTp && !matchIssuer) return false;
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        const match =
+          (d.soCongVan || '').toLowerCase().includes(q) ||
+          (d.tenCongVan || '').toLowerCase().includes(q) ||
+          (d.donViBanHanh || '').toLowerCase().includes(q);
+        if (!match) return false;
       }
-      if (selectedStatus !== 'ALL' && d.trangThai !== selectedStatus) return false;
-      if (selectedUrgency !== 'ALL' && d.mucDoKhan !== selectedUrgency) return false;
+
+      if (statusFilter !== 'ALL') {
+        if (statusFilter === 'CHUA_GIAO_TP' && d.assignedTpId) return false;
+        if (statusFilter === 'DANG_XU_LY' && (d.trangThai === 'HOAN_THANH' || !d.assignedTpId)) return false;
+        if (statusFilter === 'HOAN_THANH' && d.trangThai !== 'HOAN_THANH') return false;
+      }
+
+      if (urgencyFilter !== 'ALL' && d.mucDoKhan !== urgencyFilter) return false;
+
       return true;
     });
-  }, [dispatches, searchQuery, selectedStatus, selectedUrgency]);
+  }, [dispatches, searchTerm, statusFilter, urgencyFilter]);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800">
-              <FileText className="w-4 h-4" />
-            </div>
-            <h1 className="text-base font-black text-slate-900 uppercase tracking-tight">
-              Công Văn Được Viện Trưởng Giao ({dispatches.length})
-            </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-md"
+            style={{ backgroundColor: '#B71C1C' }}
+          >
+            <Inbox className="w-5 h-5 text-white" />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Toàn bộ công văn, văn bản chỉ đạo từ Viện Trưởng giao Phó Viện Trưởng trực tiếp chỉ đạo giải quyết
-          </p>
+          <div>
+            <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+              Công văn được giao
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              {kpis.total} văn bản
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => exportDispatchesToExcel(filtered, DEFAULT_COLUMNS)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-amber-900 bg-white hover:bg-amber-50 border border-slate-200 rounded-xl transition cursor-pointer shadow-2xs"
-          >
-            <Download className="w-4 h-4 text-slate-500" />
-            Xuất Excel
-          </button>
+        {onRefresh && (
           <button
             onClick={onRefresh}
-            className="p-2 text-slate-600 hover:text-amber-900 bg-white hover:bg-amber-50 border border-slate-200 rounded-xl transition cursor-pointer shadow-2xs"
-            title="Làm mới"
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95 disabled:opacity-50"
+            style={{ backgroundColor: '#B71C1C' }}
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-amber-700' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Làm mới
           </button>
-        </div>
+        )}
       </div>
 
-      {/* Filter toolbar */}
-      <div className="p-4 border-b border-slate-200 bg-white flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Tìm kiếm theo số công văn, trích yếu nội dung, đơn vị ban hành..."
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:ring-1 focus:ring-amber-600 focus:outline-none bg-slate-50/50"
-          />
-        </div>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="Tổng nhận" value={kpis.total} icon={FileText} color="slate" />
+        <KpiCard label="Chưa giao TP" value={kpis.chuaGiaoTp} icon={Clock} color="amber" alert={kpis.chuaGiaoTp > 0} />
+        <KpiCard label="Đang xử lý" value={kpis.dangXuLy} icon={Send} color="blue" />
+        <KpiCard label="Hoàn thành" value={kpis.hoanThanh} icon={CheckCircle2} color="emerald" />
+      </div>
 
-        <div className="flex items-center gap-2">
+      {/* Filter Bar */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Tìm số CV, trích yếu, đơn vị..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-50 text-slate-800 pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:bg-white font-medium"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
           <select
-            value={selectedStatus}
-            onChange={e => setSelectedStatus(e.target.value)}
-            className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-slate-50/50 text-slate-700 focus:outline-none"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-50 hover:bg-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 cursor-pointer text-slate-700"
           >
             <option value="ALL">Tất cả trạng thái</option>
+            <option value="CHUA_GIAO_TP">Chưa giao TP</option>
             <option value="DANG_XU_LY">Đang xử lý</option>
-            <option value="CHO_TP_XU_LY">Chờ TP xử lý</option>
-            <option value="CHO_TRINH_VT">Chờ trình VT</option>
-            <option value="SAP_DEN_HAN">Sắp đến hạn</option>
-            <option value="QUA_HAN">Quá hạn</option>
-            <option value="HOAN_THANH">Đã hoàn thành</option>
+            <option value="HOAN_THANH">Hoàn thành</option>
           </select>
 
           <select
-            value={selectedUrgency}
-            onChange={e => setSelectedUrgency(e.target.value)}
-            className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-slate-50/50 text-slate-700 focus:outline-none"
+            value={urgencyFilter}
+            onChange={e => setUrgencyFilter(e.target.value)}
+            className="px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-50 hover:bg-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 cursor-pointer text-slate-700"
           >
-            <option value="ALL">Tất cả độ khẩn</option>
+            <option value="ALL">Mọi mức độ</option>
             <option value="HOA_TOC">Hỏa tốc</option>
-            <option value="THUONG_KHAN">Thượng khẩn</option>
             <option value="KHAN">Khẩn</option>
             <option value="THUONG">Thường</option>
           </select>
+
+          {(searchTerm || statusFilter !== 'ALL' || urgencyFilter !== 'ALL') && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('ALL');
+                setUrgencyFilter('ALL');
+              }}
+              className="px-2.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition cursor-pointer"
+            >
+              Xóa lọc
+            </button>
+          )}
+
+          <span className="ml-auto text-xs font-bold text-slate-600">
+            Kết quả:{' '}
+            <span
+              className="px-2 py-0.5 rounded-lg text-white"
+              style={{ backgroundColor: '#B71C1C' }}
+            >
+              {filtered.length}
+            </span>
+          </span>
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs border-collapse">
-          <thead>
-            <tr className="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
-              <th className="py-3 px-3.5 w-12 text-center">STT</th>
-              <th className="py-3 px-3.5 w-32">Số Công Văn</th>
-              <th className="py-3 px-3.5 min-w-[260px]">Nội Dung & Chỉ Đạo Của Viện Trưởng</th>
-              <th className="py-3 px-3.5 w-44">Trưởng Phòng Phụ Trách</th>
-              <th className="py-3 px-3.5 w-32">Hạn Xử Lý</th>
-              <th className="py-3 px-3.5 w-28 text-center">Tiến Độ</th>
-              <th className="py-3 px-3.5 w-28 text-center">Trạng Thái</th>
-              <th className="py-3 px-3.5 w-32 text-center">Thao Tác</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 text-slate-800">
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="py-12 text-center text-slate-400 italic">
-                  Không tìm thấy công văn nào phù hợp với bộ lọc hiện tại.
-                </td>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr
+                className="text-white font-bold uppercase text-[10px] tracking-wider"
+                style={{ backgroundColor: '#B71C1C' }}
+              >
+                <th className="py-3 px-3 w-12 text-center">STT</th>
+                <th className="py-3 px-3 w-32">Số CV</th>
+                <th className="py-3 px-3 min-w-[280px]">Trích yếu</th>
+                <th className="py-3 px-3 w-40">TP phụ trách</th>
+                <th className="py-3 px-3 w-28">Hạn xử lý</th>
+                <th className="py-3 px-3 w-32 text-center">Trạng thái</th>
+                <th className="py-3 px-3 w-40 text-center">Thao tác</th>
               </tr>
-            ) : (
-              filtered.map((disp, idx) => (
-                <tr key={disp.id} className="hover:bg-amber-50/30 transition">
-                  <td className="py-3.5 px-3.5 text-center font-medium text-slate-400">
-                    {idx + 1}
-                  </td>
-                  <td className="py-3.5 px-3.5 font-mono font-bold text-slate-900">
-                    {disp.soCongVan}
-                    {disp.mucDoKhan && disp.mucDoKhan !== 'THUONG' && (
-                      <span className="block text-[10px] font-sans font-bold text-rose-600">
-                        [{disp.mucDoKhan}]
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-3.5">
-                    <div
-                      onClick={() => onOpenDetail(disp)}
-                      className="font-semibold text-slate-900 hover:text-amber-800 cursor-pointer line-clamp-2"
-                    >
-                      {disp.tenCongVan}
-                    </div>
-                    {disp.vtChiDao && (
-                      <div className="text-[11px] text-rose-800 bg-rose-50/80 p-1.5 rounded-lg mt-1 border border-rose-200">
-                        <strong>Chỉ đạo của Viện Trưởng:</strong> {disp.vtChiDao}
-                      </div>
-                    )}
-                    {disp.pvtChiDao && (
-                      <div className="text-[10px] text-amber-800 italic mt-0.5">
-                        <strong>Chỉ đạo của PVT:</strong> {disp.pvtChiDao}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-3.5">
-                    {disp.assignedTpName ? (
-                      <div>
-                        <span className="font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-md border border-amber-300 block truncate">
-                          {disp.assignedTpName}
-                        </span>
-                        <button
-                          onClick={() => onOpenAssignTp(disp)}
-                          className="text-[10px] text-amber-700 hover:underline mt-0.5 cursor-pointer"
-                        >
-                          Đổi Trưởng phòng
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => onOpenAssignTp(disp)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-amber-700 hover:bg-amber-800 px-2.5 py-1 rounded-lg shadow-2xs transition cursor-pointer"
-                      >
-                        <CornerDownRight className="w-3.5 h-3.5" />
-                        Giao Trưởng Phòng
-                      </button>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-3.5 whitespace-nowrap">
-                    <div className="font-medium text-slate-800">{disp.hanBaoCaoXuLy || '—'}</div>
-                    {disp.thoiHanXuLy && (
-                      <span className={`text-[10px] font-semibold ${
-                        disp.thoiHanXuLy.includes('Quá hạn') ? 'text-rose-600' : 'text-slate-500'
-                      }`}>
-                        {disp.thoiHanXuLy}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-3.5 text-center">
-                    <span className="font-bold text-slate-900">{disp.tienDo || 0}%</span>
-                    <div className="h-1.5 w-16 bg-slate-200 rounded-full mx-auto mt-1 overflow-hidden">
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-16">
+                    <div className="text-center">
                       <div
-                        className={`h-full ${
-                          (disp.tienDo || 0) >= 80
-                            ? 'bg-emerald-600'
-                            : (disp.tienDo || 0) >= 40
-                            ? 'bg-amber-600'
-                            : 'bg-blue-600'
-                        }`}
-                        style={{ width: `${disp.tienDo || 0}%` }}
-                      />
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-3.5 text-center whitespace-nowrap">
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                        disp.trangThai === 'HOAN_THANH'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : disp.trangThai === 'QUA_HAN'
-                          ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                          : disp.trangThai === 'SAP_DEN_HAN'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                          : disp.trangThai === 'CHO_TP_XU_LY'
-                          ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                          : 'bg-blue-100 text-blue-800 border border-blue-300'
-                      }`}
-                    >
-                      {disp.trangThai || 'DANG_XU_LY'}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-3.5 text-center whitespace-nowrap">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <button
-                        onClick={() => onOpenDetail(disp)}
-                        className="p-1.5 text-slate-600 hover:text-amber-800 hover:bg-slate-100 rounded-lg border border-slate-200 transition cursor-pointer"
-                        title="Xem chi tiết"
+                        className="w-16 h-16 rounded-full border-2 border-dashed flex items-center justify-center mx-auto mb-3"
+                        style={{ borderColor: '#B71C1C40' }}
                       >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => onOpenAssignTp(disp)}
-                        className="px-2 py-1 text-[11px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-lg border border-amber-300 transition cursor-pointer"
-                      >
-                        Chỉ đạo
-                      </button>
+                        <Inbox className="w-7 h-7" style={{ color: '#B71C1C50' }} />
+                      </div>
+                      <div className="text-sm font-bold text-slate-700">
+                        {dispatches.length === 0
+                          ? 'Chưa có công văn nào được Viện trưởng giao'
+                          : 'Không có công văn khớp bộ lọc'}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        {dispatches.length === 0
+                          ? 'Khi Viện trưởng giao việc, công văn sẽ xuất hiện tại đây'
+                          : 'Thử điều chỉnh bộ lọc để tìm kiếm'}
+                      </div>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                filtered.map((d, idx) => {
+                  const status = getStatusInfo(d);
+                  const StatusIcon = status.icon;
+
+                  return (
+                    <tr key={d.id} className="hover:bg-red-50/30 transition">
+                      <td className="py-3 px-3 text-center text-slate-400 font-mono">
+                        {idx + 1}
+                      </td>
+
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono font-black text-[11px] text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            {d.soCongVan || '—'}
+                          </span>
+                          {d.mucDoKhan === 'HOA_TOC' && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-800 border border-red-200">
+                              <Flame className="w-2.5 h-2.5" />
+                              HỎA TỐC
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-3">
+                        <div
+                          onClick={() => onOpenDetail(d)}
+                          className="font-semibold text-slate-900 hover:text-red-700 cursor-pointer line-clamp-2"
+                        >
+                          {d.tenCongVan}
+                        </div>
+                        {d.donViBanHanh && (
+                          <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                            {d.donViBanHanh}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3">
+                        {d.assignedTpName ? (
+                          <span className="inline-block px-2 py-0.5 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+                            {d.assignedTpName}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                            <AlertTriangle className="w-3 h-3" />
+                            Chưa giao
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3 text-slate-700 font-mono text-[11px]">
+                        {formatDate(d.hanBaoCaoXuLy)}
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${status.color}`}
+                        >
+                          <StatusIcon className="w-3 h-3" />
+                          {status.label}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-3">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => onOpenDetail(d)}
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-700 hover:bg-blue-50 hover:border-blue-300 transition cursor-pointer"
+                            title="Xem chi tiết"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          {d.trangThai !== 'HOAN_THANH' && (
+                            <>
+                              <button
+                                onClick={() => onOpenAssignTp(d)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white transition cursor-pointer active:scale-95 shadow-xs"
+                                style={{ backgroundColor: '#B71C1C' }}
+                              >
+                                <Send className="w-3 h-3" />
+                                {d.assignedTpId ? 'Đổi TP' : 'Giao TP'}
+                              </button>
+                              {onMarkComplete && (
+                                <button
+                                  onClick={() => onMarkComplete(d)}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white bg-emerald-700 hover:bg-emerald-800 transition cursor-pointer active:scale-95 shadow-xs"
+                                  title="Đánh dấu hoàn thành"
+                                >
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Xong
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        {filtered.length > 0 && (
+          <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+            <span className="text-slate-600">
+              Hiển thị <strong className="text-slate-900">{filtered.length}</strong> /{' '}
+              <strong className="text-slate-900">{dispatches.length}</strong> công văn
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+// ============================================
+// KPI CARD
+// ============================================
+const KpiCard: React.FC<{
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  color: 'slate' | 'amber' | 'blue' | 'emerald';
+  alert?: boolean;
+}> = ({ label, value, icon: Icon, color, alert }) => {
+  const colors = {
+    slate: { bg: 'bg-slate-50', border: 'border-slate-200', icon: 'bg-slate-600', text: 'text-slate-700' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'bg-amber-600', text: 'text-amber-800' },
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'bg-blue-600', text: 'text-blue-800' },
+    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'bg-emerald-600', text: 'text-emerald-800' },
+  }[color];
+
+  return (
+    <div className={`p-3.5 rounded-2xl ${colors.bg} border ${colors.border} shadow-xs relative`}>
+      {alert && (
+        <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 animate-pulse border-2 border-white" />
+      )}
+      <div className="flex items-center justify-between mb-1.5">
+        <span className={`text-[10px] font-black ${colors.text} uppercase tracking-wider`}>
+          {label}
+        </span>
+        <div className={`w-7 h-7 rounded-lg ${colors.icon} text-white flex items-center justify-center shadow-sm`}>
+          <Icon className="w-3.5 h-3.5" />
+        </div>
+      </div>
+      <div className="text-2xl font-black text-slate-900 leading-none tabular-nums">
+        {value}
+      </div>
+    </div>
+  );
+};
+
+export default PvtAssignedDispatches;

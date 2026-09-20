@@ -10,9 +10,13 @@ export const dispatchesService = {
     const limit = parseInt(filters.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const where = {
-      deletedAt: null,
-    };
+    const where = {};
+
+    // Chỉ filter deletedAt = null nếu KHÔNG yêu cầu include deleted
+    // Admin có thể truyền includeDeleted=true để xem cả CV đã xoá mềm
+    if (filters.includeDeleted !== 'true' && filters.includeDeleted !== true) {
+      where.deletedAt = null;
+    }
 
     // 1.1. Phân quyền
     const perms = currentUser.permissions || [];
@@ -170,7 +174,7 @@ export const dispatchesService = {
 
     // Check quyền xem
     const perms = currentUser.permissions || [];
-    
+
     if (!perms.includes('dispatch:view:all')) {
       const canView =
         dispatch.createdById === currentUser.id ||
@@ -276,7 +280,7 @@ export const dispatchesService = {
 
     // Check quyền sửa
     const perms = currentUser.permissions || [];
-    
+
     if (!perms.includes('dispatch:update:all')) {
       if (!perms.includes('dispatch:update:assigned')) {
         if (dispatch.createdById !== currentUser.id) {
@@ -364,7 +368,6 @@ export const dispatchesService = {
   async getStats(currentUser) {
     const where = { deletedAt: null };
 
-    // Filter theo role
     const perms = currentUser.permissions || [];
     if (perms.includes('dispatch:view:all')) {
       // Tất cả
@@ -374,43 +377,41 @@ export const dispatchesService = {
       where.dispatchTps = { some: { tpId: currentUser.id } };
     }
 
+    // ✅ THÊM DÒNG NÀY — khai báo today
     const today = new Date();
+    today.setHours(0, 0, 0, 0);   // Đầu ngày hôm nay
+
     const in3Days = new Date();
     in3Days.setDate(in3Days.getDate() + 3);
+    in3Days.setHours(23, 59, 59, 999);  // Cuối ngày thứ 3
 
-    const [
-      total,
-      dangXuLy,
-      hoanThanh,
-      quaHan,
-      sapDenHan,
-      chuaToiHan,
-    ] = await Promise.all([
-      prisma.dispatch.count({ where }),
-      prisma.dispatch.count({ where: { ...where, trangThai: 'DANG_XU_LY' } }),
-      prisma.dispatch.count({ where: { ...where, trangThai: 'HOAN_THANH' } }),
-      prisma.dispatch.count({
-        where: {
-          ...where,
-          hanBaoCaoXuLy: { lt: today },
-          trangThai: { not: 'HOAN_THANH' },
-        },
-      }),
-      prisma.dispatch.count({
-        where: {
-          ...where,
-          hanBaoCaoXuLy: { gte: today, lte: in3Days },
-          trangThai: { not: 'HOAN_THANH' },
-        },
-      }),
-      prisma.dispatch.count({
-        where: {
-          ...where,
-          hanBaoCaoXuLy: { gt: in3Days },
-          trangThai: { not: 'HOAN_THANH' },
-        },
-      }),
-    ]);
+    const [total, dangXuLy, hoanThanh, quaHan, sapDenHan, chuaToiHan] =
+      await Promise.all([
+        prisma.dispatch.count({ where }),
+        prisma.dispatch.count({ where: { ...where, trangThai: 'DANG_XU_LY' } }),
+        prisma.dispatch.count({ where: { ...where, trangThai: 'HOAN_THANH' } }),
+        prisma.dispatch.count({
+          where: {
+            ...where,
+            hanBaoCaoXuLy: { lt: today },
+            trangThai: { not: 'HOAN_THANH' },
+          },
+        }),
+        prisma.dispatch.count({
+          where: {
+            ...where,
+            hanBaoCaoXuLy: { gte: today, lte: in3Days },
+            trangThai: { not: 'HOAN_THANH' },
+          },
+        }),
+        prisma.dispatch.count({
+          where: {
+            ...where,
+            hanBaoCaoXuLy: { gt: in3Days },
+            trangThai: { not: 'HOAN_THANH' },
+          },
+        }),
+      ]);
 
     return {
       total,
@@ -420,6 +421,73 @@ export const dispatchesService = {
       sapDenHan,
       chuaToiHan,
       tyLeHoanThanh: total > 0 ? Math.round((hoanThanh / total) * 100) : 0,
+    };
+  },
+    // ============================================
+  // 7. ĐÁNH DẤU HOÀN THÀNH (PVT/TP tự chốt)
+  // ============================================
+  async markComplete(dispatchId, currentUser, note) {
+    const dispatch = await prisma.dispatch.findUnique({
+      where: { id: dispatchId },
+      include: {
+        dispatchPvts: true,
+        dispatchTps: true,
+      },
+    });
+
+    if (!dispatch || dispatch.deletedAt) {
+      throw { status: 404, message: 'Không tìm thấy công văn' };
+    }
+
+    if (dispatch.trangThai === 'HOAN_THANH') {
+      throw { status: 400, message: 'Công văn đã hoàn thành' };
+    }
+
+    // Check quyền: VT/PVT/TP đều có thể hoàn thành
+    const perms = currentUser.permissions || [];
+    const isVtOrAdmin =
+      perms.includes('dispatch:view:all') ||
+      currentUser.roles?.includes('VIEN_TRUONG') ||
+      currentUser.roles?.includes('ADMIN');
+
+    const isAssignedPvt = dispatch.dispatchPvts.some(
+      dp => dp.pvtId === currentUser.id
+    );
+    const isAssignedTp = dispatch.dispatchTps.some(
+      dt => dt.tpId === currentUser.id
+    );
+
+    if (!isVtOrAdmin && !isAssignedPvt && !isAssignedTp) {
+      throw { status: 403, message: 'Bạn không có quyền đánh dấu công văn này' };
+    }
+
+    // Update
+    const updated = await prisma.dispatch.update({
+      where: { id: dispatchId },
+      data: {
+        trangThai: 'HOAN_THANH',
+        tienDo: 100,
+        completedAt: new Date(),
+        baoCaoTienDo: note || dispatch.baoCaoTienDo,
+      },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: currentUser.id,
+        userName: currentUser.fullName,
+        action: 'MARK_COMPLETE',
+        entityType: 'dispatch',
+        entityId: dispatchId,
+        newValue: { note },
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Đã đánh dấu hoàn thành',
+      dispatch: updated,
     };
   },
 };

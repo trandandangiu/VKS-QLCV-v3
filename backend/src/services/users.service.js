@@ -116,12 +116,19 @@ export const usersService = {
       prisma.user.count({ where }),
     ]);
 
-    // 1.4. Format
-    const formatted = users.map(u => ({
-      ...u,
-      roles: u.userRoles.map(ur => ur.role),
-      userRoles: undefined,
-    }));
+ 
+    // 1.4. Format — thêm `role` string từ roles[0]
+    const formatted = users.map(u => {
+      const roles = u.userRoles.map(ur => ur.role);
+      const primaryRole = roles[0]?.code || 'TRUONG_PHONG';
+      
+      return {
+        ...u,
+        roles,
+        role: primaryRole,              // ← THÊM: string cho FE dùng
+        userRoles: undefined,
+      };
+    });
 
     return {
       users: formatted,
@@ -214,6 +221,8 @@ export const usersService = {
     const {
       username, password, fullName, email, phone,
       position, departmentId, managerId, roleIds,
+      role: roleCode,
+      roomCode,
     } = data;
 
     // 3.1. Check username trùng
@@ -235,28 +244,55 @@ export const usersService = {
       }
     }
 
-    // 3.3. Check roles tồn tại
+    // 3.3. Xác định roleIds — từ roleIds array HOẶC role code
+    let finalRoleIds = roleIds;
+
+    if ((!finalRoleIds || finalRoleIds.length === 0) && roleCode) {
+      const roleObj = await prisma.role.findUnique({
+        where: { code: roleCode },
+      });
+      if (!roleObj) {
+        throw { status: 400, message: `Vai trò "${roleCode}" không tồn tại` };
+      }
+      finalRoleIds = [roleObj.id];
+    }
+
+    if (!finalRoleIds || finalRoleIds.length === 0) {
+      throw { status: 400, message: 'Phải chọn ít nhất 1 vai trò' };
+    }
+
+    // 3.3b. Check roles tồn tại
     const roles = await prisma.role.findMany({
-      where: { id: { in: roleIds }, active: true },
+      where: { id: { in: finalRoleIds }, active: true },
     });
 
-    if (roles.length !== roleIds.length) {
+    if (roles.length !== finalRoleIds.length) {
       throw { status: 400, message: 'Một số role không tồn tại' };
+    }
+
+    // 3.3c. Xác định departmentId — từ departmentId HOẶC roomCode
+    let finalDeptId = departmentId;
+
+    if (!finalDeptId && roomCode) {
+      const dept = await prisma.department.findUnique({
+        where: { code: roomCode },
+      });
+      if (dept) finalDeptId = dept.id;
     }
 
     // 3.4. Validate: role TRUONG_PHONG cần departmentId
     const hasTpRole = roles.some(r => r.code === 'TRUONG_PHONG');
-    if (hasTpRole && !departmentId) {
+    if (hasTpRole && !finalDeptId) {
       throw {
         status: 400,
         message: 'User có vai trò Trưởng phòng phải được gán vào phòng',
       };
     }
 
-    // 3.5. Check department tồn tại (nếu có)
-    if (departmentId) {
+    // 3.5. Check department tồn tại
+    if (finalDeptId) {
       const dept = await prisma.department.findUnique({
-        where: { id: departmentId },
+        where: { id: finalDeptId },
       });
       if (!dept) {
         throw { status: 400, message: 'Phòng ban không tồn tại' };
@@ -277,7 +313,7 @@ export const usersService = {
           email: email || null,
           phone: phone || null,
           position: position || null,
-          departmentId: departmentId || null,
+          departmentId: finalDeptId || null,
           managerId: managerId || null,
           active: true,
         },
@@ -285,7 +321,7 @@ export const usersService = {
 
       // Gán roles
       await tx.userRole.createMany({
-        data: roleIds.map(roleId => ({
+        data: finalRoleIds.map(roleId => ({
           userId: user.id,
           roleId,
           assignedBy: currentUser.id,
@@ -300,7 +336,7 @@ export const usersService = {
           action: 'CREATE_USER',
           entityType: 'user',
           entityId: user.id,
-          newValue: { username, fullName, roleIds },
+          newValue: { username, fullName, roleIds: finalRoleIds },
         },
       });
 

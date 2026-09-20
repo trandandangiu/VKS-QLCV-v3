@@ -6,17 +6,16 @@ export const departmentsService = {
   // 1. LẤY DANH SÁCH
   // ============================================
   async getDepartments(filters = {}) {
-    const where = {};
+    // Mặc định chỉ lấy phòng active = true
+    const where = {
+      active: filters.active !== undefined ? filters.active === 'true' : true,
+    };
 
     if (filters.search) {
       where.OR = [
         { code: { contains: filters.search, mode: 'insensitive' } },
         { name: { contains: filters.search, mode: 'insensitive' } },
       ];
-    }
-
-    if (filters.active !== undefined) {
-      where.active = filters.active === 'true';
     }
 
     const departments = await prisma.department.findMany({
@@ -34,7 +33,7 @@ export const departmentsService = {
       },
     });
 
-    // Thêm thông tin manager + pvt manager
+    // Enrich với manager + pvtManager
     const enriched = await Promise.all(
       departments.map(async (dept) => {
         let manager = null;
@@ -90,16 +89,16 @@ export const departmentsService = {
     // Lấy manager + pvt manager
     const manager = dept.managerId
       ? await prisma.user.findUnique({
-          where: { id: dept.managerId },
-          select: { id: true, username: true, fullName: true },
-        })
+        where: { id: dept.managerId },
+        select: { id: true, username: true, fullName: true },
+      })
       : null;
 
     const pvtManager = dept.pvtManagerId
       ? await prisma.user.findUnique({
-          where: { id: dept.pvtManagerId },
-          select: { id: true, username: true, fullName: true },
-        })
+        where: { id: dept.pvtManagerId },
+        select: { id: true, username: true, fullName: true },
+      })
       : null;
 
     return { ...dept, manager, pvtManager };
@@ -139,6 +138,8 @@ export const departmentsService = {
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
+        userName: currentUser.fullName,    // ← THÊM
+        userRole: currentUser.roles?.[0] || 'ADMIN',   // ← THÊM
         action: 'CREATE_DEPARTMENT',
         entityType: 'department',
         entityId: dept.id,
@@ -176,6 +177,8 @@ export const departmentsService = {
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
+        userName: currentUser.fullName,    // ← THÊM
+        userRole: currentUser.roles?.[0] || 'ADMIN',   // ← THÊM
         action: 'UPDATE_DEPARTMENT',
         entityType: 'department',
         entityId: id,
@@ -217,6 +220,8 @@ export const departmentsService = {
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
+        userName: currentUser.fullName,    // ← THÊM
+        userRole: currentUser.roles?.[0] || 'ADMIN',   // ← THÊM
         action: 'DELETE_DEPARTMENT',
         entityType: 'department',
         entityId: id,

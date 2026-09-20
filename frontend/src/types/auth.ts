@@ -1,9 +1,9 @@
 // frontend/src/types/auth.ts
 
-export type UserRole = 
-  | 'ADMIN' 
-  | 'VIEN_TRUONG' 
-  | 'PHO_VIEN_TRUONG' 
+export type UserRole =
+  | 'ADMIN'
+  | 'VIEN_TRUONG'
+  | 'PHO_VIEN_TRUONG'
   | 'TRUONG_PHONG';
 
 export interface User {
@@ -22,6 +22,7 @@ export interface User {
     name: string;
   };
   managerId?: string;
+  pvtManagerId?: string;
   manager?: {
     id: string;
     username: string;

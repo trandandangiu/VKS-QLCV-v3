@@ -64,18 +64,12 @@ export const Login: React.FC = () => {
         navigate('/vt');
         break;
       case 'PHO_VIEN_TRUONG':
-        if (fallbackUsername?.startsWith('pvt')) {
-          navigate(`/${fallbackUsername.toLowerCase()}`);
-        } else {
-          navigate('/pvt/1');
-        }
+        // ✅ LUÔN dùng /pvt để match route /pvt/*
+        navigate('/pvt');
         break;
       case 'TRUONG_PHONG':
-        if (fallbackUsername?.startsWith('tp')) {
-          navigate(`/${fallbackUsername.toLowerCase()}`);
-        } else {
-          navigate('/tp/1');
-        }
+        // ✅ LUÔN dùng /tp để match route /tp/*
+        navigate('/tp');
         break;
       default:
         navigate('/');
@@ -105,13 +99,22 @@ export const Login: React.FC = () => {
               />
             </div>
 
-            <h2 className="text-xl sm:text-3xl lg:text-4xl font-black uppercase tracking-wider text-amber-300 drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)] leading-tight">
-              Hệ thống báo cáo công việc
-            </h2>
             {/* Agency Name (h3 placed above h2, now larger, elegant official typography) */}
             <h3 className="text-xl sm:text-2xl lg:text-3xl font-extrabold uppercase tracking-[0.08em] sm:tracking-[0.14em] text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-200 to-amber-400 drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)] mb-3 leading-snug max-w-xl text-center">
               VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
             </h3>
+
+            {/* Subtle decorative divider */}
+            <div className="flex items-center justify-center gap-3 w-48 mb-3">
+              <span className="h-px w-full bg-gradient-to-r from-transparent via-amber-300/80 to-transparent" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,0.8)]" />
+              <span className="h-px w-full bg-gradient-to-r from-transparent via-amber-300/80 to-transparent" />
+            </div>
+
+            {/* System Title (h2, smaller than h3, crisp, modern and prestigious) */}
+            <h2 className="text-sm sm:text-base lg:text-lg font-semibold uppercase tracking-[0.2em] sm:tracking-[0.25em] text-amber-100 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] leading-relaxed">
+              Hệ thống báo cáo công việc
+            </h2>
           </div>
 
           <div className="lg:col-span-5 w-full max-w-md mx-auto">

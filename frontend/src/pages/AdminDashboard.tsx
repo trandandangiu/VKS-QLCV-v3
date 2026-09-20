@@ -11,22 +11,27 @@ import { ColumnManagerModal } from '../components/ColumnManagerModal';
 import { DispatchDetailDrawer } from '../components/DispatchDetailDrawer';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { GoogleSheetModal } from '../components/GoogleSheetModal';
+import { DatabaseBrowser } from '../components/admin/DatabaseBrowser';
+import { AdminDepartments } from '../components/admin/AdminDepartments';
+import { AdminDashboardHome } from '../components/admin/AdminDashboardHome';
+import { AdminAuditLogs } from '../components/admin/AdminAuditLogs';
+import { AdminSessions } from '../components/admin/AdminSessions';
 import { useDispatches } from '../hooks/useDispatches';
 import { apiClient } from '../services/apiClient';
 import { exportDispatchesToExcel, exportLeadershipReportToExcel } from '../services/excelService';
 import { Dispatch } from '../types/dispatch';
 import { User, UserRole } from '../types/auth';
-import { 
-  Users, 
-  Database, 
-  Wifi, 
-  Copy, 
-  Check, 
-  Key, 
-  Edit3, 
-  RefreshCw, 
-  AlertCircle, 
-  CheckCircle2, 
+import {
+  Users,
+  Database,
+  Wifi,
+  Copy,
+  Check,
+  Key,
+  Edit3,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
   Server,
   Building,
   FileSpreadsheet,
@@ -176,21 +181,20 @@ export const AdminDashboard: React.FC = () => {
     toggleColumnVisibility,
     removeColumn,
     resetToDefaultColumns
-  } = useDispatches();
-
-  type AdminModule = 
+  } = useDispatches({ includeDeleted: true });
+  type AdminModule =
     | 'dashboard'
-    | 'create-user' 
-    | 'transfer-dept' 
-    | 'assign-pvt' 
-    | 'tab-users' 
-    | 'export-leadership-excel' 
-    | 'tab-dispatches' 
-    | 'roles' 
-    | 'permissions' 
-    | 'departments' 
-    | 'stats-overview' 
-    | 'stats-by-dept' 
+    | 'create-user'
+    | 'transfer-dept'
+    | 'assign-pvt'
+    | 'tab-users'
+    | 'export-leadership-excel'
+    | 'tab-dispatches'
+    | 'roles'
+    | 'permissions'
+    | 'departments'
+    | 'stats-overview'
+    | 'stats-by-dept'
     | 'stats-by-time'
     | 'database-tables'
     | 'audit-logs'
@@ -234,6 +238,31 @@ export const AdminDashboard: React.FC = () => {
   const [userCurrentPage, setUserCurrentPage] = useState(1);
   const userPageSize = 20;
 
+
+  // Departments từ API
+  const [departments, setDepartments] = useState<Array<{ id: string; code: string; name: string }>>([]);
+
+  useEffect(() => {
+    const loadDepts = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const res = await fetch('/api/departments', {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const data = await res.json();
+        if (data.success) {
+          const activeDepts = (data.departments || []).filter((d: any) => d.active !== false);
+          setDepartments(activeDepts);
+        }
+      } catch (e) {
+        console.error('Lỗi load departments:', e);
+      }
+    };
+    loadDepts();
+  }, []);
   // 1. Create User State
   const [newUser, setNewUser] = useState({
     username: '',
@@ -418,7 +447,7 @@ export const AdminDashboard: React.FC = () => {
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {}
+    onConfirm: () => { }
   });
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' | 'warning' } | null>(null);
@@ -478,7 +507,7 @@ export const AdminDashboard: React.FC = () => {
       }
       // 4. Status filter
       if (userStatusFilter !== 'all') {
-        const isActive = u.active !== 0;
+        const isActive = !!u.active;
         if (userStatusFilter === 'active' && !isActive) return false;
         if (userStatusFilter === 'inactive' && isActive) return false;
       }
@@ -498,10 +527,10 @@ export const AdminDashboard: React.FC = () => {
       showToast('Không thể khóa tài khoản Quản trị viên tối cao!', 'warning');
       return;
     }
-    const newActive = u.active === 0 ? 1 : 0;
+    const newActive = !u.active;
     const res = await apiClient.updateUser(u.id, { active: newActive });
     if (res) {
-      showToast(`Đã ${newActive === 1 ? 'kích hoạt' : 'tạm dừng'} tài khoản "${u.username}"!`);
+      showToast(`Đã ${newActive ? 'kích hoạt' : 'tạm dừng'} tài khoản "${u.username}"!`);
       reloadUsers();
     } else {
       showToast('Lỗi khi cập nhật trạng thái tài khoản', 'error');
@@ -513,7 +542,7 @@ export const AdminDashboard: React.FC = () => {
     setEditingUser(u);
     setEditFullName(u.fullName);
     setEditPassword('');
-    setEditPvtManager(u.pvtManagerId || '');
+    setEditPvtManager(u.managerId || '');
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
@@ -620,11 +649,13 @@ export const AdminDashboard: React.FC = () => {
     e.preventDefault();
     if (!transferUser) return;
 
+    // Tìm departmentId từ roomCode
+    const targetDept = departments.find(d => d.code === transferRoomCode.trim().toUpperCase());
+
     const res = await apiClient.updateUser(transferUser.id, {
-      roomCode: transferRoomCode.trim().toUpperCase(),
-      role: transferRole,
-      pvtManagerId: transferRole === 'TRUONG_PHONG' ? (transferPvtManagerId || null) : null
-    });
+      departmentId: targetDept?.id || null,
+      pvtManagerId: transferRole === 'TRUONG_PHONG' ? (transferPvtManagerId || null) : null,
+    } as any);
 
     if (res) {
       showToast(`Đã điều chuyển đồng chí ${transferUser.fullName} sang bộ phận "${transferRoomCode}"`);
@@ -652,9 +683,18 @@ export const AdminDashboard: React.FC = () => {
     e.preventDefault();
     if (!assignTpUser) return;
 
+    // Map roleId cho TP (theo DB: TRUONG_PHONG = 4)
+    const ROLE_CODE_TO_ID: Record<string, number> = {
+      ADMIN: 1,
+      VIEN_TRUONG: 2,
+      PHO_VIEN_TRUONG: 3,
+      TRUONG_PHONG: 4,
+    };
+
+    // Gán PVT phụ trách cho TP — dùng pvtManagerId (User field)
     const res = await apiClient.updateUser(assignTpUser.id, {
-      pvtManagerId: assignPvtId || null
-    });
+      pvtManagerId: assignPvtId || null,
+    } as any);
 
     if (res) {
       const pvt = allUsers.find(u => u.id === assignPvtId);
@@ -666,7 +706,6 @@ export const AdminDashboard: React.FC = () => {
       showToast('Lỗi khi gán quyền phụ trách', 'error');
     }
   };
-
   // Handle Export Leadership Excel
   const handleExportLeadershipExcel = () => {
     const targetDispatches = selectedIds.length > 0
@@ -773,8 +812,8 @@ export const AdminDashboard: React.FC = () => {
     // Filter by search query
     if (sidebarSearch.trim()) {
       const q = sidebarSearch.toLowerCase();
-      result = result.filter(f => 
-        f.title.toLowerCase().includes(q) || 
+      result = result.filter(f =>
+        f.title.toLowerCase().includes(q) ||
         f.description.toLowerCase().includes(q) ||
         f.categoryName.toLowerCase().includes(q)
       );
@@ -810,11 +849,10 @@ export const AdminDashboard: React.FC = () => {
           {/* LEFT SIDEBAR: ADMIN FUNCTION PANEL */}
           {/* ========================================================================= */}
           {isSidebarOpen && (
-            <aside 
+            <aside
               id="admin-left-sidebar"
-              className={`w-full lg:w-80 shrink-0 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-200 ${
-                isSidebarMobileOpen ? 'block' : 'hidden lg:block'
-              }`}
+              className={`w-full lg:w-80 shrink-0 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-200 ${isSidebarMobileOpen ? 'block' : 'hidden lg:block'
+                }`}
             >
               {/* Sidebar Top: Header with Close Sidebar Button */}
               <div className="p-3.5 bg-slate-900 text-white border-b border-slate-800">
@@ -825,11 +863,10 @@ export const AdminDashboard: React.FC = () => {
                       setActiveModule('dashboard');
                       setIsSidebarMobileOpen(false);
                     }}
-                    className={`flex items-center gap-2 px-2.5 py-1 rounded-xl transition cursor-pointer ${
-                      activeModule === 'dashboard'
-                        ? 'bg-red-700 text-white shadow-xs font-black'
-                        : 'text-slate-200 hover:text-white hover:bg-slate-800 font-bold'
-                    }`}
+                    className={`flex items-center gap-2 px-2.5 py-1 rounded-xl transition cursor-pointer ${activeModule === 'dashboard'
+                      ? 'bg-red-700 text-white shadow-xs font-black'
+                      : 'text-slate-200 hover:text-white hover:bg-slate-800 font-bold'
+                      }`}
                   >
                     <LayoutDashboard className="w-4 h-4 text-red-400" />
                     <h2 className="text-xs uppercase tracking-wider">
@@ -883,16 +920,14 @@ export const AdminDashboard: React.FC = () => {
                       setActiveModule('dashboard');
                       setIsSidebarMobileOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-2xl mb-2 transition cursor-pointer border ${
-                      activeModule === 'dashboard'
-                        ? 'bg-red-50 text-red-900 border-red-300 font-bold shadow-xs ring-1 ring-red-200'
-                        : 'bg-white text-slate-800 hover:bg-slate-50 border-slate-200'
-                    }`}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-2xl mb-2 transition cursor-pointer border ${activeModule === 'dashboard'
+                      ? 'bg-red-50 text-red-900 border-red-300 font-bold shadow-xs ring-1 ring-red-200'
+                      : 'bg-white text-slate-800 hover:bg-slate-50 border-slate-200'
+                      }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
-                        activeModule === 'dashboard' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-700 border-red-200'
-                      }`}>
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${activeModule === 'dashboard' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-700 border-red-200'
+                        }`}>
                         <LayoutDashboard className="w-4 h-4" />
                       </div>
                       <div className="text-left min-w-0">
@@ -927,11 +962,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('tab-users');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'tab-users'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'tab-users'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <Users className="w-3.5 h-3.5 mr-2 text-slate-500 shrink-0" />
@@ -945,11 +979,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('create-user');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'create-user'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'create-user'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <UserPlus className="w-3.5 h-3.5 mr-2 text-blue-600 shrink-0" />
@@ -964,11 +997,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('roles');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'roles'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'roles'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <ShieldCheck className="w-3.5 h-3.5 mr-2 text-purple-600 shrink-0" />
@@ -984,11 +1016,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('permissions');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'permissions'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'permissions'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">└──</span>
                         <Key className="w-3.5 h-3.5 mr-2 text-amber-600 shrink-0" />
@@ -1021,11 +1052,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('departments');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'departments'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'departments'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <Building className="w-3.5 h-3.5 mr-2 text-blue-600 shrink-0" />
@@ -1040,11 +1070,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('assign-pvt');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'assign-pvt'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'assign-pvt'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">└──</span>
                         <ShieldCheck className="w-3.5 h-3.5 mr-2 text-purple-600 shrink-0" />
@@ -1077,11 +1106,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('tab-dispatches');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'tab-dispatches'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'tab-dispatches'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <FileText className="w-3.5 h-3.5 mr-2 text-emerald-600 shrink-0" />
@@ -1124,11 +1152,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('export-leadership-excel');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'export-leadership-excel'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'export-leadership-excel'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">└──</span>
                         <Download className="w-3.5 h-3.5 mr-2 text-emerald-600 shrink-0" />
@@ -1161,11 +1188,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('stats-overview');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'stats-overview'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'stats-overview'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <PieChartIcon className="w-3.5 h-3.5 mr-2 text-purple-600 shrink-0" />
@@ -1179,11 +1205,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('stats-by-dept');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'stats-by-dept'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'stats-by-dept'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <Building className="w-3.5 h-3.5 mr-2 text-blue-600 shrink-0" />
@@ -1197,11 +1222,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('stats-by-time');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'stats-by-time'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'stats-by-time'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">└──</span>
                         <Calendar className="w-3.5 h-3.5 mr-2 text-amber-600 shrink-0" />
@@ -1235,11 +1259,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('database-tables');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'database-tables'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'database-tables'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <Table className="w-3.5 h-3.5 mr-2 text-cyan-600 shrink-0" />
@@ -1253,11 +1276,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('audit-logs');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'audit-logs'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'audit-logs'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <History className="w-3.5 h-3.5 mr-2 text-amber-600 shrink-0" />
@@ -1271,11 +1293,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('sessions');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'sessions'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'sessions'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">└──</span>
                         <Activity className="w-3.5 h-3.5 mr-2 text-emerald-600 shrink-0" />
@@ -1308,11 +1329,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('custom-columns');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'custom-columns'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'custom-columns'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">├──</span>
                         <Columns className="w-3.5 h-3.5 mr-2 text-indigo-600 shrink-0" />
@@ -1326,11 +1346,10 @@ export const AdminDashboard: React.FC = () => {
                           setActiveModule('system-settings');
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${
-                          activeModule === 'system-settings'
-                            ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center text-left py-1.5 px-2 rounded-xl transition cursor-pointer ${activeModule === 'system-settings'
+                          ? 'bg-red-50 text-red-800 font-bold border border-red-200 shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                          }`}
                       >
                         <span className="text-slate-400 select-none mr-2 font-normal">└──</span>
                         <Settings className="w-3.5 h-3.5 mr-2 text-slate-600 shrink-0" />
@@ -1351,11 +1370,10 @@ export const AdminDashboard: React.FC = () => {
                           item.action();
                           setIsSidebarMobileOpen(false);
                         }}
-                        className={`group p-2.5 rounded-2xl transition cursor-pointer border ${
-                          isCurrentTab 
-                            ? 'bg-red-50/80 border-red-200 shadow-xs ring-1 ring-red-200' 
-                            : 'hover:bg-slate-50 border-transparent hover:border-slate-200'
-                        }`}
+                        className={`group p-2.5 rounded-2xl transition cursor-pointer border ${isCurrentTab
+                          ? 'bg-red-50/80 border-red-200 shadow-xs ring-1 ring-red-200'
+                          : 'hover:bg-slate-50 border-transparent hover:border-slate-200'
+                          }`}
                       >
                         <div className="flex items-center gap-2.5">
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${item.iconBg}`}>
@@ -1363,9 +1381,8 @@ export const AdminDashboard: React.FC = () => {
                           </div>
 
                           <div className="flex-1 min-w-0">
-                            <h3 className={`text-xs font-bold truncate ${
-                              isCurrentTab ? 'text-red-900 font-extrabold' : 'text-slate-900 group-hover:text-red-700'
-                            }`}>
+                            <h3 className={`text-xs font-bold truncate ${isCurrentTab ? 'text-red-900 font-extrabold' : 'text-slate-900 group-hover:text-red-700'
+                              }`}>
                               {item.title}
                             </h3>
                           </div>
@@ -1409,461 +1426,12 @@ export const AdminDashboard: React.FC = () => {
               </div>
             )}
 
-            {/* MODULE: ADMIN DASHBOARD OVERVIEW (DEFAULT & MAIN DASHBOARD) */}
+
+            {/* MODULE: ADMIN DASHBOARD OVERVIEW (NEW - API INTEGRATED) */}
             {activeModule === 'dashboard' && (
-              <div id="admin-dashboard-overview" className="space-y-4 animate-fadeIn">
-                {/* 1. TOP 4 METRIC CARDS: Users (27) | Dispatches (9) | Phòng (12) | Roles (4) */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* Card 1: Users */}
-                  <div
-                    onClick={() => setActiveModule('tab-users')}
-                    className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md hover:border-blue-300 transition cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Users</span>
-                      <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center group-hover:scale-105 transition">
-                        <Users className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-3xl font-black text-slate-900 mt-2">
-                      {allUsers.length > 0 ? allUsers.length : 27}
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-1 font-medium">
-                      1 VT • 12 PVT • 12 TP • 1 Admin
-                    </div>
-                  </div>
-
-                  {/* Card 2: Dispatches */}
-                  <div
-                    onClick={() => setActiveModule('tab-dispatches')}
-                    className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md hover:border-red-300 transition cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Dispatches</span>
-                      <div className="w-8 h-8 rounded-xl bg-red-50 text-red-700 border border-red-200 flex items-center justify-center group-hover:scale-105 transition">
-                        <FileSpreadsheet className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-3xl font-black text-slate-900 mt-2">
-                      {dispatches.length > 0 ? dispatches.length : 9}
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-1 font-medium">
-                      Hồ sơ công văn chỉ đạo VKS
-                    </div>
-                  </div>
-
-                  {/* Card 3: Phòng */}
-                  <div
-                    onClick={() => setActiveModule('departments')}
-                    className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md hover:border-purple-300 transition cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Phòng</span>
-                      <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 flex items-center justify-center group-hover:scale-105 transition">
-                        <Building className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-3xl font-black text-slate-900 mt-2">12</div>
-                    <div className="text-[11px] text-slate-500 mt-1 font-medium">
-                      Phòng ban nghiệp vụ cơ quan
-                    </div>
-                  </div>
-
-                  {/* Card 4: Roles */}
-                  <div
-                    onClick={() => setActiveModule('roles')}
-                    className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md hover:border-amber-300 transition cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Roles</span>
-                      <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center group-hover:scale-105 transition">
-                        <ShieldCheck className="w-4 h-4" />
-                      </div>
-                    </div>
-                    <div className="text-3xl font-black text-slate-900 mt-2">4</div>
-                    <div className="text-[11px] text-slate-500 mt-1 font-medium">
-                      VT • PVT • TP • Quản trị viên
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. MIDDLE SECTION: 📈 Biểu đồ công văn theo trạng thái */}
-                <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-xs space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
-                        <TrendingUp className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                          <span>📈 Biểu đồ công văn theo trạng thái</span>
-                        </h3>
-                        <p className="text-xs text-slate-500">
-                          Tỷ lệ phân bổ: 🔴 Quá hạn (12) • 🟡 Đang xử lý / Sắp đến hạn (25) • 🟢 Hoàn thành (208)
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveModule('tab-dispatches')}
-                      className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer self-start sm:self-auto"
-                    >
-                      Xem chi tiết bảng công văn →
-                    </button>
-                  </div>
-
-                  {/* Chart and Legend Breakdown */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-                    {/* SVG Donut Chart */}
-                    <div className="md:col-span-5 flex flex-col items-center justify-center py-2">
-                      <div className="relative w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center">
-                        <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                          {/* Background Track */}
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="38"
-                            fill="transparent"
-                            stroke="#f1f5f9"
-                            strokeWidth="14"
-                          />
-                          {/* Segment 1: Hoàn thành (208) -> 208/245 = 84.9% -> 202.7 on 238.7 circumference */}
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="38"
-                            fill="transparent"
-                            stroke="#10b981"
-                            strokeWidth="14"
-                            strokeDasharray="202.7 238.7"
-                            strokeDashoffset="0"
-                            className="transition-all duration-700 ease-out"
-                          />
-                          {/* Segment 2: Đang xử lý / Sắp quá hạn (25) -> 25/245 = 10.2% -> 24.3 */}
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="38"
-                            fill="transparent"
-                            stroke="#f59e0b"
-                            strokeWidth="14"
-                            strokeDasharray="24.3 238.7"
-                            strokeDashoffset="-202.7"
-                            className="transition-all duration-700 ease-out"
-                          />
-                          {/* Segment 3: Quá hạn (12) -> 12/245 = 4.9% -> 11.7 */}
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="38"
-                            fill="transparent"
-                            stroke="#ef4444"
-                            strokeWidth="14"
-                            strokeDasharray="11.7 238.7"
-                            strokeDashoffset="-227.0"
-                            className="transition-all duration-700 ease-out"
-                          />
-                        </svg>
-
-                        {/* Center text inside Donut */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center select-none pointer-events-none">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tổng cộng</span>
-                          <span className="text-2xl font-black text-slate-900 leading-none my-0.5">245</span>
-                          <span className="text-[10px] font-semibold text-emerald-700">Công văn</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Breakdown & Legend */}
-                    <div className="md:col-span-7 space-y-2.5">
-                      {/* Quá hạn (12) */}
-                      <div className="p-3 rounded-xl bg-red-50/70 border border-red-200/90 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="w-3.5 h-3.5 rounded-full bg-red-500 shrink-0"></span>
-                          <div>
-                            <div className="text-xs font-bold text-red-950">🔴 12 Quá hạn xử lý</div>
-                            <div className="text-[11px] text-red-700">Cần Lãnh đạo Viện đôn đốc gấp</div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-base font-black text-red-700">12</span>
-                          <span className="text-xs text-red-700 ml-1.5 font-bold">(5%)</span>
-                        </div>
-                      </div>
-
-                      {/* Đang xử lý / Sắp đến hạn (25) */}
-                      <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/90 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="w-3.5 h-3.5 rounded-full bg-amber-500 shrink-0"></span>
-                          <div>
-                            <div className="text-xs font-bold text-amber-950">🟡 25 Đang xử lý / Sắp đến hạn</div>
-                            <div className="text-[11px] text-amber-700">Đang tiến hành trong hạn định</div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-base font-black text-amber-700">25</span>
-                          <span className="text-xs text-amber-700 ml-1.5 font-bold">(10%)</span>
-                        </div>
-                      </div>
-
-                      {/* Hoàn thành (208) */}
-                      <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/90 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 shrink-0"></span>
-                          <div>
-                            <div className="text-xs font-bold text-emerald-950">🟢 208 Hoàn thành đúng hạn</div>
-                            <div className="text-[11px] text-emerald-700">Đã giải quyết và có báo cáo kết quả</div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-base font-black text-emerald-700">208</span>
-                          <span className="text-xs text-emerald-700 ml-1.5 font-bold">(85%)</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. BOTTOM SECTION: 🕐 Hoạt động gần đây */}
-                <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 border border-slate-300 flex items-center justify-center shrink-0">
-                        <Clock className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900">
-                          🕐 Hoạt động gần đây
-                        </h3>
-                        <p className="text-xs text-slate-500">
-                          Nhật ký thao tác nghiệp vụ và luân chuyển văn bản trực tiếp
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveModule('audit-logs')}
-                      className="text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
-                    >
-                      Xem toàn bộ Audit Logs →
-                    </button>
-                  </div>
-
-                  {/* Activity Feed Items matching user instructions */}
-                  <div className="divide-y divide-slate-100">
-                    <div className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl transition">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></div>
-                        <div className="text-xs font-medium text-slate-800 truncate">
-                          <strong className="text-blue-700 font-bold">Admin</strong> tạo user <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-900 font-bold">test01</span>
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-medium text-slate-500 shrink-0 font-sans">
-                        5 phút trước
-                      </span>
-                    </div>
-
-                    <div className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl transition">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-purple-500 shrink-0"></div>
-                        <div className="text-xs font-medium text-slate-800 truncate">
-                          <strong className="text-purple-700 font-bold">VT</strong> giao CV-001 cho <span className="font-mono bg-purple-50 text-purple-800 px-1.5 py-0.5 rounded font-bold">PVT1</span>
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-medium text-slate-500 shrink-0 font-sans">
-                        10 phút trước
-                      </span>
-                    </div>
-
-                    <div className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl transition">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
-                        <div className="text-xs font-medium text-slate-800 truncate">
-                          <strong className="text-emerald-700 font-bold">TP1</strong> báo cáo <span className="font-mono bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded font-bold">CV-003</span>
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-medium text-slate-500 shrink-0 font-sans">
-                        1 giờ trước
-                      </span>
-                    </div>
-
-                    <div className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl transition">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></div>
-                        <div className="text-xs font-medium text-slate-800 truncate">
-                          <strong className="text-amber-700 font-bold">Admin</strong> phân công PVT 1 phụ trách <span className="font-semibold text-slate-800">Phòng 1, Phòng 2</span>
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-medium text-slate-500 shrink-0 font-sans">
-                        2 giờ trước
-                      </span>
-                    </div>
-
-                    <div className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl transition">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-slate-400 shrink-0"></div>
-                        <div className="text-xs font-medium text-slate-800 truncate">
-                          <strong className="text-slate-700 font-bold">Hệ thống</strong> tự động đồng bộ và sao lưu an toàn CSDL
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-medium text-slate-500 shrink-0 font-sans">
-                        4 giờ trước
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AdminDashboardHome onNavigate={(m) => setActiveModule(m as AdminModule)} />
             )}
 
-            {/* MODULE 1: CREATE USER INLINE VIEW */}
-            {activeModule === 'create-user' && (
-              <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden p-6 space-y-6 animate-fadeIn">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center">
-                      <UserPlus className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900">Tạo tài khoản người dùng mới</h2>
-                      <p className="text-xs text-slate-500">Khởi tạo tài khoản lãnh đạo, kiểm sát viên hoặc phòng ban trong hệ thống</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setActiveModule('tab-users')}
-                    className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
-                  >
-                    ← Quay lại danh sách
-                  </button>
-                </div>
-
-                <form onSubmit={handleCreateUser} className="max-w-2xl space-y-5 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-bold text-slate-700 uppercase mb-1">Tên Đăng Nhập <span className="text-red-500">*</span></label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="ví dụ: pvt13, tp13, ksv_nam..."
-                        value={newUser.username}
-                        onChange={e => setNewUser({ ...newUser, username: e.target.value })}
-                        className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 uppercase mb-1">Mật Khẩu Khởi Tạo <span className="text-red-500">*</span></label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="Nhập mật khẩu ban đầu..."
-                        value={newUser.password}
-                        onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                        className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 uppercase mb-1">Họ Và Tên / Chức Danh <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Đ/c Nguyễn Văn A..."
-                      value={newUser.fullName}
-                      onChange={e => setNewUser({ ...newUser, fullName: e.target.value })}
-                      className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-bold text-slate-700 uppercase mb-1">Vai Trò Phân Quyền</label>
-                      <select
-                        value={newUser.role}
-                        onChange={e => setNewUser({ ...newUser, role: e.target.value as UserRole })}
-                        className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-medium"
-                      >
-                        <option value="TRUONG_PHONG">TRUONG_PHONG (Lãnh đạo phòng)</option>
-                        <option value="PHO_VIEN_TRUONG">PHO_VIEN_TRUONG (Phó Viện Trưởng)</option>
-                        <option value="VIEN_TRUONG">VIEN_TRUONG (Viện Trưởng)</option>
-                        <option value="ADMIN">ADMIN (Quản trị viên)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 uppercase mb-1">Bộ Phận / Ký Hiệu Đơn Vị</label>
-                      <input
-                        type="text"
-                        placeholder="TP1, TP2, PVT1, VT..."
-                        value={newUser.roomCode}
-                        onChange={e => setNewUser({ ...newUser, roomCode: e.target.value })}
-                        className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono font-bold text-blue-900"
-                      />
-                    </div>
-                  </div>
-
-                  {newUser.role === 'TRUONG_PHONG' && (
-                    <div>
-                      <label className="block font-bold text-slate-700 uppercase mb-1">Phó Viện Trưởng Phụ Trách Trực Tiếp</label>
-                      <select
-                        value={newUser.pvtManagerId}
-                        onChange={e => setNewUser({ ...newUser, pvtManagerId: e.target.value })}
-                        className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-medium"
-                      >
-                        <option value="">-- Chưa phân bổ --</option>
-                        {pvtUsers.map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.roomCode}: {p.fullName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-bold text-slate-700 uppercase mb-1">Số Điện Thoại Liên Hệ</label>
-                      <input
-                        type="text"
-                        placeholder="090..."
-                        value={newUser.phone}
-                        onChange={e => setNewUser({ ...newUser, phone: e.target.value })}
-                        className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-bold text-slate-700 uppercase mb-1">Hộp Thư Công Vụ (Email)</label>
-                      <input
-                        type="email"
-                        placeholder="canbo@vks.gov.vn"
-                        value={newUser.email}
-                        onChange={e => setNewUser({ ...newUser, email: e.target.value })}
-                        className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-                    <button
-                      type="button"
-                      onClick={() => setActiveModule('tab-users')}
-                      className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                    >
-                      Hủy thao tác
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-5 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition cursor-pointer"
-                    >
-                      Lưu & Tạo Tài Khoản
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
 
             {/* MODULE 2: TRANSFER DEPARTMENT INLINE VIEW */}
             {activeModule === 'transfer-dept' && (
@@ -2188,9 +1756,9 @@ export const AdminDashboard: React.FC = () => {
                     >
                       <option value="all">Phòng ▼</option>
                       <option value="none">- (Không phòng)</option>
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map(num => (
-                        <option key={`room-tp-${num}`} value={`TP${num}`}>
-                          Phòng {num} (TP{num})
+                      {departments.map(dept => (
+                        <option key={dept.id} value={dept.code}>
+                          {dept.name} ({dept.code})
                         </option>
                       ))}
                     </select>
@@ -2256,16 +1824,16 @@ export const AdminDashboard: React.FC = () => {
                         ) : (
                           paginatedUsers.map((u, idx) => {
                             const rowIndex = (userCurrentPage - 1) * userPageSize + idx + 1;
-                            const isActive = u.active !== 0;
+                            const isActive = !!u.active;
 
                             const roleDisplay =
                               u.role === 'ADMIN'
                                 ? 'Quản trị viên'
                                 : u.role === 'VIEN_TRUONG'
-                                ? 'Viện trưởng'
-                                : u.role === 'PHO_VIEN_TRUONG'
-                                ? 'Phó Viện trưởng'
-                                : 'Trưởng phòng';
+                                  ? 'Viện trưởng'
+                                  : u.role === 'PHO_VIEN_TRUONG'
+                                    ? 'Phó Viện trưởng'
+                                    : 'Trưởng phòng';
 
                             const roomDisplay = u.role === 'TRUONG_PHONG' ? (u.roomCode || '—') : '—';
 
@@ -2282,15 +1850,14 @@ export const AdminDashboard: React.FC = () => {
                                 </td>
                                 <td className="py-3 px-3.5">
                                   <span
-                                    className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold ${
-                                      u.role === 'ADMIN'
-                                        ? 'bg-slate-100 text-slate-800 border border-slate-300'
-                                        : u.role === 'VIEN_TRUONG'
+                                    className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold ${u.role === 'ADMIN'
+                                      ? 'bg-slate-100 text-slate-800 border border-slate-300'
+                                      : u.role === 'VIEN_TRUONG'
                                         ? 'bg-red-100 text-red-800 border border-red-200'
                                         : u.role === 'PHO_VIEN_TRUONG'
-                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                        : 'bg-blue-100 text-blue-800 border border-blue-200'
-                                    }`}
+                                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                          : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                      }`}
                                   >
                                     {roleDisplay}
                                   </span>
@@ -2302,11 +1869,10 @@ export const AdminDashboard: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => handleToggleUserActive(u)}
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer border ${
-                                      isActive
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                        : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-                                    }`}
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer border ${isActive
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                      : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                                      }`}
                                     title={isActive ? 'Đang kích hoạt - Bấm để tạm khóa' : 'Đã khóa - Bấm để kích hoạt'}
                                   >
                                     {isActive ? (
@@ -2365,11 +1931,10 @@ export const AdminDashboard: React.FC = () => {
                       type="button"
                       disabled={userCurrentPage <= 1}
                       onClick={() => setUserCurrentPage(p => Math.max(1, p - 1))}
-                      className={`p-1.5 rounded-xl border text-xs font-semibold transition ${
-                        userCurrentPage <= 1
-                          ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
-                          : 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer bg-white shadow-2xs'
-                      }`}
+                      className={`p-1.5 rounded-xl border text-xs font-semibold transition ${userCurrentPage <= 1
+                        ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                        : 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer bg-white shadow-2xs'
+                        }`}
                       title="Trang trước"
                     >
                       <ChevronLeft className="w-4 h-4" />
@@ -2381,11 +1946,10 @@ export const AdminDashboard: React.FC = () => {
                         key={`page-btn-${pageNum}`}
                         type="button"
                         onClick={() => setUserCurrentPage(pageNum)}
-                        className={`min-w-[32px] h-8 px-2 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                          userCurrentPage === pageNum
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 shadow-2xs'
-                        }`}
+                        className={`min-w-[32px] h-8 px-2 rounded-xl border text-xs font-bold transition cursor-pointer ${userCurrentPage === pageNum
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 shadow-2xs'
+                          }`}
                       >
                         {pageNum}
                       </button>
@@ -2396,11 +1960,10 @@ export const AdminDashboard: React.FC = () => {
                       type="button"
                       disabled={userCurrentPage >= totalUserPages}
                       onClick={() => setUserCurrentPage(p => Math.min(totalUserPages, p + 1))}
-                      className={`p-1.5 rounded-xl border text-xs font-semibold transition ${
-                        userCurrentPage >= totalUserPages
-                          ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
-                          : 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer bg-white shadow-2xs'
-                      }`}
+                      className={`p-1.5 rounded-xl border text-xs font-semibold transition ${userCurrentPage >= totalUserPages
+                        ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                        : 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer bg-white shadow-2xs'
+                        }`}
                       title="Trang kế tiếp"
                     >
                       <ChevronRight className="w-4 h-4" />
@@ -2412,7 +1975,7 @@ export const AdminDashboard: React.FC = () => {
 
             {/* MODULE: CREATE USER VIEW */}
             {activeModule === 'create-user' && (
-              <div 
+              <div
                 id="admin-create-user-container"
                 className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden p-6 sm:p-8 max-w-2xl space-y-6 animate-fadeIn font-sans text-xs"
               >
@@ -2575,11 +2138,10 @@ export const AdminDashboard: React.FC = () => {
                           <div
                             key={r.id}
                             onClick={() => setNewUser(prev => ({ ...prev, role: r.id as UserRole }))}
-                            className={`p-3 rounded-xl border cursor-pointer select-none transition ${
-                              isSelected
-                                ? 'bg-blue-50/80 border-blue-300 ring-1 ring-blue-300'
-                                : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                            }`}
+                            className={`p-3 rounded-xl border cursor-pointer select-none transition ${isSelected
+                              ? 'bg-blue-50/80 border-blue-300 ring-1 ring-blue-300'
+                              : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
                           >
                             <div className="flex items-center gap-2.5">
                               {isSelected ? (
@@ -2623,8 +2185,8 @@ export const AdminDashboard: React.FC = () => {
                             className="w-60 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs cursor-pointer"
                           >
                             <option value="">-- Chọn phòng ban --</option>
-                            {Array.from({ length: 12 }, (_, i) => `TP${i + 1}`).map(r => (
-                              <option key={r} value={r}>Phòng {r.replace('TP', '')} ({r})</option>
+                            {departments.map(dept => (
+                              <option key={dept.id} value={dept.code}>{dept.name} ({dept.code})</option>
                             ))}
                           </select>
                           <span className="text-slate-500 text-[11px] whitespace-nowrap">
@@ -2695,7 +2257,7 @@ export const AdminDashboard: React.FC = () => {
 
             {/* MODULE: ROLES MANAGEMENT VIEW */}
             {activeModule === 'roles' && (
-              <div 
+              <div
                 id="admin-roles-container"
                 className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden p-6 sm:p-8 max-w-4xl space-y-6 animate-fadeIn font-sans text-xs"
               >
@@ -2750,34 +2312,34 @@ export const AdminDashboard: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {[
-                        { 
-                          stt: 1, 
-                          code: 'ADMIN', 
-                          name: 'Quản trị viên', 
+                        {
+                          stt: 1,
+                          code: 'ADMIN',
+                          name: 'Quản trị viên',
                           permissionsCount: 40,
                           badgeColor: 'bg-purple-50 text-purple-800 border-purple-200',
                           description: 'Quản trị hệ thống, quản lý tài khoản cán bộ, thiết lập các trường dữ liệu, phân quyền và sao lưu dữ liệu toàn hệ thống.'
                         },
-                        { 
-                          stt: 2, 
-                          code: 'VIEN_TRUONG', 
-                          name: 'Viện trưởng', 
+                        {
+                          stt: 2,
+                          code: 'VIEN_TRUONG',
+                          name: 'Viện trưởng',
                           permissionsCount: 23,
                           badgeColor: 'bg-red-50 text-red-800 border-red-200',
                           description: 'Lãnh đạo cao nhất cơ quan, toàn quyền chỉ đạo công tác xử lý công văn, phân công nhiệm vụ cho Phó Viện Trưởng, phê duyệt báo cáo.'
                         },
-                        { 
-                          stt: 3, 
-                          code: 'PHO_VIEN_TRUONG', 
-                          name: 'Phó Viện trưởng', 
+                        {
+                          stt: 3,
+                          code: 'PHO_VIEN_TRUONG',
+                          name: 'Phó Viện trưởng',
                           permissionsCount: 15,
                           badgeColor: 'bg-blue-50 text-blue-800 border-blue-200',
                           description: 'Lãnh đạo phụ trách các khối phòng ban, nhận chỉ đạo từ Viện Trưởng, giao việc chỉ đạo cho các Trưởng phòng trực thuộc.'
                         },
-                        { 
-                          stt: 4, 
-                          code: 'TRUONG_PHONG', 
-                          name: 'Trưởng phòng', 
+                        {
+                          stt: 4,
+                          code: 'TRUONG_PHONG',
+                          name: 'Trưởng phòng',
                           permissionsCount: 12,
                           badgeColor: 'bg-emerald-50 text-emerald-800 border-emerald-200',
                           description: 'Trưởng đơn vị / phòng ban nghiệp vụ, tiếp nhận công văn phân công từ Lãnh đạo Viện, tổ chức thực hiện và báo cáo tiến độ.'
@@ -3033,11 +2595,10 @@ export const AdminDashboard: React.FC = () => {
                         key={r}
                         type="button"
                         onClick={() => setPermissionRole(r)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                          permissionRole === r
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${permissionRole === r
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
                       >
                         {r === 'ADMIN' ? 'Admin' : r === 'VIEN_TRUONG' ? 'Viện trưởng' : r === 'PHO_VIEN_TRUONG' ? 'Phó VT' : 'Trưởng phòng'}
                       </button>
@@ -3073,11 +2634,10 @@ export const AdminDashboard: React.FC = () => {
                               <div
                                 key={item.key}
                                 onClick={() => togglePermission(item.key)}
-                                className={`flex items-center gap-3 py-2 px-3 rounded-xl cursor-pointer transition select-none border ${
-                                  isChecked
-                                    ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-2xs'
-                                    : 'bg-white hover:bg-slate-50 border-slate-200/80 text-slate-700'
-                                }`}
+                                className={`flex items-center gap-3 py-2 px-3 rounded-xl cursor-pointer transition select-none border ${isChecked
+                                  ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-2xs'
+                                  : 'bg-white hover:bg-slate-50 border-slate-200/80 text-slate-700'
+                                  }`}
                               >
                                 {isChecked ? (
                                   <CheckSquare className="w-4 h-4 text-blue-600 shrink-0" />
@@ -3150,159 +2710,10 @@ export const AdminDashboard: React.FC = () => {
 
             {/* MODULE: DEPARTMENTS LIST VIEW */}
             {activeModule === 'departments' && (
-              <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden p-5 sm:p-6 space-y-6 animate-fadeIn">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center">
-                      <Building className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900">Danh Sách Phòng Ban Nghiệp Vụ</h2>
-                      <p className="text-xs text-slate-500">Quản lý các phòng ban chuyên môn, phân bổ Trưởng phòng và Phó Viện Trưởng phụ trách</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        handleOpenAssignPvtModal();
-                        setActiveModule('assign-pvt');
-                      }}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition cursor-pointer"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      Phó Viện Trưởng Phụ Trách
-                    </button>
-                    <button
-                      onClick={() => handleOpenTransferModal()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
-                    >
-                      <ArrowRightLeft className="w-3.5 h-3.5 text-slate-600" />
-                      Điều Chuyển Cán Bộ
-                    </button>
-                  </div>
-                </div>
-
-                {/* Summary Badges */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between">
-                    <div>
-                      <div className="text-[11px] font-bold text-slate-500 uppercase">Tổng số phòng ban</div>
-                      <div className="text-xl font-extrabold text-slate-900 mt-0.5">{tpUsers.length} đơn vị</div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                      <Building className="w-4 h-4" />
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/50 flex items-center justify-between">
-                    <div>
-                      <div className="text-[11px] font-bold text-emerald-700 uppercase">Đã có PVT phụ trách</div>
-                      <div className="text-xl font-extrabold text-emerald-950 mt-0.5">
-                        {tpUsers.filter(tp => !!tp.pvtManagerId).length} phòng
-                      </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                      <Check className="w-4 h-4" />
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl border border-amber-200 bg-amber-50/50 flex items-center justify-between">
-                    <div>
-                      <div className="text-[11px] font-bold text-amber-700 uppercase">Chưa phân công PVT</div>
-                      <div className="text-xl font-extrabold text-amber-950 mt-0.5">
-                        {tpUsers.filter(tp => !tp.pvtManagerId).length} phòng
-                      </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
-                      <AlertCircle className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Departments Table */}
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-700 font-bold uppercase border-b border-slate-200">
-                        <th className="py-3 px-4 w-32">Ký hiệu phòng</th>
-                        <th className="py-3 px-4">Trưởng Phòng Đương Nhiệm</th>
-                        <th className="py-3 px-4">Phó Viện Trưởng Phụ Trách</th>
-                        <th className="py-3 px-4 text-center w-36">Công Văn Thụ Lý</th>
-                        <th className="py-3 px-4 text-right w-44">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {tpUsers.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="py-8 text-center text-slate-400">
-                            Chưa có dữ liệu phòng ban nào. Hãy tạo tài khoản Trưởng phòng để hệ thống hiển thị.
-                          </td>
-                        </tr>
-                      ) : (
-                        tpUsers.map((tp) => {
-                          const assignedPvt = pvtUsers.find(p => p.id === tp.pvtManagerId);
-                          const activeDispatchesCount = dispatches.filter(d => 
-                            d.assignedTpId === tp.id || 
-                            d.assignedTpId === tp.roomCode ||
-                            (d.phongBan && d.phongBan.toUpperCase() === tp.roomCode.toUpperCase())
-                          ).length;
-
-                          return (
-                            <tr key={tp.id} className="hover:bg-slate-50/80 transition">
-                              <td className="py-3 px-4">
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 text-blue-900 border border-blue-200 font-mono font-bold text-xs">
-                                  {tp.roomCode}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4">
-                                <div className="font-bold text-slate-900">{tp.fullName}</div>
-                                <div className="text-[11px] text-slate-500 font-mono">
-                                  {tp.username} {tp.phone ? `• ${tp.phone}` : ''}
-                                </div>
-                              </td>
-                              <td className="py-3 px-4">
-                                {assignedPvt ? (
-                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-50 text-purple-900 border border-purple-200 font-medium">
-                                    <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
-                                    <span><strong>{assignedPvt.roomCode}:</strong> {assignedPvt.fullName}</span>
-                                  </div>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[11px]">
-                                    <AlertCircle className="w-3 h-3" /> Chưa phân bổ
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 font-bold">
-                                  {activeDispatchesCount} CV
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 text-right space-x-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenAssignPvtModal(tp)}
-                                  className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg font-bold text-[11px] transition cursor-pointer"
-                                  title="Đổi Phó Viện Trưởng phụ trách"
-                                >
-                                  Đổi PVT
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenTransferModal(tp)}
-                                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg font-medium text-[11px] transition cursor-pointer"
-                                  title="Điều chuyển cán bộ"
-                                >
-                                  Điều chuyển
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <AdminDepartments
+                allUsers={allUsers}
+                onShowToast={(msg, type) => showToast(msg, type || 'success')}
+              />
             )}
 
             {/* MODULE: STATS OVERVIEW */}
@@ -3346,7 +2757,6 @@ export const AdminDashboard: React.FC = () => {
                       </span>
                     </div>
                     <div className="text-2xl font-black text-slate-900 mt-2">{dispatches.length}</div>
-                    <div className="text-[11px] text-slate-500 mt-1">Toàn bộ hồ sơ trong CSDL</div>
                   </div>
 
                   <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40">
@@ -3434,7 +2844,7 @@ export const AdminDashboard: React.FC = () => {
                     <div>
                       <h3 className="text-sm font-bold text-slate-900 mb-1">Công Tác Chỉ Đạo & Báo Cáo Tiến Độ</h3>
                       <p className="text-xs text-slate-500 mb-4">Mức độ tương tác và điều hành của Ban Lãnh Đạo qua hệ thống số</p>
-                      
+
                       <div className="space-y-3.5">
                         <div>
                           <div className="flex justify-between text-xs font-semibold mb-1">
@@ -3549,8 +2959,8 @@ export const AdminDashboard: React.FC = () => {
                       ) : (
                         tpUsers.map((tp) => {
                           const assignedPvt = pvtUsers.find(p => p.id === tp.pvtManagerId);
-                          const deptDispatches = dispatches.filter(d => 
-                            d.assignedTpId === tp.id || 
+                          const deptDispatches = dispatches.filter(d =>
+                            d.assignedTpId === tp.id ||
                             d.assignedTpId === tp.roomCode ||
                             (d.phongBan && d.phongBan.toUpperCase() === tp.roomCode.toUpperCase())
                           );
@@ -3613,12 +3023,12 @@ export const AdminDashboard: React.FC = () => {
                     donut={true}
                     data={tpUsers.map((tp, idx) => {
                       const colors = [
-                        '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', 
-                        '#06b6d4', '#84cc16', '#14b8a6', '#6366f1', '#f97316', 
+                        '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
+                        '#06b6d4', '#84cc16', '#14b8a6', '#6366f1', '#f97316',
                         '#64748b', '#0284c7'
                       ];
-                      const count = dispatches.filter(d => 
-                        d.assignedTpId === tp.id || 
+                      const count = dispatches.filter(d =>
+                        d.assignedTpId === tp.id ||
                         d.assignedTpId === tp.roomCode ||
                         (d.phongBan && d.phongBan.toUpperCase() === tp.roomCode.toUpperCase())
                       ).length;
@@ -3666,11 +3076,10 @@ export const AdminDashboard: React.FC = () => {
                           key={mode}
                           type="button"
                           onClick={() => setStatsTimeFilter(mode)}
-                          className={`px-3 py-1 text-xs font-bold rounded-xl transition cursor-pointer ${
-                            isActive
-                              ? 'bg-white text-red-900 shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
+                          className={`px-3 py-1 text-xs font-bold rounded-xl transition cursor-pointer ${isActive
+                            ? 'bg-white text-red-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                            }`}
                         >
                           {labels[mode]}
                         </button>
@@ -3796,13 +3205,12 @@ export const AdminDashboard: React.FC = () => {
                                   <td className="py-2.5 px-4 text-slate-500 font-mono">{d.ngayBanHanh || '—'}</td>
                                   <td className="py-2.5 px-4 text-slate-500 font-mono">{d.hanXuLy || '—'}</td>
                                   <td className="py-2.5 px-4 text-center">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${
-                                      d.trangThai === 'da_giai_quyet'
-                                        ? 'bg-emerald-100 text-emerald-800'
-                                        : d.trangThai === 'qua_han'
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${d.trangThai === 'da_giai_quyet'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : d.trangThai === 'qua_han'
                                         ? 'bg-rose-100 text-rose-800'
                                         : 'bg-amber-100 text-amber-800'
-                                    }`}>
+                                      }`}>
                                       {d.trangThai === 'da_giai_quyet' ? 'Đã giải quyết' : d.trangThai === 'qua_han' ? 'Quá hạn' : 'Đang xử lý'}
                                     </span>
                                   </td>
@@ -3820,482 +3228,14 @@ export const AdminDashboard: React.FC = () => {
 
             {/* MODULE: DATABASE - VIEW ALL TABLES (DATABASE VIEWER) */}
             {activeModule === 'database-tables' && (
-              <div
-                id="admin-database-viewer-view"
-                className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden p-6 sm:p-8 max-w-4xl space-y-6 animate-fadeIn font-sans text-xs"
-              >
-                {/* Header: 🗄️ DATABASE VIEWER */}
-                <div className="pb-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-cyan-50 text-cyan-700 border border-cyan-200 flex items-center justify-center shrink-0">
-                      <Database className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900 tracking-wide uppercase flex items-center gap-2">
-                        <span>DATABASE VIEWER - CƠ SỞ DỮ LIỆU</span>
-                      </h2>
-                      <p className="text-xs text-slate-500 font-normal">
-                        Trực quan hóa cấu trúc dữ liệu, bảng quan hệ và trạng thái bản ghi
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 font-sans">
-                    <button
-                      type="button"
-                      onClick={() => handleExportDbTable('all')}
-                      className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 rounded-xl font-bold transition cursor-pointer shadow-xs text-xs active:scale-95"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Xuất Toàn Bộ CSDL</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 📊 TỔNG QUAN */}
-                <div className="space-y-2.5">
-                  <div className="font-bold text-slate-900 text-xs flex items-center gap-2 select-none">
-                    <BarChart3 className="w-4 h-4 text-blue-600" />
-                    <span className="tracking-wide uppercase">TỔNG QUAN HỆ THỐNG</span>
-                  </div>
-
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 inline-block overflow-x-auto text-slate-100 font-mono text-xs sm:text-sm leading-relaxed select-all shadow-md">
-                    <div className="text-slate-500 font-bold">┌──────────┬──────────┬──────────┬──────────┐</div>
-                    <div className="py-0.5">
-                      <span className="text-slate-500">│ </span>
-                      <span
-                        className="cursor-pointer hover:text-cyan-300 font-bold text-cyan-400 transition"
-                        title="Bấm để xem bảng users"
-                        onClick={() => setDbViewerPreviewTable('users')}
-                      >
-                        users:27
-                      </span>
-                      <span className="text-slate-500"> │ </span>
-                      <span
-                        className="cursor-pointer hover:text-emerald-300 font-bold text-emerald-400 transition"
-                        title="Bấm để xem bảng dispatches"
-                        onClick={() => setDbViewerPreviewTable('dispatches')}
-                      >
-                        disp:9   
-                      </span>
-                      <span className="text-slate-500">│ </span>
-                      <span
-                        className="cursor-pointer hover:text-purple-300 font-bold text-purple-400 transition"
-                        title="Bấm để xem bảng departments"
-                        onClick={() => setDbViewerPreviewTable('departments')}
-                      >
-                        dept:12  
-                      </span>
-                      <span className="text-slate-500">│ </span>
-                      <span
-                        className="cursor-pointer hover:text-amber-300 font-bold text-amber-400 transition"
-                        title="Bấm để xem bảng roles"
-                        onClick={() => setDbViewerPreviewTable('roles')}
-                      >
-                        roles:4  
-                      </span>
-                      <span className="text-slate-500">│</span>
-                    </div>
-                    <div className="py-0.5">
-                      <span className="text-slate-500">│ </span>
-                      <span
-                        className="cursor-pointer hover:text-indigo-300 font-bold text-indigo-400 transition"
-                        title="Bấm để xem bảng permissions"
-                        onClick={() => setDbViewerPreviewTable('permissions')}
-                      >
-                        perm:40  
-                      </span>
-                      <span className="text-slate-500">│ </span>
-                      <span
-                        className="cursor-pointer hover:text-teal-300 font-bold text-teal-400 transition"
-                        title="Bấm để xem bảng user_roles"
-                        onClick={() => setDbViewerPreviewTable('user_roles')}
-                      >
-                        user_roles:27       
-                      </span>
-                      <span className="text-slate-500">│ </span>
-                      <span
-                        className="cursor-pointer hover:text-slate-300 font-bold text-slate-400 transition"
-                        title="Bấm để xem bảng audit_logs"
-                        onClick={() => setDbViewerPreviewTable('audit_logs')}
-                      >
-                        audit:0  
-                      </span>
-                      <span className="text-slate-500">│</span>
-                    </div>
-                    <div className="text-slate-500 font-bold">└──────────┴──────────┴──────────┴──────────┘</div>
-                  </div>
-                </div>
-
-                {/* 📋 DANH SÁCH BẢNG */}
-                <div className="space-y-3 pt-2">
-                  <div className="font-bold text-slate-900 text-xs flex items-center gap-2 select-none border-b border-slate-100 pb-2">
-                    <Table className="w-4 h-4 text-cyan-600" />
-                    <span className="tracking-wide uppercase">DANH SÁCH CÁC BẢNG DỮ LIỆU</span>
-                  </div>
-
-                  <div className="space-y-2 font-sans">
-                    {[
-                      { name: 'users', count: 27, hasExport: true, label: 'Tài khoản người dùng' },
-                      { name: 'dispatches', count: 9, hasExport: true, label: 'Văn bản và công văn' },
-                      { name: 'departments', count: 12, hasExport: true, label: 'Phòng ban và đơn vị' },
-                      { name: 'roles', count: 4, hasExport: true, label: 'Vai trò chức danh' },
-                      { name: 'permissions', count: 40, hasExport: true, label: 'Danh mục quyền hạn' },
-                      { name: 'user_roles', count: 27, hasExport: true, label: 'Ánh xạ tài khoản - vai trò' },
-                      { name: 'audit_logs', count: 0, hasExport: false, label: 'Nhật ký kiểm toán' }
-                    ].map(table => {
-                      const isExpanded = !!dbViewerExpanded[table.name];
-                      return (
-                        <div key={table.name} className="border border-slate-200/80 rounded-2xl overflow-hidden transition hover:border-slate-300 bg-white">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 gap-2.5">
-                            {/* table_name (N records) */}
-                            <div
-                              onClick={() => toggleDbTableExpand(table.name)}
-                              className="flex items-center gap-3 cursor-pointer select-none group"
-                            >
-                              <div className="w-6 h-6 rounded-lg bg-slate-100 group-hover:bg-slate-200 flex items-center justify-center transition text-slate-600">
-                                {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4" />
-                                )}
-                              </div>
-                              <span className="font-mono font-bold text-sm text-slate-900 group-hover:text-cyan-700 transition">
-                                {table.name}
-                              </span>
-                              <span className="text-xs text-slate-500 font-sans hidden sm:inline">
-                                — {table.label}
-                              </span>
-                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-[11px] font-bold">
-                                {table.count} records
-                              </span>
-                            </div>
-
-                            {/* Actions */}
-                            <div className="flex items-center gap-2 self-start sm:self-auto font-sans">
-                              <button
-                                type="button"
-                                onClick={() => setDbViewerPreviewTable(table.name)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs cursor-pointer shadow-2xs active:scale-95 transition"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-blue-600" />
-                                <span>Xem</span>
-                              </button>
-                              {table.hasExport && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleExportDbTable(table.name)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs cursor-pointer shadow-2xs active:scale-95 transition"
-                                >
-                                  <Download className="w-3.5 h-3.5 text-cyan-600" />
-                                  <span>Xuất JSON</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Expanded inline quick preview */}
-                          {isExpanded && (
-                            <div className="px-4 pb-4 pt-1 bg-slate-50/70 border-t border-slate-100 text-xs font-sans space-y-2 animate-fadeIn">
-                              {table.name === 'users' && (
-                                <>
-                                  <div className="text-slate-600 font-semibold flex items-center justify-between">
-                                    <span>Xem nhanh dữ liệu bảng users (27 records):</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setDbViewerPreviewTable('users')}
-                                      className="text-blue-600 hover:underline font-bold text-xs cursor-pointer"
-                                    >
-                                      Mở toàn bộ 27 records →
-                                    </button>
-                                  </div>
-                                  <div className="divide-y divide-slate-200 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                                    {allUsers.slice(0, 5).map(u => (
-                                      <div key={u.id} className="p-2.5 flex items-center justify-between gap-2 text-slate-700">
-                                        <div className="font-semibold text-slate-900 truncate">
-                                          <span className="font-mono text-slate-400 mr-2">#{u.id}</span>
-                                          {u.fullName} <span className="font-mono text-slate-500 text-[11px]">({u.username})</span>
-                                        </div>
-                                        <div className="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 shrink-0 font-bold font-mono">
-                                          {u.role}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {table.name === 'dispatches' && (
-                                <>
-                                  <div className="text-slate-600 font-semibold flex items-center justify-between">
-                                    <span>Xem nhanh dữ liệu bảng dispatches (9 records):</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setDbViewerPreviewTable('dispatches')}
-                                      className="text-blue-600 hover:underline font-bold text-xs cursor-pointer"
-                                    >
-                                      Mở toàn bộ 9 records →
-                                    </button>
-                                  </div>
-                                  <div className="divide-y divide-slate-200 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                                    {dispatches.slice(0, 5).map(d => (
-                                      <div key={d.id} className="p-2.5 flex items-center justify-between gap-2 text-slate-700">
-                                        <div className="font-semibold text-slate-900 truncate">
-                                          <span className="font-mono font-bold text-blue-700 mr-2">[{d.soHieu}]</span>
-                                          {d.trichYeu}
-                                        </div>
-                                        <div className="text-[11px] px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 shrink-0 font-bold">
-                                          {d.trangThai}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {table.name === 'departments' && (
-                                <>
-                                  <div className="text-slate-600 font-semibold">Danh sách 12 phòng ban nghiệp vụ:</div>
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 font-sans">
-                                    {Array.from({ length: 12 }, (_, i) => `TP${i + 1}`).map(r => (
-                                      <div key={r} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-700 font-medium text-xs shadow-2xs flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-                                        <span><strong className="font-mono">{r}:</strong> Phòng {r.replace('TP', '')}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {table.name === 'roles' && (
-                                <>
-                                  <div className="text-slate-600 font-semibold">Danh mục 4 vai trò phân quyền:</div>
-                                  <div className="space-y-1.5 bg-white border border-slate-200 rounded-xl p-3 shadow-2xs text-slate-700">
-                                    <div className="flex items-center justify-between"><span className="font-bold">ADMIN (Quản trị viên)</span><span className="font-mono text-slate-500">40 permissions</span></div>
-                                    <div className="flex items-center justify-between"><span className="font-bold">VIEN_TRUONG (Viện trưởng)</span><span className="font-mono text-slate-500">23 permissions</span></div>
-                                    <div className="flex items-center justify-between"><span className="font-bold">PHO_VIEN_TRUONG (Phó Viện trưởng)</span><span className="font-mono text-slate-500">15 permissions</span></div>
-                                    <div className="flex items-center justify-between"><span className="font-bold">TRUONG_PHONG (Trưởng phòng)</span><span className="font-mono text-slate-500">12 permissions</span></div>
-                                  </div>
-                                </>
-                              )}
-
-                              {table.name === 'permissions' && (
-                                <>
-                                  <div className="text-slate-600 font-semibold flex items-center justify-between">
-                                    <span>Danh mục quyền hạn hệ thống (40 records):</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setDbViewerPreviewTable('permissions')}
-                                      className="text-blue-600 hover:underline font-bold text-xs cursor-pointer"
-                                    >
-                                      Mở toàn bộ 40 records →
-                                    </button>
-                                  </div>
-                                  <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-1.5 shadow-2xs text-slate-700">
-                                    <div>📁 <strong className="font-mono">USER</strong> (10 records): user:view:all, user:view:department...</div>
-                                    <div>📁 <strong className="font-mono">DISPATCH</strong> (15 records): dispatch:view:all, dispatch:create...</div>
-                                    <div>📁 <strong className="font-mono">SYSTEM</strong> (8 records): system:backup, system:restore...</div>
-                                    <div>📁 <strong className="font-mono">REPORTS & ANALYTICS</strong> (7 records): report:dashboard:view...</div>
-                                  </div>
-                                </>
-                              )}
-
-                              {table.name === 'user_roles' && (
-                                <>
-                                  <div className="text-slate-600 font-semibold flex items-center justify-between">
-                                    <span>Bảng ánh xạ vai trò người dùng (27 records):</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setDbViewerPreviewTable('user_roles')}
-                                      className="text-blue-600 hover:underline font-bold text-xs cursor-pointer"
-                                    >
-                                      Mở toàn bộ 27 records →
-                                    </button>
-                                  </div>
-                                  <div className="divide-y divide-slate-200 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                                    {allUsers.slice(0, 5).map(u => (
-                                      <div key={u.id} className="p-2.5 flex items-center justify-between text-slate-700">
-                                        <span className="font-semibold text-slate-900">{u.fullName} <span className="font-mono text-slate-500 text-[11px]">({u.username})</span></span>
-                                        <span className="text-blue-600 font-bold font-mono text-xs">➔ {u.role}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-
-                              {table.name === 'audit_logs' && (
-                                <div className="text-slate-500 italic p-3 bg-white border border-slate-200 rounded-xl">
-                                  Hiện chưa có bản ghi kiểm toán nào (0 records).
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
+              <DatabaseBrowser />
             )}
 
-            {/* MODULE: DATABASE - AUDIT LOGS */}
-            {activeModule === 'audit-logs' && (
-              <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden p-5 sm:p-6 space-y-6 animate-fadeIn">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center">
-                      <History className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900">Nhật Ký Hoạt Động Hệ Thống (Audit Logs)</h2>
-                      <p className="text-xs text-slate-500">Truy vết chi tiết mọi thao tác chỉ đạo, chỉnh sửa văn bản, điều chuyển và bảo mật hệ thống</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => showToast('Đã xóa log tạm thời')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-slate-500" />
-                      Dọn Dẹp Log
-                    </button>
-                    <button
-                      onClick={() => showToast('Đã xuất file Audit Log Excel!')}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Xuất Audit Log
-                    </button>
-                  </div>
-                </div>
 
-                {/* Audit Logs Table */}
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-700 font-bold uppercase border-b border-slate-200">
-                        <th className="py-3 px-4 w-36">Thời Gian</th>
-                        <th className="py-3 px-4 w-40">Người Thao Tác</th>
-                        <th className="py-3 px-3 w-28 text-center">Vai Trò</th>
-                        <th className="py-3 px-3 w-32 font-mono">Địa chỉ IP</th>
-                        <th className="py-3 px-4 w-48">Hành Động</th>
-                        <th className="py-3 px-3 w-24 text-center">Mức độ</th>
-                        <th className="py-3 px-4">Chi Tiết Thao Tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {[
-                        { time: '12:54:10 19/09/2026', user: 'admin', role: 'ADMIN', ip: '127.0.0.1', action: 'Cấu hình hệ thống', level: 'INFO', detail: 'Truy cập mô-đun quản trị Database & Cài đặt' },
-                        { time: '11:42:30 19/09/2026', user: 'vt', role: 'VIEN_TRUONG', ip: '192.168.1.10', action: 'Chỉ đạo văn bản', level: 'INFO', detail: 'Đưa ý kiến chỉ đạo cho công văn 18/VKS-VP: "Yêu cầu TP1 khẩn trương kiểm tra báo cáo"' },
-                        { time: '10:15:22 19/09/2026', user: 'pvt_1', role: 'PHO_VIEN_TRUONG', ip: '192.168.1.15', action: 'Phân công Trưởng phòng', level: 'INFO', detail: 'Giao việc cho đ/c TP1 thực hiện công văn hỏa tốc' },
-                        { time: '09:30:05 19/09/2026', user: 'tp_1', role: 'TRUONG_PHONG', ip: '192.168.1.28', action: 'Cập nhật tiến độ', level: 'INFO', detail: 'Cập nhật tiến độ 75% cho công văn số 15/VKS-KT' },
-                        { time: '08:45:19 19/09/2026', user: 'admin', role: 'ADMIN', ip: '127.0.0.1', action: 'Gán PVT phụ trách', level: 'SECURITY', detail: 'Phân công PVT 1 phụ trách TP1 & TP2' },
-                        { time: '08:00:12 19/09/2026', user: 'admin', role: 'ADMIN', ip: '127.0.0.1', action: 'Đăng nhập hệ thống', level: 'SECURITY', detail: 'Đăng nhập thành công từ bảng điều khiển quản trị' }
-                      ].map((log, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition">
-                          <td className="py-2.5 px-4 font-mono text-slate-500 text-[11px]">{log.time}</td>
-                          <td className="py-2.5 px-4 font-bold text-slate-900">{log.user}</td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                              {log.role}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-slate-500 text-[11px]">{log.ip}</td>
-                          <td className="py-2.5 px-4 font-semibold text-slate-800">{log.action}</td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              log.level === 'SECURITY' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {log.level}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-4 text-slate-600 truncate max-w-xs">{log.detail}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+            {activeModule === 'audit-logs' && <AdminAuditLogs />}
 
             {/* MODULE: DATABASE - SESSIONS */}
-            {activeModule === 'sessions' && (
-              <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden p-5 sm:p-6 space-y-6 animate-fadeIn">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center">
-                      <Activity className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900">Quản Lý Phiên Đăng Nhập (Active Sessions)</h2>
-                      <p className="text-xs text-slate-500">Giám sát các phiên kết nối đang trực tuyến, vị trí truy cập và thu hồi phiên từ xa</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => showToast('Đã thu hồi tất cả các phiên khác!')}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition cursor-pointer"
-                  >
-                    Thu Hồi Phiên Khác
-                  </button>
-                </div>
-
-                {/* Sessions Table */}
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-700 font-bold uppercase border-b border-slate-200">
-                        <th className="py-3 px-4">Tài Khoản / Cán Bộ</th>
-                        <th className="py-3 px-4">Thiết Bị / Trình Duyệt</th>
-                        <th className="py-3 px-3 font-mono">Địa chỉ IP</th>
-                        <th className="py-3 px-4">Thời Gian Đăng Nhập</th>
-                        <th className="py-3 px-3 text-center">Trạng Thái</th>
-                        <th className="py-3 px-4 w-32 text-right">Thao Tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {[
-                        { user: 'admin (Quản trị viên)', device: 'Chrome on Windows 11', ip: '127.0.0.1', loginAt: '12:00 Hôm nay', current: true },
-                        { user: 'vt (Đ/c Viện Trưởng)', device: 'Chrome on macOS', ip: '192.168.1.10', loginAt: '11:30 Hôm nay', current: false },
-                        { user: 'pvt_1 (Đ/c PVT 1)', device: 'Safari on iPad', ip: '192.168.1.15', loginAt: '10:05 Hôm nay', current: false },
-                        { user: 'tp_1 (Đ/c TP 1)', device: 'Firefox on Windows', ip: '192.168.1.28', loginAt: '09:20 Hôm nay', current: false },
-                        { user: 'tp_2 (Đ/c TP 2)', device: 'Edge on Windows', ip: '192.168.1.32', loginAt: '08:50 Hôm nay', current: false }
-                      ].map((s, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition">
-                          <td className="py-3 px-4 font-bold text-slate-900">
-                            {s.user}
-                            {s.current && (
-                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                Phiên hiện tại
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">{s.device}</td>
-                          <td className="py-3 px-3 font-mono text-slate-500">{s.ip}</td>
-                          <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">{s.loginAt}</td>
-                          <td className="py-3 px-3 text-center">
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              Online
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            {s.current ? (
-                              <span className="text-slate-400 italic text-[11px]">Đang dùng</span>
-                            ) : (
-                              <button
-                                onClick={() => showToast(`Đã thu hồi phiên của ${s.user}`)}
-                                className="px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 rounded-lg border border-rose-200 transition cursor-pointer"
-                              >
-                                Đăng xuất
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+            {activeModule === 'sessions' && <AdminSessions />}
 
             {/* MODULE: SETTINGS - CUSTOM COLUMNS */}
             {activeModule === 'custom-columns' && (
@@ -4337,16 +3277,14 @@ export const AdminDashboard: React.FC = () => {
                     <div
                       key={col.id}
                       onClick={() => toggleColumnVisibility(col.id)}
-                      className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
-                        col.visible
-                          ? 'bg-indigo-50/50 border-indigo-200 text-indigo-950 shadow-xs'
-                          : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
-                      }`}
+                      className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${col.visible
+                        ? 'bg-indigo-50/50 border-indigo-200 text-indigo-950 shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                        }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-lg flex items-center justify-center border ${
-                          col.visible ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-300'
-                        }`}>
+                        <div className={`w-5 h-5 rounded-lg flex items-center justify-center border ${col.visible ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-300'
+                          }`}>
                           {col.visible && <Check className="w-3.5 h-3.5" />}
                         </div>
                         <div>
@@ -4354,9 +3292,8 @@ export const AdminDashboard: React.FC = () => {
                           <div className="text-[11px] font-mono text-slate-500">{col.key}</div>
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        col.visible ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-600'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${col.visible ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-600'
+                        }`}>
                         {col.visible ? 'Hiển thị' : 'Ẩn'}
                       </span>
                     </div>
@@ -4649,11 +3586,11 @@ export const AdminDashboard: React.FC = () => {
                   <span className="text-xs text-slate-400 font-medium">
                     (
                     {dbViewerPreviewTable === 'users' ? allUsers.length :
-                     dbViewerPreviewTable === 'dispatches' ? dispatches.length :
-                     dbViewerPreviewTable === 'departments' ? 12 :
-                     dbViewerPreviewTable === 'roles' ? 4 :
-                     dbViewerPreviewTable === 'permissions' ? 40 :
-                     dbViewerPreviewTable === 'user_roles' ? allUsers.length : 0} records
+                      dbViewerPreviewTable === 'dispatches' ? dispatches.length :
+                        dbViewerPreviewTable === 'departments' ? 12 :
+                          dbViewerPreviewTable === 'roles' ? 4 :
+                            dbViewerPreviewTable === 'permissions' ? 40 :
+                              dbViewerPreviewTable === 'user_roles' ? allUsers.length : 0} records
                     )
                   </span>
                 </div>

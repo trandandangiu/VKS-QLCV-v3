@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useDialog } from '../hooks/useDialog';
 import { Header } from '../components/Header';
 import { AssignTpModal } from '../components/AssignTpModal';
 import { SubmitVtModal } from '../components/SubmitVtModal';
@@ -12,45 +13,47 @@ import { PvtPendingVtView } from '../components/pvt/PvtPendingVtView';
 import { PvtRoomsDispatchesView } from '../components/pvt/PvtRoomsDispatchesView';
 import { PvtStatsView } from '../components/pvt/PvtStatsView';
 import { PvtNotificationsView } from '../components/pvt/PvtNotificationsView';
+import { PvtSidebar, PvtSidebarTab } from '../components/pvt/PvtSidebar';
+import { PvtHeroHeader } from '../components/pvt/PvtHeroHeader';
 import { apiClient } from '../services/apiClient';
 import { Dispatch } from '../types/dispatch';
 import { User } from '../types/auth';
 import { DEFAULT_COLUMNS } from '../constants/columns';
 import { exportDispatchesToExcel } from '../services/excelService';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  CornerDownRight, 
-  Send, 
-  Building2, 
-  BarChart3, 
-  Bell, 
-  CheckCircle2, 
-  RefreshCw, 
+import {
+  LayoutDashboard,
+  FileText,
+  CornerDownRight,
+  Send,
+  Building2,
+  BarChart3,
+  Bell,
+  CheckCircle2,
+  RefreshCw,
   Download,
   ChevronRight,
   Menu,
   X
 } from 'lucide-react';
 
-export type PvtTabKey = 
-  | 'dashboard' 
-  | 'cv-duoc-giao' 
-  | 'giao-tp' 
-  | 'cho-trinh-vt' 
-  | 'cv-cua-phong' 
-  | 'thong-ke' 
+export type PvtTabKey =
+  | 'dashboard'
+  | 'cv-duoc-giao'
+  | 'giao-tp'
+  | 'cho-trinh-vt'
+  | 'cv-cua-phong'
+  | 'thong-ke'
   | 'thong-bao';
 
 export const PhoVienTruongDashboard: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
   const { allUsers, currentUser } = useAuth();
+  const dialog = useDialog();
   const navigate = useNavigate();
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState<PvtTabKey>('dashboard');
+  const [activeSidebarTab, setActiveSidebarTab] = useState<PvtSidebarTab>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-
   // Determine which PVT is being viewed (defaults to PVT1)
   const pvtUser = useMemo(() => {
     if (id) {
@@ -89,8 +92,8 @@ export const PhoVienTruongDashboard: React.FC = () => {
   // For PVT1: explicitly includes TP1 and TP2
   const subordinateRooms = useMemo(() => {
     if (!pvtUser) return [];
-    const subs = allUsers.filter(u => 
-      u.role === 'TRUONG_PHONG' && 
+    const subs = allUsers.filter(u =>
+      u.role === 'TRUONG_PHONG' &&
       (u.pvtManagerId === pvtUser.id || u.pvtManagerId === pvtUser.roomCode)
     );
     // If this is PVT1 and list is empty or needs fallback, ensure TP1 and TP2 are present
@@ -111,9 +114,8 @@ export const PhoVienTruongDashboard: React.FC = () => {
     try {
       // 1. Fetch PVT's dispatches from VT
       const pvtList = await apiClient.getDispatches({
-        role: 'PHO_VIEN_TRUONG',
-        userId: pvtUser.id,
-        roomCode: pvtUser.roomCode
+        assignedPvtId: pvtUser.id,
+        limit: 500
       });
       setDispatches(pvtList);
 
@@ -134,7 +136,7 @@ export const PhoVienTruongDashboard: React.FC = () => {
   // 1. CÔNG VĂN ĐƯỢC VT GIAO
   // All dispatches where assignedPvt matches this PVT
   const dispatchesFromVt = useMemo(() => {
-    return dispatches.filter(d => 
+    return dispatches.filter(d =>
       d.assignedPvtId === pvtUser?.id ||
       d.assignedPvtName === pvtUser?.fullName ||
       (pvtUser?.roomCode && d.assignedPvtName?.includes(pvtUser.roomCode))
@@ -151,7 +153,7 @@ export const PhoVienTruongDashboard: React.FC = () => {
       const isStatusPending = d.trangThai === 'CHO_TRINH_VT' || d.customFields?.trinhVtStatus === 'CHO_TRINH';
       const isPvtMatch = d.assignedPvtId === pvtUser?.id || (pvtUser?.roomCode && d.assignedPvtName?.includes(pvtUser.roomCode));
       const isTpMatch = (d.assignedTpId && subIds.includes(d.assignedTpId)) ||
-                        (d.assignedTpName && subCodes.some(c => d.assignedTpName?.includes(c)));
+        (d.assignedTpName && subCodes.some(c => d.assignedTpName?.includes(c)));
       return isStatusPending && (isPvtMatch || isTpMatch);
     });
   }, [allSystemDispatches, subordinateRooms, pvtUser]);
@@ -161,10 +163,24 @@ export const PhoVienTruongDashboard: React.FC = () => {
     setDispatchToAssign(disp);
     setIsAssignTpModalOpen(true);
   };
-
   const handleSaveAssignTp = async (data: any) => {
     if (!dispatchToAssign) return;
-    const updated = await apiClient.assignToTp(dispatchToAssign.id, data);
+
+    // Tìm roomCode của TP
+    const targetTp = allTpUsers.find(u =>
+      u.id === data.tpId || u.roomCode === data.tpId
+    );
+
+    const updated = await apiClient.assignToTps(dispatchToAssign.id, {
+      tps: [{
+        tpId: data.tpId,
+        tpName: data.tpName,
+        roomCode: targetTp?.roomCode || data.roomCode || '',
+        isPrimary: true
+      }],
+      pvtChiDao: data.pvtChiDao,
+      hanBaoCaoXuLy: data.hanBaoCaoXuLy
+    });
     if (updated) {
       showToast(`Đã giao công văn số ${updated.soCongVan} cho ${data.tpName}`);
       loadDispatches();
@@ -177,9 +193,8 @@ export const PhoVienTruongDashboard: React.FC = () => {
   };
 
   const handleSubmitVt = async (dispatchId: string, yKienTrinhVt: string) => {
-    const updated = await apiClient.submitToVt(dispatchId, {
-      yKienTrinhVt,
-      fromPvtName: pvtUser?.fullName || 'Phó Viện Trưởng'
+    const updated = await apiClient.pvtSubmit(dispatchId, {
+      pvtChiDao: yKienTrinhVt
     });
     if (updated) {
       showToast(`Đã ký duyệt và trình Viện Trưởng công văn số ${updated.soCongVan}!`, 'success');
@@ -187,217 +202,112 @@ export const PhoVienTruongDashboard: React.FC = () => {
     }
   };
 
+
+
   const handleReturnTp = async (dispatchId: string, lyDoTraLai: string) => {
-    const updated = await apiClient.returnToTp(dispatchId, { lyDoTraLai });
+    const updated = await apiClient.pvtDisagree(dispatchId, lyDoTraLai);
     if (updated) {
       showToast(`Đã trả lại hồ sơ công văn số ${updated.soCongVan} cho cấp phòng!`, 'info');
       loadDispatches();
     }
   };
 
+  // Summary cho Hero Header
+  const heroSummary = useMemo(() => {
+    const total = dispatches.length;
+    const hoanThanh = dispatches.filter(d => d.trangThai === 'HOAN_THANH').length;
+    const quaHan = dispatches.filter(d => {
+      if (d.trangThai === 'HOAN_THANH' || !d.hanBaoCaoXuLy) return false;
+      return new Date(d.hanBaoCaoXuLy) < new Date();
+    }).length;
+    const choTrinhVt = dispatches.filter(d => d.trangThai === 'CHO_PVT_DUYET').length;
+    const choGiaoTp = dispatches.filter(d => !d.assignedTpId && d.trangThai !== 'HOAN_THANH').length;
+    return { total, hoanThanh, quaHan, choTrinhVt, choGiaoTp };
+  }, [dispatches]);
+
+  // KPI counts cho sidebar
+  const sidebarCounts = useMemo(() => {
+    return {
+      pendingTp: dispatches.filter(d => !d.assignedTpId && d.trangThai !== 'HOAN_THANH').length,
+      assignedTp: dispatches.filter(d => !!d.assignedTpId).length,
+      waitingVt: dispatches.filter(d => d.trangThai === 'CHO_PVT_DUYET').length,
+      notifications: 0,   // TODO: nối với useNotifications sau
+    };
+  }, [dispatches]);
+
+  // Helper: lấy danh sách theo tab
+  const getTabData = (): { title: string; items: Dispatch[]; emptyMessage: string } => {
+    switch (activeSidebarTab) {
+      case 'action-pending-tp':
+        return {
+          title: 'Chờ giao Trưởng phòng',
+          items: dispatches.filter(d => !d.assignedTpId && d.trangThai !== 'HOAN_THANH'),
+          emptyMessage: 'Tất cả công văn đã được giao cho phòng',
+        };
+      case 'action-assigned-tp':
+        return {
+          title: 'Đã giao Trưởng phòng',
+          items: dispatches.filter(d => !!d.assignedTpId),
+          emptyMessage: 'Chưa có công văn nào được giao TP',
+        };
+      case 'action-waiting-vt':
+        return {
+          title: 'Hồ sơ chờ trình Viện trưởng',
+          items: dispatches.filter(d => d.trangThai === 'CHO_PVT_DUYET'),
+          emptyMessage: 'Không có hồ sơ nào chờ trình',
+        };
+      default:
+        return {
+          title: 'Tất cả công văn',
+          items: dispatches,
+          emptyMessage: 'Chưa có công văn nào',
+        };
+    }
+  };
+
+  const tabData = getTabData();
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900 font-sans">
       <Header />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5">
-        {/* Top bar removed per request */}
-        {/* Layout Grid: Left Sidebar + Main View Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* ─────────────────────────────────────────────────────────────┐
-              │  SIDEBAR NAVIGATION (EXACT USER SPECIFICATION)
-              │  Dashboard (phòng phụ trách)
-              │  ├─────────────────────────────────────┤
-              │  │  CÔNG VĂN
-              │  │  ├── Công văn được giao
-              │  │  ├── Giao cho TP
-              │  │  ├── Chờ tôi trình VT
-              │  │  └── Công văn của phòng
-              │  ├─────────────────────────────────────┤
-              │  │  THỐNG KÊ
-              │  │  └── Phòng phụ trách
-              │  ├─────────────────────────────────────┤
-              │  │  THÔNG BÁO
-              └───────────────────────────────────────────────────────────── */}
-          <aside className={`lg:col-span-3 bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 space-y-4 ${
-            isMobileSidebarOpen ? 'block' : 'hidden lg:block'
-          }`}>
-            {/* Item 1: Dashboard (phòng phụ trách) */}
-            <div>
-              <button
-                onClick={() => {
-                  setActiveTab('dashboard');
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer ${
-                  activeTab === 'dashboard'
-                    ? 'bg-amber-800 text-white shadow-xs'
-                    : 'text-slate-700 hover:bg-amber-50 hover:text-amber-900'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <LayoutDashboard className="w-4 h-4" />
-                  <span>Bảng điều khiển</span>
-                </div>
-                {activeTab === 'dashboard' && <ChevronRight className="w-4 h-4 text-amber-300" />}
-              </button>
-            </div>
+      <main className="flex-1 max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
+        {/* Mobile toggle */}
+        <div className="lg:hidden mb-3">
+          <button
+            onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs cursor-pointer"
+          >
+            {isMobileSidebarOpen ? '✕ Đóng menu' : '☰ Mở menu'}
+          </button>
+        </div>
 
-            <div className="border-t border-slate-200/80 my-2" />
+        {/* Layout 2 cột */}
+        <div className="flex flex-col lg:flex-row gap-5 items-start">
+          {/* Sidebar */}
+          <PvtSidebar
+            activeTab={activeSidebarTab}
+            onChangeTab={setActiveSidebarTab}
+            roomCode={pvtUser?.roomCode}
+            userName={pvtUser?.fullName}
+            counts={sidebarCounts}
+            isMobileOpen={isMobileSidebarOpen}
+            onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          />
 
-            {/* Group 2: CÔNG VĂN */}
-            <div className="space-y-1">
-              <div className="px-3 py-1 text-[11px] font-black tracking-wider text-slate-400 uppercase">
-                CÔNG VĂN
-              </div>
+          {/* Main content */}
+          <div className="flex-1 min-w-0 w-full space-y-5">
+            {/* Hero Header — luôn hiển thị */}
+            <PvtHeroHeader
+              userName={pvtUser?.fullName || 'Phó Viện trưởng'}
+              roomCode={pvtUser?.roomCode}
+              summary={heroSummary}
+              onRefresh={loadDispatches}
+              isLoading={isLoading}
+            />
 
-              {/* ├── Công văn được giao */}
-              <button
-                onClick={() => {
-                  setActiveTab('cv-duoc-giao');
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer pl-6 ${
-                  activeTab === 'cv-duoc-giao'
-                    ? 'bg-amber-100 text-amber-950 font-bold border border-amber-300 shadow-2xs'
-                    : 'text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-400 text-xs">├──</span>
-                  <span>Công văn được giao</span>
-                </div>
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                  activeTab === 'cv-duoc-giao'
-                    ? 'bg-amber-800 text-white'
-                    : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {dispatchesFromVt.length}
-                </span>
-              </button>
-
-              {/* ├── Giao cho TP */}
-              <button
-                onClick={() => {
-                  setActiveTab('giao-tp');
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer pl-6 ${
-                  activeTab === 'giao-tp'
-                    ? 'bg-amber-100 text-amber-950 font-bold border border-amber-300 shadow-2xs'
-                    : 'text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-400 text-xs">├──</span>
-                  <span>Giao cho TP</span>
-                </div>
-                <CornerDownRight className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-
-              {/* ├── Chờ tôi trình VT */}
-              <button
-                onClick={() => {
-                  setActiveTab('cho-trinh-vt');
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer pl-6 ${
-                  activeTab === 'cho-trinh-vt'
-                    ? 'bg-rose-100 text-rose-950 font-bold border border-rose-300 shadow-2xs'
-                    : 'text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-400 text-xs">├──</span>
-                  <span>Chờ tôi trình VT</span>
-                </div>
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                  activeTab === 'cho-trinh-vt'
-                    ? 'bg-rose-800 text-white'
-                    : 'bg-rose-100 text-rose-800'
-                }`}>
-                  {pendingSubmitVtDispatches.length}
-                </span>
-              </button>
-
-              {/* └── Công văn của phòng */}
-              <button
-                onClick={() => {
-                  setActiveTab('cv-cua-phong');
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer pl-6 ${
-                  activeTab === 'cv-cua-phong'
-                    ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300 shadow-2xs'
-                    : 'text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-400 text-xs">└──</span>
-                  <span>Công văn của phòng</span>
-                </div>
-                <Building2 className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-            </div>
-
-            <div className="border-t border-slate-200/80 my-2" />
-
-            {/* Group 3: THỐNG KÊ */}
-            <div className="space-y-1">
-              <div className="px-3 py-1 text-[11px] font-black tracking-wider text-slate-400 uppercase">
-                THỐNG KÊ
-              </div>
-
-              {/* └── Phòng phụ trách */}
-              <button
-                onClick={() => {
-                  setActiveTab('thong-ke');
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer pl-6 ${
-                  activeTab === 'thong-ke'
-                    ? 'bg-emerald-100 text-emerald-950 font-bold border border-emerald-300 shadow-2xs'
-                    : 'text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-slate-400 text-xs">└──</span>
-                  <span>Phòng phụ trách</span>
-                </div>
-                <BarChart3 className="w-3.5 h-3.5 text-slate-400" />
-              </button>
-            </div>
-
-            <div className="border-t border-slate-200/80 my-2" />
-
-            {/* Group 4: THÔNG BÁO */}
-            <div>
-              <button
-                onClick={() => {
-                  setActiveTab('thong-bao');
-                  setIsMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  activeTab === 'thong-bao'
-                    ? 'bg-amber-800 text-white shadow-xs'
-                    : 'text-slate-700 hover:bg-amber-50 hover:text-amber-900'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Bell className="w-4 h-4" />
-                  <span>THÔNG BÁO</span>
-                </div>
-                {pendingSubmitVtDispatches.length > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                )}
-              </button>
-            </div>
-          </aside>
-
-          {/* ─────────────────────────────────────────────────────────────┐
-              │  MAIN CONTENT AREA
-              └───────────────────────────────────────────────────────────── */}
-          <div className="lg:col-span-9 space-y-6">
-            {activeTab === 'dashboard' && (
+            {/* Tab: Dashboard — dùng component cũ */}
+            {activeSidebarTab === 'dashboard' && (
               <PvtDashboardHome
                 pvtUser={pvtUser || null}
                 dispatchesFromVt={dispatchesFromVt}
@@ -407,11 +317,27 @@ export const PhoVienTruongDashboard: React.FC = () => {
                 onOpenAssignTp={handleOpenAssignTp}
                 onOpenSubmitVt={handleOpenSubmitVt}
                 onOpenDetail={setDetailDispatch}
-                onNavigateTab={(tab) => setActiveTab(tab as PvtTabKey)}
+                onNavigateTab={(tab) => setActiveSidebarTab(tab as PvtSidebarTab)}
               />
             )}
 
-            {activeTab === 'cv-duoc-giao' && (
+            {/* Tab: Báo cáo tổng quan */}
+            {activeSidebarTab === 'report-overview' && (
+              <PvtDashboardHome
+                pvtUser={pvtUser || null}
+                dispatchesFromVt={dispatchesFromVt}
+                pendingSubmitVtDispatches={pendingSubmitVtDispatches}
+                subordinateRooms={subordinateRooms}
+                allDispatches={allSystemDispatches}
+                onOpenAssignTp={handleOpenAssignTp}
+                onOpenSubmitVt={handleOpenSubmitVt}
+                onOpenDetail={setDetailDispatch}
+                onNavigateTab={(tab) => setActiveSidebarTab(tab as PvtSidebarTab)}
+              />
+            )}
+
+            {/* Tab: Báo cáo theo thời gian */}
+            {activeSidebarTab === 'report-by-time' && (
               <PvtAssignedDispatches
                 dispatches={dispatchesFromVt}
                 onOpenAssignTp={handleOpenAssignTp}
@@ -421,41 +347,64 @@ export const PhoVienTruongDashboard: React.FC = () => {
               />
             )}
 
-            {activeTab === 'giao-tp' && (
-              <PvtAssignTpView
-                dispatches={dispatchesFromVt}
-                subordinateRooms={subordinateRooms}
-                allTpUsers={allTpUsers}
-                onOpenAssignTp={handleOpenAssignTp}
-                onOpenDetail={setDetailDispatch}
-              />
-            )}
-
-            {activeTab === 'cho-trinh-vt' && (
-              <PvtPendingVtView
-                dispatches={pendingSubmitVtDispatches}
-                onOpenSubmitVt={handleOpenSubmitVt}
-                onOpenDetail={setDetailDispatch}
-              />
-            )}
-
-            {activeTab === 'cv-cua-phong' && (
-              <PvtRoomsDispatchesView
-                dispatches={allSystemDispatches}
-                subordinateRooms={subordinateRooms}
-                onOpenDetail={setDetailDispatch}
-                onOpenAssignTp={handleOpenAssignTp}
-              />
-            )}
-
-            {activeTab === 'thong-ke' && (
+            {/* Tab: Xếp hạng PVT */}
+            {activeSidebarTab === 'report-leaderboard' && (
               <PvtStatsView
                 subordinateRooms={subordinateRooms}
                 allDispatches={allSystemDispatches}
               />
             )}
 
-            {activeTab === 'thong-bao' && (
+            {/* Tab: Tất cả công văn */}
+            {activeSidebarTab === 'action-all' && (
+              <PvtAssignedDispatches
+                dispatches={dispatchesFromVt}
+                onOpenAssignTp={handleOpenAssignTp}
+                onOpenDetail={setDetailDispatch}
+                onRefresh={loadDispatches}
+                isLoading={isLoading}
+              />
+            )}
+
+            {/* Tab: Chờ giao TP */}
+            {activeSidebarTab === 'action-pending-tp' && (
+              <PvtAssignTpView
+                dispatches={tabData.items}
+                subordinateRooms={subordinateRooms}
+                allTpUsers={allTpUsers}
+                onOpenAssignTp={handleOpenAssignTp}
+                onOpenDetail={setDetailDispatch}
+                onRefresh={loadDispatches}
+                isLoading={isLoading}
+              />
+            )}
+
+            {/* Tab: Đã giao TP */}
+            {activeSidebarTab === 'action-assigned-tp' && (
+              <PvtAssignTpView
+                dispatches={tabData.items}
+                subordinateRooms={subordinateRooms}
+                allTpUsers={allTpUsers}
+                onOpenAssignTp={handleOpenAssignTp}
+                onOpenDetail={setDetailDispatch}
+                onRefresh={loadDispatches}
+                isLoading={isLoading}
+              />
+            )}
+
+            {/* Tab: Chờ trình VT */}
+            {activeSidebarTab === 'action-waiting-vt' && (
+              <PvtPendingVtView
+                dispatches={pendingSubmitVtDispatches}
+                onOpenSubmitVt={handleOpenSubmitVt}
+                onOpenDetail={setDetailDispatch}
+                onRefresh={loadDispatches}
+                isLoading={isLoading}
+              />
+            )}
+
+            {/* Tab: Thông báo */}
+            {activeSidebarTab === 'action-notifications' && (
               <PvtNotificationsView
                 pendingSubmitVtDispatches={pendingSubmitVtDispatches}
                 dispatchesFromVt={dispatchesFromVt}
@@ -495,16 +444,17 @@ export const PhoVienTruongDashboard: React.FC = () => {
         }}
       />
 
-      {/* Toast Notification */}
+      {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 animate-fadeIn">
-          <div className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border ${
-            toast.type === 'success'
+          <div
+            className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
               ? 'bg-slate-900 text-white border-slate-700'
               : toast.type === 'error'
-              ? 'bg-rose-900 text-white border-rose-700'
-              : 'bg-amber-900 text-white border-amber-700'
-          }`}>
+                ? 'bg-rose-900 text-white border-rose-700'
+                : 'bg-amber-900 text-white border-amber-700'
+              }`}
+          >
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span>{toast.message}</span>
           </div>

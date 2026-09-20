@@ -1,13 +1,13 @@
 import React from 'react';
-import { 
-  FileText, 
-  Send, 
-  CornerDownRight, 
-  Eye, 
-  Clock, 
-  CheckCircle2, 
-  Building2, 
-  AlertCircle, 
+import {
+  FileText,
+  Send,
+  CornerDownRight,
+  Eye,
+  Clock,
+  CheckCircle2,
+  Building2,
+  AlertCircle,
   CheckCheck,
   ChevronRight,
   TrendingUp,
@@ -42,12 +42,12 @@ export const PvtDashboardHome: React.FC<PvtDashboardHomeProps> = ({
 }) => {
   // Compute progress for each subordinate department (e.g. TP1, TP2)
   const departmentProgress = subordinateRooms.map((tp, index) => {
-    const tpDispatches = allDispatches.filter(d => 
-      d.assignedTpId === tp.id || 
+    const tpDispatches = allDispatches.filter(d =>
+      d.assignedTpId === tp.id ||
       d.assignedTpName === tp.fullName ||
       (d.assignedTpName && d.assignedTpName.includes(tp.roomCode))
     );
-    
+
     // Default mock calculation if no dispatches yet, ensure TP1 is 80% and TP2 is 60% as user requested
     let completionPercent = 0;
     if (tpDispatches.length > 0) {
@@ -185,7 +185,7 @@ export const PvtDashboardHome: React.FC<PvtDashboardHomeProps> = ({
 
                       {/* Tên công văn */}
                       <td className="py-3.5 px-4">
-                        <div 
+                        <div
                           onClick={() => onOpenDetail(disp)}
                           className="font-semibold text-slate-900 hover:text-amber-800 cursor-pointer line-clamp-2"
                         >
@@ -207,22 +207,25 @@ export const PvtDashboardHome: React.FC<PvtDashboardHomeProps> = ({
                         </span>
                       </td>
 
-                      {/* Tiến độ: hiển thị tiến độ % + thanh tiến độ + thông tin hạn (sắp hết hạn - hết hạn - Chưa tới hạn) */}
+                      {/* Tiến độ: hiển thị trạng thái xử lý + thanh tiến độ */}
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex flex-col items-center justify-center gap-1.5">
                           <div className="flex items-center justify-center gap-2">
-                            <span className="font-bold text-slate-900 w-8 text-right text-xs">
-                              {disp.tienDo || 0}%
+                            <span className="font-bold text-slate-900 text-xs">
+                              {(disp.tienDo || 0) >= 100
+                                ? 'Hoàn thành'
+                                : (disp.tienDo || 0) > 0
+                                  ? 'Đang xử lý'
+                                  : 'Chưa xử lý'}
                             </span>
                             <div className="h-2 w-20 bg-slate-200 rounded-full overflow-hidden">
                               <div
-                                className={`h-full transition-all ${
-                                  (disp.tienDo || 0) >= 80
+                                className={`h-full transition-all ${(disp.tienDo || 0) >= 80
                                     ? 'bg-emerald-600'
                                     : (disp.tienDo || 0) >= 40
-                                    ? 'bg-amber-600'
-                                    : 'bg-blue-600'
-                                }`}
+                                      ? 'bg-amber-600'
+                                      : 'bg-blue-600'
+                                  }`}
                                 style={{ width: `${disp.tienDo || 0}%` }}
                               />
                             </div>
@@ -337,7 +340,7 @@ export const PvtDashboardHome: React.FC<PvtDashboardHomeProps> = ({
                         </div>
 
                         {/* Title of dispatch */}
-                        <p 
+                        <p
                           onClick={() => onOpenDetail(disp)}
                           className="text-xs font-semibold text-slate-800 mt-1 hover:text-amber-800 cursor-pointer"
                         >
@@ -362,13 +365,12 @@ export const PvtDashboardHome: React.FC<PvtDashboardHomeProps> = ({
                         </span>
                         <div className="h-2 w-20 bg-slate-200 rounded-full overflow-hidden">
                           <div
-                            className={`h-full transition-all ${
-                              (disp.tienDo || 90) >= 80
+                            className={`h-full transition-all ${(disp.tienDo || 90) >= 80
                                 ? 'bg-emerald-600'
                                 : (disp.tienDo || 90) >= 40
-                                ? 'bg-amber-600'
-                                : 'bg-blue-600'
-                            }`}
+                                  ? 'bg-amber-600'
+                                  : 'bg-blue-600'
+                              }`}
                             style={{ width: `${disp.tienDo || 90}%` }}
                           />
                         </div>
@@ -450,9 +452,8 @@ export const PvtDashboardHome: React.FC<PvtDashboardHomeProps> = ({
                     </span>
                     <div className="h-2 w-28 bg-slate-200 rounded-full overflow-hidden">
                       <div
-                        className={`h-full transition-all duration-500 ${
-                          dept.percent >= 80 ? 'bg-emerald-600' : 'bg-amber-600'
-                        }`}
+                        className={`h-full transition-all duration-500 ${dept.percent >= 80 ? 'bg-emerald-600' : 'bg-amber-600'
+                          }`}
                         style={{ width: `${dept.percent}%` }}
                       />
                     </div>

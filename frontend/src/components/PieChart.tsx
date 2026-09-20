@@ -160,13 +160,8 @@ export const PieChart: React.FC<PieChartProps> = ({
               {activeItem ? activeItem.value : totalValue}
             </span>
             <span className="text-[11px] font-semibold text-slate-500 truncate max-w-[100px]">
-              {activeItem ? `${activeItem.percent}%` : 'Tổng số việc'}
+              {activeItem ? activeItem.label : 'Tổng số việc'}
             </span>
-            {activeItem && (
-              <span className="text-[10px] text-slate-400 truncate max-w-[110px]">
-                {activeItem.label}
-              </span>
-            )}
           </div>
         )}
       </div>
@@ -174,7 +169,6 @@ export const PieChart: React.FC<PieChartProps> = ({
       {/* Legend & Breakdown List */}
       <div className="mt-2 space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
         {data.map(item => {
-          const percent = totalValue > 0 ? Math.round((item.value / totalValue) * 100) : 0;
           const isSelected = selectedId === item.id;
           const isHovered = hoveredId === item.id;
 
@@ -206,11 +200,8 @@ export const PieChart: React.FC<PieChartProps> = ({
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0 ml-2">
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
                 <span className="font-semibold text-slate-700">{item.value}</span>
-                <span className="text-[10px] text-slate-400 w-8 text-right font-medium">
-                  {percent}%
-                </span>
               </div>
             </div>
           );

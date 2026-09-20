@@ -24,10 +24,12 @@ export const adminService = {
       exports,
       columns,
       systemSettings,
+      dispatchPvts,      // ← THÊM
+      dispatchTps,       // ← THÊM
     ] = await Promise.all([
-      prisma.user.count(),
-      prisma.dispatch.count(),
-      prisma.department.count(),
+      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.dispatch.count({ where: { deletedAt: null } }),
+      prisma.department.count({ where: { active: true } }),
       prisma.role.count(),
       prisma.permission.count(),
       prisma.userRole.count(),
@@ -42,6 +44,8 @@ export const adminService = {
       prisma.export.count(),
       prisma.column.count(),
       prisma.systemSetting.count(),
+      prisma.dispatchPvt.count(),       // ← THÊM
+      prisma.dispatchTp.count(),
     ]);
 
     return {
@@ -63,6 +67,8 @@ export const adminService = {
         { name: 'exports', count: exports },
         { name: 'columns', count: columns },
         { name: 'system_settings', count: systemSettings },
+        { name: 'dispatch_pvts', count: dispatchPvts },   // ← THÊM
+        { name: 'dispatch_tps', count: dispatchTps },
       ],
     };
   },
@@ -80,7 +86,7 @@ export const adminService = {
       'users', 'dispatches', 'departments', 'roles', 'permissions',
       'user_roles', 'role_permissions', 'assignments', 'attachments',
       'reports', 'rejections', 'notifications', 'audit_logs',
-      'sessions', 'exports', 'columns', 'system_settings',
+      'sessions', 'exports', 'columns', 'system_settings', 'dispatch_pvts', 'dispatch_tps',
     ];
 
     if (!allowedTables.includes(tableName)) {
@@ -130,9 +136,9 @@ export const adminService = {
   // ============================================
   async getStats() {
     const [users, dispatches, departments, roles, permissions] = await Promise.all([
-      prisma.user.count(),
-      prisma.dispatch.count(),
-      prisma.department.count(),
+      prisma.user.count({ where: { deletedAt: null } }),
+      prisma.dispatch.count({ where: { deletedAt: null } }),
+      prisma.department.count({ where: { active: true } }),
       prisma.role.count(),
       prisma.permission.count(),
     ]);

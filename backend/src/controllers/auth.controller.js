@@ -39,4 +39,17 @@ export const authController = {
   async logout(req, res) {
     res.json({ success: true, message: 'Đã đăng xuất' });
   },
+    async changePassword(req, res, next) {
+    try {
+      const { oldPassword, newPassword } = req.body;
+      const result = await authService.changePassword(
+        req.user.id,
+        oldPassword,
+        newPassword
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

@@ -95,5 +95,30 @@ router.get('/me', authenticate, authController.me);
  *         description: Đăng xuất thành công
  */
 router.post('/logout', authenticate, authController.logout);
+/**
+ * @swagger
+ * /api/auth/change-password:
+ *   post:
+ *     summary: User tự đổi mật khẩu
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [oldPassword, newPassword]
+ *             properties:
+ *               oldPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Đổi mật khẩu thành công
+ *       401:
+ *         description: Mật khẩu hiện tại không chính xác
+ */
+router.post('/change-password', authenticate, authController.changePassword);
 
 export default router;

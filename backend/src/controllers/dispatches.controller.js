@@ -97,4 +97,16 @@ export const dispatchesController = {
       next(err);
     }
   },
+  async markComplete(req, res, next) {
+    try {
+      const result = await dispatchesService.markComplete(
+        req.params.id,
+        req.user,
+        req.body?.note
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

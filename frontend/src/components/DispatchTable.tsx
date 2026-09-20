@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDate } from '../utils/format';
 import { 
   Eye, 
   Edit3, 
@@ -187,15 +188,7 @@ export const DispatchTable: React.FC<DispatchTableProps> = ({
       case 'ngayPhatHanh':
       case 'hanBaoCaoXuLy': {
         const val = (dispatch as any)[col.id];
-        if (!val) return <span className="text-slate-300 italic">-</span>;
-        // If YYYY-MM-DD, reformat for display as DD/MM/YYYY
-        if (typeof val === 'string' && val.includes('-')) {
-          const parts = val.split('-');
-          if (parts.length === 3) {
-            return <span className="text-xs text-slate-800 font-medium">{`${parts[2]}/${parts[1]}/${parts[0]}`}</span>;
-          }
-        }
-        return <span className="text-xs text-slate-800 font-medium">{val}</span>;
+        return <span className="text-xs text-slate-800 font-medium">{formatDate(val)}</span>;
       }
 
       case 'soCongVan':

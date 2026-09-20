@@ -28,7 +28,7 @@ const DEFAULT_COLUMNS: ColumnDefinition[] = [
   { id: 'ghiChu', label: 'Ghi chú', type: 'text', visible: true, isCustom: false, width: '250px', required: false },
 ];
 
-export const useDispatches = () => {
+export const useDispatches = (options: { includeDeleted?: boolean } = {}) => {
   // ============================================
   // STATE
   // ============================================
@@ -65,7 +65,10 @@ export const useDispatches = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await apiClient.getDispatches({ limit: 500 });
+      const data = await apiClient.getDispatches({ 
+        limit: 500,
+        includeDeleted: options.includeDeleted === true,
+      });
       setDispatches(data);
     } catch (e: any) {
       setError(e.message || 'Lỗi tải dữ liệu');
@@ -73,7 +76,7 @@ export const useDispatches = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [options.includeDeleted]);
 
   useEffect(() => {
     loadDispatches();

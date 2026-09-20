@@ -5,7 +5,7 @@ import prisma from '../config/prisma.js';
 // VALIDATE TẠO USER
 // ============================================
 export function validateCreateUser(req, res, next) {
-  const { username, fullName, roleIds, departmentId } = req.body;
+  const { username, fullName, roleIds, role, departmentId, roomCode } = req.body;
   const errors = [];
 
   // 1. Username
@@ -18,8 +18,11 @@ export function validateCreateUser(req, res, next) {
     errors.push('Họ tên phải có ít nhất 2 ký tự');
   }
 
-  // 3. Role (BẮT BUỘC)
-  if (!roleIds || !Array.isArray(roleIds) || roleIds.length === 0) {
+  // 3. Role — chấp nhận roleIds (array) HOẶC role (string)
+  const hasRoleIds = roleIds && Array.isArray(roleIds) && roleIds.length > 0;
+  const hasRoleCode = role && typeof role === 'string' && role.trim().length > 0;
+
+  if (!hasRoleIds && !hasRoleCode) {
     errors.push('Phải chọn ít nhất 1 vai trò');
   }
 
@@ -33,7 +36,6 @@ export function validateCreateUser(req, res, next) {
 
   next();
 }
-
 // ============================================
 // VALIDATE UPDATE USER
 // ============================================

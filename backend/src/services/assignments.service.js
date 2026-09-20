@@ -85,6 +85,9 @@ export const assignmentsService = {
             ? new Date(hanBaoCaoXuLy) 
             : dispatch.hanBaoCaoXuLy,
           mucDoKhan: mucDoKhan || dispatch.mucDoKhan,
+          // ✅ Legacy fields
+          assignedPvtId: pvts[0].pvtId,
+          assignedPvtName: pvts[0].pvtName,
           updatedAt: new Date(),
         },
       });
@@ -165,12 +168,14 @@ export const assignmentsService = {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    // 2.3. Check user là PVT được giao
+    // 2.3. Check user: PVT được giao HOẶC VT HOẶC Admin
     const isAssignedPvt = dispatch.dispatchPvts.some(
       dp => dp.pvtId === currentUser.id
     );
+    const isVienTruong = currentUser.roles?.includes('VIEN_TRUONG');
+    const isAdmin = currentUser.roles?.includes('ADMIN');
 
-    if (!isAssignedPvt && !currentUser.roles?.includes('ADMIN')) {
+    if (!isAssignedPvt && !isVienTruong && !isAdmin) {
       throw { status: 403, message: 'Bạn không được giao công văn này' };
     }
 
@@ -228,10 +233,26 @@ export const assignmentsService = {
         data: {
           trangThai: 'CHO_TP_XU_LY',
           pvtChiDao,
+          // ✅ Legacy fields
+          assignedTpId: tps[0].tpId,
+          assignedTpName: tps[0].tpName,
           updatedAt: new Date(),
         },
       });
 
+      // ✅ Nếu VT giao trực tiếp (không qua PVT), đánh dấu cờ
+      if (isVienTruong && !isAssignedPvt) {
+        await tx.dispatch.update({
+          where: { id: dispatchId },
+          data: {
+            customFields: {
+              ...(dispatch.customFields || {}),
+              assignedDirectlyByVt: true,   // ← Cờ đánh dấu VT giao trực tiếp
+              assignedByUserId: currentUser.id,
+            },
+          },
+        });
+      }
       // Log + notification
       for (const tp of tps) {
         await tx.assignment.create({
@@ -620,8 +641,8 @@ export const assignmentsService = {
       });
 
       // Lấy PVT chính
-      const primaryPvt = dispatch.dispatchPvts.find(p => p.isPrimary) 
-                     || dispatch.dispatchPvts[0];
+      const primaryPvt = dispatch.dispatchPvts.find(p => p.isPrimary)
+        || dispatch.dispatchPvts[0];
 
       if (primaryPvt) {
         // Log rejection

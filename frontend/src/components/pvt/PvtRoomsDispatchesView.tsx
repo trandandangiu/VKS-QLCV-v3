@@ -1,253 +1,396 @@
+// src/components/pvt/PvtRoomsDispatchesView.tsx
 import React, { useState, useMemo } from 'react';
-import { 
-  Building2, 
-  Search, 
-  Filter, 
-  Download, 
-  Eye, 
-  User, 
-  CheckCircle2, 
-  Clock, 
-  CornerDownRight 
+import {
+  Search,
+  Eye,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Flame,
+  X,
+  RefreshCw,
+  FileText,
+  Building,
+  Download,
 } from 'lucide-react';
 import { Dispatch } from '../../types/dispatch';
-import { User as AuthUser } from '../../types/auth';
-import { DEFAULT_COLUMNS } from '../../constants/columns';
-import { exportDispatchesToExcel } from '../../services/excelService';
+import { User } from '../../types/auth';
 
 interface PvtRoomsDispatchesViewProps {
   dispatches: Dispatch[];
-  subordinateRooms: AuthUser[];
-  onOpenDetail: (disp: Dispatch) => void;
-  onOpenAssignTp: (disp: Dispatch) => void;
+  subordinateRooms: User[];
+  onOpenDetail: (d: Dispatch) => void;
+  onOpenAssignTp?: (d: Dispatch) => void;
+  onRefresh?: () => void;
+  isLoading?: boolean;
 }
+
+const formatDate = (dateStr?: string): string => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${d.getFullYear()}`;
+};
+
+const getStatusInfo = (d: Dispatch) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (d.trangThai === 'HOAN_THANH') {
+    return { label: 'Hoàn thành', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CheckCircle2 };
+  }
+  if (d.hanBaoCaoXuLy) {
+    const han = new Date(d.hanBaoCaoXuLy);
+    if (han < today) {
+      return { label: 'Quá hạn', color: 'bg-rose-100 text-rose-800 border-rose-200', icon: AlertTriangle };
+    }
+  }
+  if (d.trangThai === 'CHO_TP_XU_LY') {
+    return { label: 'TP đang xử lý', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: Clock };
+  }
+  return { label: 'Đang xử lý', color: 'bg-slate-100 text-slate-700 border-slate-200', icon: Clock };
+};
 
 export const PvtRoomsDispatchesView: React.FC<PvtRoomsDispatchesViewProps> = ({
   dispatches,
   subordinateRooms,
   onOpenDetail,
-  onOpenAssignTp
+  onRefresh,
+  isLoading,
 }) => {
-  const [selectedRoomCode, setSelectedRoomCode] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeRoomCode, setActiveRoomCode] = useState<string>('ALL');
 
-  // Subordinate room IDs or codes
-  const subordinateCodes = subordinateRooms.map(r => r.roomCode);
-  const subordinateIds = subordinateRooms.map(r => r.id);
-
-  // Filter dispatches that belong to any subordinate room (or currently selected room)
-  const filtered = useMemo(() => {
-    return dispatches.filter(d => {
-      // Must belong to subordinate rooms
-      const matchesSubordinate = 
-        (d.assignedTpId && subordinateIds.includes(d.assignedTpId)) ||
-        (d.assignedTpName && subordinateCodes.some(code => d.assignedTpName?.includes(code))) ||
-        (d.donViBanHanh && subordinateCodes.some(code => d.donViBanHanh.includes(code)));
-
-      if (!matchesSubordinate) return false;
-
-      // Filter by specific room if not ALL
-      if (selectedRoomCode !== 'ALL') {
-        const matchesRoom = 
-          d.assignedTpId === selectedRoomCode ||
-          (d.assignedTpName && d.assignedTpName.includes(selectedRoomCode)) ||
-          (d.donViBanHanh && d.donViBanHanh.includes(selectedRoomCode));
-        if (!matchesRoom) return false;
-      }
-
-      if (selectedStatus !== 'ALL' && d.trangThai !== selectedStatus) return false;
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const m1 = (d.soCongVan || '').toLowerCase().includes(q);
-        const m2 = (d.tenCongVan || '').toLowerCase().includes(q);
-        const m3 = (d.nguoiThucHien || '').toLowerCase().includes(q);
-        if (!m1 && !m2 && !m3) return false;
-      }
-
-      return true;
+  // Build room list với count
+  const roomsWithCount = useMemo(() => {
+    return subordinateRooms.map(room => {
+      const count = dispatches.filter(
+        d => d.assignedTpId === room.id || d.assignedTpId === room.roomCode
+      ).length;
+      return { ...room, count };
     });
-  }, [dispatches, subordinateIds, subordinateCodes, selectedRoomCode, selectedStatus, searchQuery]);
+  }, [subordinateRooms, dispatches]);
+
+  // KPI
+  const kpis = useMemo(() => {
+    const total = dispatches.length;
+    const hoanThanh = dispatches.filter(d => d.trangThai === 'HOAN_THANH').length;
+    const quaHan = dispatches.filter(d => {
+      if (d.trangThai === 'HOAN_THANH' || !d.hanBaoCaoXuLy) return false;
+      return new Date(d.hanBaoCaoXuLy) < new Date();
+    }).length;
+    const dangXuLy = total - hoanThanh - quaHan;
+    return { total, hoanThanh, quaHan, dangXuLy };
+  }, [dispatches]);
+
+  // Filter
+  const filtered = useMemo(() => {
+    let result = dispatches;
+
+    if (activeRoomCode !== 'ALL') {
+      const room = subordinateRooms.find(r => r.roomCode === activeRoomCode);
+      if (room) {
+        result = result.filter(
+          d => d.assignedTpId === room.id || d.assignedTpId === room.roomCode
+        );
+      }
+    }
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      result = result.filter(
+        d =>
+          (d.soCongVan || '').toLowerCase().includes(q) ||
+          (d.tenCongVan || '').toLowerCase().includes(q) ||
+          (d.assignedTpName || '').toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [dispatches, subordinateRooms, activeRoomCode, searchTerm]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-800">
-              <Building2 className="w-4 h-4" />
-            </div>
-            <h1 className="text-base font-black text-slate-900 uppercase tracking-tight">
-              Công Văn Của Các Phòng Ban Phụ Trách ({filtered.length})
-            </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-md"
+            style={{ backgroundColor: '#B71C1C' }}
+          >
+            <Building className="w-5 h-5 text-white" />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Theo dõi tất cả hồ sơ, văn bản đến và đi của các phòng chuyên môn trực thuộc ({subordinateRooms.map(r => r.roomCode).join(', ') || 'TP1, TP2'})
-          </p>
+          <div>
+            <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+              Công văn của phòng phụ trách
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              {subordinateRooms.length} phòng · {kpis.total} công văn
+            </p>
+          </div>
         </div>
 
-        <button
-          onClick={() => exportDispatchesToExcel(filtered, DEFAULT_COLUMNS)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-emerald-900 bg-white hover:bg-emerald-50 border border-slate-200 rounded-xl transition cursor-pointer shadow-2xs self-start md:self-auto"
-        >
-          <Download className="w-4 h-4 text-slate-500" />
-          Xuất Danh Sách
-        </button>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95 disabled:opacity-50"
+            style={{ backgroundColor: '#B71C1C' }}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Làm mới
+          </button>
+        )}
       </div>
 
-      {/* Room Selection Tabs */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => setSelectedRoomCode('ALL')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
-            selectedRoomCode === 'ALL'
-              ? 'bg-emerald-800 text-white shadow-xs'
-              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-          }`}
-        >
-          Tất cả phòng phụ trách ({subordinateRooms.length})
-        </button>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="Tổng công văn" value={kpis.total} icon={FileText} color="slate" />
+        <KpiCard label="Đang xử lý" value={kpis.dangXuLy} icon={Clock} color="blue" />
+        <KpiCard label="Hoàn thành" value={kpis.hoanThanh} icon={CheckCircle2} color="emerald" />
+        <KpiCard label="Quá hạn" value={kpis.quaHan} icon={AlertTriangle} color="rose" alert={kpis.quaHan > 0} />
+      </div>
 
-        {subordinateRooms.map(room => (
-          <button
+      {/* Room Tabs */}
+      <div className="bg-white rounded-2xl p-2 border border-slate-200 shadow-xs flex items-center gap-1.5 flex-wrap">
+        <RoomTab
+          active={activeRoomCode === 'ALL'}
+          onClick={() => setActiveRoomCode('ALL')}
+          label="📋 Tất cả"
+          count={dispatches.length}
+        />
+        {roomsWithCount.map(room => (
+          <RoomTab
             key={room.id}
-            onClick={() => setSelectedRoomCode(room.roomCode)}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
-              selectedRoomCode === room.roomCode
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-            }`}
-          >
-            <span>{room.roomCode}: {room.fullName}</span>
-          </button>
+            active={activeRoomCode === room.roomCode}
+            onClick={() => setActiveRoomCode(room.roomCode || '')}
+            label={`${room.roomCode}`}
+            count={room.count}
+          />
         ))}
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-        {/* Filter bar */}
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50">
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Tìm theo số hiệu, trích yếu, cán bộ..."
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-600 bg-white"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <select
-              value={selectedStatus}
-              onChange={e => setSelectedStatus(e.target.value)}
-              className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 bg-white text-slate-700"
+      {/* Search */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Tìm số CV, trích yếu, phòng..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-50 text-slate-800 pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:bg-white font-medium"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
-              <option value="ALL">Tất cả trạng thái</option>
-              <option value="DANG_XU_LY">Đang xử lý</option>
-              <option value="CHO_TP_XU_LY">Chờ TP xử lý</option>
-              <option value="CHO_TRINH_VT">Chờ trình VT</option>
-              <option value="SAP_DEN_HAN">Sắp đến hạn</option>
-              <option value="QUA_HAN">Quá hạn</option>
-              <option value="HOAN_THANH">Đã hoàn thành</option>
-            </select>
-          </div>
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
+      </div>
 
-        {/* Body */}
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-3.5 w-12 text-center">STT</th>
-                <th className="py-3 px-3.5 w-32">Số Công Văn</th>
-                <th className="py-3 px-3.5 min-w-[260px]">Nội Dung Văn Bản</th>
-                <th className="py-3 px-3.5 w-40">Phòng Ban / Cán Bộ</th>
-                <th className="py-3 px-3.5 w-32">Hạn Báo Cáo</th>
-                <th className="py-3 px-3.5 w-24 text-center">Tiến Độ</th>
-                <th className="py-3 px-3.5 w-28 text-center">Trạng Thái</th>
-                <th className="py-3 px-3.5 w-24 text-center">Thao Tác</th>
+              <tr
+                className="text-white font-bold uppercase text-[10px] tracking-wider"
+                style={{ backgroundColor: '#B71C1C' }}
+              >
+                <th className="py-3 px-3 w-12 text-center">STT</th>
+                <th className="py-3 px-3 w-32">Số CV</th>
+                <th className="py-3 px-3 min-w-[280px]">Trích yếu</th>
+                <th className="py-3 px-3 w-40">Phòng / TP</th>
+                <th className="py-3 px-3 w-28">Hạn xử lý</th>
+                <th className="py-3 px-3 w-36 text-center">Trạng thái</th>
+                <th className="py-3 px-3 w-20 text-center">Xem</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800">
+            <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-slate-400 italic">
-                    Không tìm thấy công văn nào của phòng trong danh mục này.
+                  <td colSpan={7} className="py-16">
+                    <div className="text-center">
+                      <div
+                        className="w-16 h-16 rounded-full border-2 border-dashed flex items-center justify-center mx-auto mb-3"
+                        style={{ borderColor: '#B71C1C40' }}
+                      >
+                        <Building className="w-7 h-7" style={{ color: '#B71C1C50' }} />
+                      </div>
+                      <div className="text-sm font-bold text-slate-700">
+                        {activeRoomCode === 'ALL'
+                          ? 'Chưa có công văn nào của phòng phụ trách'
+                          : `Phòng ${activeRoomCode} chưa có công văn`}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        Khi TP nhận và xử lý, công văn sẽ xuất hiện tại đây
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
-                filtered.map((disp, idx) => (
-                  <tr key={disp.id} className="hover:bg-slate-50 transition">
-                    <td className="py-3.5 px-3.5 text-center font-medium text-slate-400">
-                      {idx + 1}
-                    </td>
-                    <td className="py-3.5 px-3.5 font-mono font-bold text-slate-900">
-                      {disp.soCongVan}
-                    </td>
-                    <td className="py-3.5 px-3.5">
-                      <div
-                        onClick={() => onOpenDetail(disp)}
-                        className="font-semibold text-slate-900 hover:text-emerald-800 cursor-pointer line-clamp-2"
-                      >
-                        {disp.tenCongVan}
-                      </div>
-                      {disp.baoCaoTienDo && (
-                        <div className="text-[11px] text-slate-600 bg-slate-50 p-1.5 rounded mt-1 border border-slate-200 line-clamp-1">
-                          <strong>Báo cáo:</strong> {disp.baoCaoTienDo}
+                filtered.map((d, idx) => {
+                  const status = getStatusInfo(d);
+                  const StatusIcon = status.icon;
+
+                  return (
+                    <tr key={d.id} className="hover:bg-red-50/30 transition">
+                      <td className="py-3 px-3 text-center text-slate-400 font-mono">
+                        {idx + 1}
+                      </td>
+
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono font-black text-[11px] text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            {d.soCongVan || '—'}
+                          </span>
+                          {d.mucDoKhan === 'HOA_TOC' && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-800 border border-red-200">
+                              <Flame className="w-2.5 h-2.5" />
+                              HỎA TỐC
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-3.5">
-                      <div className="font-bold text-slate-900">
-                        {disp.assignedTpName || disp.donViBanHanh}
-                      </div>
-                      {disp.nguoiThucHien && (
-                        <span className="text-[11px] text-slate-500 block">
-                          Cán bộ: {disp.nguoiThucHien}
+                      </td>
+
+                      <td className="py-3 px-3">
+                        <div
+                          onClick={() => onOpenDetail(d)}
+                          className="font-semibold text-slate-900 hover:text-red-700 cursor-pointer line-clamp-2"
+                        >
+                          {d.tenCongVan}
+                        </div>
+                        {d.donViBanHanh && (
+                          <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                            {d.donViBanHanh}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3">
+                        {d.assignedTpName ? (
+                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+                            <Building className="w-3 h-3" />
+                            {d.assignedTpName}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">
+                            Chưa giao
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3 text-slate-700 font-mono text-[11px]">
+                        {formatDate(d.hanBaoCaoXuLy)}
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${status.color}`}
+                        >
+                          <StatusIcon className="w-3 h-3" />
+                          {status.label}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-3.5 whitespace-nowrap">
-                      {disp.hanBaoCaoXuLy || '—'}
-                    </td>
-                    <td className="py-3.5 px-3.5 text-center font-bold">
-                      {disp.tienDo || 0}%
-                    </td>
-                    <td className="py-3.5 px-3.5 text-center whitespace-nowrap">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                          disp.trangThai === 'HOAN_THANH'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : disp.trangThai === 'QUA_HAN'
-                            ? 'bg-rose-100 text-rose-800'
-                            : disp.trangThai === 'SAP_DEN_HAN'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {disp.trangThai || 'DANG_XU_LY'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3.5 text-center whitespace-nowrap">
-                      <button
-                        onClick={() => onOpenDetail(disp)}
-                        className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition cursor-pointer"
-                        title="Xem chi tiết"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          onClick={() => onOpenDetail(d)}
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-700 hover:bg-blue-50 hover:border-blue-300 transition cursor-pointer"
+                          title="Xem chi tiết"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
+
+        {filtered.length > 0 && (
+          <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+            <span className="text-slate-600">
+              Hiển thị <strong className="text-slate-900">{filtered.length}</strong> /{' '}
+              <strong className="text-slate-900">{dispatches.length}</strong> công văn
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+// ============================================
+// ROOM TAB
+// ============================================
+const RoomTab: React.FC<{
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+}> = ({ active, onClick, label, count }) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+      active ? 'text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'
+    }`}
+    style={active ? { backgroundColor: '#B71C1C' } : undefined}
+  >
+    <span>{label}</span>
+    <span
+      className={`min-w-[22px] h-5 px-1.5 rounded-full text-[10px] font-black flex items-center justify-center ${
+        active ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+      }`}
+    >
+      {count}
+    </span>
+  </button>
+);
+
+// ============================================
+// KPI CARD
+// ============================================
+const KpiCard: React.FC<{
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  color: 'slate' | 'blue' | 'emerald' | 'rose';
+  alert?: boolean;
+}> = ({ label, value, icon: Icon, color, alert }) => {
+  const colors = {
+    slate: { bg: 'bg-slate-50', border: 'border-slate-200', icon: 'bg-slate-600', text: 'text-slate-700' },
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'bg-blue-600', text: 'text-blue-800' },
+    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'bg-emerald-600', text: 'text-emerald-800' },
+    rose: { bg: 'bg-rose-50', border: 'border-rose-200', icon: 'bg-rose-600', text: 'text-rose-800' },
+  }[color];
+
+  return (
+    <div className={`p-3.5 rounded-2xl ${colors.bg} border ${colors.border} shadow-xs relative`}>
+      {alert && (
+        <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 animate-pulse border-2 border-white" />
+      )}
+      <div className="flex items-center justify-between mb-1.5">
+        <span className={`text-[10px] font-black ${colors.text} uppercase tracking-wider`}>
+          {label}
+        </span>
+        <div className={`w-7 h-7 rounded-lg ${colors.icon} text-white flex items-center justify-center shadow-sm`}>
+          <Icon className="w-3.5 h-3.5" />
+        </div>
+      </div>
+      <div className="text-2xl font-black text-slate-900 leading-none tabular-nums">
+        {value}
+      </div>
+    </div>
+  );
+};
+
+export default PvtRoomsDispatchesView;

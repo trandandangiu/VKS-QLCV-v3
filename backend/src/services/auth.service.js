@@ -142,4 +142,86 @@ export const authService = {
       permissions: Array.from(permissions),
     };
   },
+    // ============================================
+  // CHANGE PASSWORD — User tự đổi
+  // ============================================
+  async changePassword(userId, oldPassword, newPassword) {
+    // 1. Validate input
+    if (!oldPassword || !newPassword) {
+      throw { status: 400, message: 'Vui lòng nhập đầy đủ mật khẩu cũ và mới' };
+    }
+
+    if (newPassword.length < 6) {
+      throw { status: 400, message: 'Mật khẩu mới phải có ít nhất 6 ký tự' };
+    }
+
+    if (!/[A-Z]/.test(newPassword)) {
+      throw { status: 400, message: 'Mật khẩu mới phải có ít nhất 1 chữ in hoa' };
+    }
+
+    if (!/[a-z]/.test(newPassword)) {
+      throw { status: 400, message: 'Mật khẩu mới phải có ít nhất 1 chữ thường' };
+    }
+
+    if (!/[0-9]/.test(newPassword)) {
+      throw { status: 400, message: 'Mật khẩu mới phải có ít nhất 1 chữ số' };
+    }
+
+    if (oldPassword === newPassword) {
+      throw { status: 400, message: 'Mật khẩu mới phải khác mật khẩu cũ' };
+    }
+
+    // 2. Tìm user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt) {
+      throw { status: 404, message: 'Không tìm thấy user' };
+    }
+
+    // 3. Verify mật khẩu cũ
+    const match = await bcrypt.compare(oldPassword, user.passwordHash);
+    if (!match) {
+      throw { status: 401, message: 'Mật khẩu hiện tại không chính xác' };
+    }
+
+    // 4. Hash mật khẩu mới
+    const newHash = await bcrypt.hash(newPassword, 10);
+
+    // 5. Update
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash: newHash,
+          // Reset TOTP khi đổi password (bảo mật)
+          totpSecret: null,
+          totpEnabled: false,
+        },
+      });
+
+      // Audit log
+      await tx.auditLog.create({
+        data: {
+          userId: userId,
+          userName: user.fullName,
+          action: 'CHANGE_PASSWORD',
+          entityType: 'user',
+          entityId: userId,
+        },
+      });
+
+      // Thu hồi tất cả sessions cũ (bảo mật)
+      await tx.session.updateMany({
+        where: { userId },
+        data: { revokedAt: new Date() },
+      });
+    });
+
+    return {
+      success: true,
+      message: 'Đổi mật khẩu thành công',
+    };
+  },
 };

@@ -167,7 +167,6 @@ router.post(
 /**
  * @swagger
  * /api/dispatches/{id}:
- * 
  * tags: [Dispatches]
  *   put:
  *     summary: Cập nhật công văn
@@ -207,7 +206,7 @@ router.put(
 /**
  * @swagger
  * /api/dispatches/{id}:
- * tags: [Dispatches]
+ *   tags: [Dispatches]
  *   delete:
  *     summary: Xóa mềm công văn
  *     parameters:
@@ -226,4 +225,12 @@ router.delete(
   dispatchesController.deleteDispatch
 );
 
+// ============================================
+// 7. PATCH /api/dispatches/:id/complete
+// PVT/TP tự đánh dấu hoàn thành
+// ============================================
+router.patch(
+  '/:id/complete',
+  dispatchesController.markComplete
+);
 export default router;

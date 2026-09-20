@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, CornerDownRight, ShieldAlert, Calendar } from 'lucide-react';
 import { Dispatch } from '../types/dispatch';
+import { formatDate } from '../utils/format';
 import { User } from '../types/auth';
 
 interface AssignTpModalProps {
@@ -89,7 +90,7 @@ export const AssignTpModal: React.FC<AssignTpModalProps> = ({
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1 text-xs">
             <div className="flex items-center justify-between text-slate-500 font-medium">
               <span>Số CV: <strong className="text-slate-800 font-mono text-sm">{dispatch.soCongVan}</strong></span>
-              <span>Hạn xử lý: <strong className="text-red-700">{dispatch.hanBaoCaoXuLy || 'Chưa định'}</strong></span>
+              <span>Hạn xử lý: <strong className="text-red-700">{formatDate(dispatch.hanBaoCaoXuLy) || 'Chưa định'}</strong></span>
             </div>
             <div className="text-slate-800 font-semibold line-clamp-2">
               {dispatch.tenCongVan}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDate } from '../utils/format';
 import { 
   X, 
   Clock, 
@@ -28,14 +29,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
 
   const customColumns = columns.filter(c => c.isCustom);
 
-  const formatDate = (val?: string) => {
-    if (!val) return '(Không rõ)';
-    if (typeof val === 'string' && val.includes('-')) {
-      const parts = val.split('-');
-      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return val;
-  };
+
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-xs flex justify-end">

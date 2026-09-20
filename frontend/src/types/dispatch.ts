@@ -1,11 +1,19 @@
-export type DispatchStatus = 
-  | 'DANG_XU_LY' 
-  | 'CHO_TP_XU_LY'
-  | 'CHO_TRINH_VT'
-  | 'SAP_DEN_HAN' 
-  | 'QUA_HAN' 
-  | 'HOAN_THANH' 
-  | 'CHO_Y_KIEN_LANH_DAO';
+export type DispatchStatus =
+  // Trạng thái cơ bản
+  | 'MOI_TAO'
+  | 'DANG_XU_LY'
+  | 'HOAN_THANH'
+  | 'QUA_HAN'
+  | 'SAP_DEN_HAN'
+  | 'CHO_Y_KIEN_LANH_DAO'
+  // Trạng thái workflow
+  | 'CHO_PVT_XU_LY'      // Chờ PVT xử lý
+  | 'CHO_TP_XU_LY'       // Chờ TP xử lý
+  | 'CHO_PVT_DUYET'      // Chờ PVT duyệt (TP đã báo cáo)
+  | 'CHO_VT_DUYET'       // Chờ VT duyệt (PVT đã trình)
+  | 'CHO_TRINH_VT'       // Chờ trình VT (legacy)
+  | 'VT_TRA_LAI'         // VT trả lại
+  | 'PVT_TRA_LAI';       // PVT trả lại
 
 export type UrgencyLevel = 'HOA_TOC' | 'THUONG_KHAN' | 'KHAN' | 'THUONG';
 

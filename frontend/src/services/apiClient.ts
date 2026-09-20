@@ -129,6 +129,20 @@ export const apiClient = {
     }
   },
 
+  async changePassword(
+    oldPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      return await request('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  },
+
   // ============================================
   // 2. USERS
   // ============================================
@@ -240,6 +254,15 @@ export const apiClient = {
     limit?: number;
     search?: string;
     trangThai?: string;
+    mucDoKhan?: string;
+    role?: string;
+    userId?: string;
+    roomCode?: string;
+    assignedPvtId?: string;
+    assignedTpId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    includeDeleted?: boolean;
   }): Promise<Dispatch[]> {
     try {
       const query = new URLSearchParams();
@@ -247,6 +270,14 @@ export const apiClient = {
       if (params?.limit) query.set('limit', String(params.limit));
       if (params?.search) query.set('search', params.search);
       if (params?.trangThai) query.set('trangThai', params.trangThai);
+      if (params?.mucDoKhan) query.set('mucDoKhan', params.mucDoKhan);
+      if (params?.role) query.set('role', params.role);
+      if (params?.userId) query.set('userId', params.userId);
+      if (params?.roomCode) query.set('roomCode', params.roomCode);
+      if (params?.assignedPvtId) query.set('assignedPvtId', params.assignedPvtId);
+      if (params?.assignedTpId) query.set('assignedTpId', params.assignedTpId);
+      if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
+      if (params?.dateTo) query.set('dateTo', params.dateTo);
 
       const data = await request<{ success: boolean; dispatches: Dispatch[] }>(
         `/dispatches?${query.toString()}`
@@ -302,6 +333,112 @@ export const apiClient = {
     } catch (e) {
       console.error('Lỗi khi cập nhật công văn:', e);
       return null;
+    }
+  },
+  async markComplete(
+    id: string,
+    note?: string
+  ): Promise<{ success: boolean; message?: string; dispatch?: Dispatch }> {
+    try {
+      return await request(`/dispatches/${id}/complete`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note }),
+      });
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+  },
+  // ============================================
+  // 9. ATTACHMENTS — File đính kèm
+  // ============================================
+  async uploadAttachment(
+    dispatchId: string,
+    file: File,
+    fileCategory: string = 'ORIGINAL',
+    description?: string
+  ): Promise<any> {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('fileCategory', fileCategory);
+      if (description) formData.append('description', description);
+
+      const token = localStorage.getItem(TOKEN_KEY);
+      const res = await fetch(
+        `${API_BASE}/dispatches/${dispatchId}/attachments`,
+        {
+          method: 'POST',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: formData,
+        }
+      );
+
+      const data = await res.json();
+      return data;
+    } catch (e: any) {
+      console.error('Lỗi upload attachment:', e);
+      return { success: false, message: e.message };
+    }
+  },
+
+  async getAttachments(dispatchId: string): Promise<any[]> {
+    try {
+      const data = await request<{ success: boolean; attachments: any[] }>(
+        `/dispatches/${dispatchId}/attachments`
+      );
+      return data.success ? data.attachments : [];
+    } catch (e) {
+      console.error('Lỗi lấy attachments:', e);
+      return [];
+    }
+  },
+
+  async downloadAttachment(attachmentId: string): Promise<void> {
+    try {
+      const token = localStorage.getItem(TOKEN_KEY);
+      const res = await fetch(
+        `${API_BASE}/attachments/${attachmentId}/download`,
+        {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      if (!res.ok) throw new Error('Download failed');
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+
+      // Lấy tên file từ header Content-Disposition hoặc dùng mặc định
+      const contentDisposition = res.headers.get('content-disposition');
+      let fileName = 'attachment';
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match) fileName = decodeURIComponent(match[1]);
+      }
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Lỗi download:', e);
+      throw e;
+    }
+  },
+
+  async deleteAttachment(attachmentId: string): Promise<boolean> {
+    try {
+      const data = await request<{ success: boolean }>(
+        `/attachments/${attachmentId}`,
+        { method: 'DELETE' }
+      );
+      return !!data.success;
+    } catch (e) {
+      console.error('Lỗi xóa attachment:', e);
+      return false;
     }
   },
 
