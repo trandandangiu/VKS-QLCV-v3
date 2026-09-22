@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: QLCV@2026Strong!
       TZ: Asia/Ho_Chi_Minh
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - qlcv_postgres_data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
