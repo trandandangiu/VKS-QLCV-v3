@@ -270,7 +270,7 @@ export const AdminDashboard: React.FC = () => {
     fullName: '',
     email: '',
     phone: '',
-    position: 'Chuyên viên',
+    position: '',
     role: 'PHO_VIEN_TRUONG' as UserRole,
     roomCode: '',
     pvtManagerId: ''
@@ -598,7 +598,7 @@ export const AdminDashboard: React.FC = () => {
         fullName: '',
         email: '',
         phone: '',
-        position: 'Chuyên viên',
+        position: '',
         role: 'PHO_VIEN_TRUONG',
         roomCode: '',
         pvtManagerId: ''
@@ -2021,7 +2021,7 @@ export const AdminDashboard: React.FC = () => {
                           <input
                             type="text"
                             required
-                            placeholder="test01"
+                            placeholder=""
                             value={newUser.username}
                             onChange={e => setNewUser(prev => ({ ...prev, username: e.target.value }))}
                             className="w-60 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
@@ -2056,7 +2056,7 @@ export const AdminDashboard: React.FC = () => {
                           <input
                             type="text"
                             required
-                            placeholder="Nguyễn Văn Test"
+                            placeholder=""
                             value={newUser.fullName}
                             onChange={e => setNewUser(prev => ({ ...prev, fullName: e.target.value }))}
                             className="w-60 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
@@ -2073,7 +2073,7 @@ export const AdminDashboard: React.FC = () => {
                         <div className="flex items-center gap-2 flex-1 max-w-sm">
                           <input
                             type="email"
-                            placeholder="test01@vks.gov.vn"
+                            placeholder=""
                             value={newUser.email}
                             onChange={e => setNewUser(prev => ({ ...prev, email: e.target.value }))}
                             className="w-60 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
@@ -2089,7 +2089,7 @@ export const AdminDashboard: React.FC = () => {
                         <div className="flex items-center gap-2 flex-1 max-w-sm">
                           <input
                             type="tel"
-                            placeholder="0912345678"
+                            placeholder=""
                             value={newUser.phone}
                             onChange={e => setNewUser(prev => ({ ...prev, phone: e.target.value }))}
                             className="w-60 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
@@ -2105,7 +2105,7 @@ export const AdminDashboard: React.FC = () => {
                         <div className="flex items-center gap-2 flex-1 max-w-sm">
                           <input
                             type="text"
-                            placeholder="Chuyên viên"
+                            placeholder=""
                             value={newUser.position}
                             onChange={e => setNewUser(prev => ({ ...prev, position: e.target.value }))}
                             className="w-60 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
@@ -2128,10 +2128,10 @@ export const AdminDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {[
-                        { id: 'ADMIN', label: 'Quản trị viên (ADMIN)', desc: 'Toàn quyền cấu hình hệ thống' },
-                        { id: 'VIEN_TRUONG', label: 'Viện trưởng (VIEN_TRUONG)', desc: 'Chỉ đạo toàn diện' },
-                        { id: 'PHO_VIEN_TRUONG', label: 'Phó Viện trưởng (PHO_VT)', desc: 'Chỉ đạo khối phòng ban' },
-                        { id: 'TRUONG_PHONG', label: 'Trưởng phòng (TRUONG_PHONG)', desc: 'Chỉ huy phòng nghiệp vụ' }
+                        { id: 'ADMIN', label: 'Quản trị viên ', desc: '' },
+                        { id: 'VIEN_TRUONG', label: 'Viện trưởng ', desc: '' },
+                        { id: 'PHO_VIEN_TRUONG', label: 'Phó Viện trưởng ', desc: '' },
+                        { id: 'TRUONG_PHONG', label: 'Trưởng phòng ', desc: '' }
                       ].map(r => {
                         const isSelected = newUser.role === r.id;
                         return (
@@ -2231,7 +2231,7 @@ export const AdminDashboard: React.FC = () => {
                           fullName: '',
                           email: '',
                           phone: '',
-                          position: 'Chuyên viên',
+                          position: '',
                           role: 'PHO_VIEN_TRUONG',
                           roomCode: '',
                           pvtManagerId: ''

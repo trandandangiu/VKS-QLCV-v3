@@ -1,37 +1,42 @@
 // src/components/vt/VtSidebar.tsx
 import React from 'react';
 import {
-  LayoutDashboard,
-  PieChart,
-  Calendar,
-  Trophy,
   FileText,
   Plus,
-  Clock,
-  Users,
-  CheckCircle2,
   ChevronRight,
   Building,
+  // ─── Các icon không dùng nữa (giữ lại để sau này bật) ───
+  // LayoutDashboard,
+  // PieChart,
+  // Calendar,
+  // Trophy,
+  // Clock,
+  // Users,
+  // CheckCircle2,
 } from 'lucide-react';
 
 export type VtSidebarTab =
-  // BÁO CÁO
-  | 'report-overview'
-  | 'report-by-dept'
-  | 'report-by-time'
-  | 'report-leaderboard'
-  // THAO TÁC
+  // ─── CHỈ GIỮ 2 TAB NÀY ───
   | 'action-all'
-  | 'action-create'
-  | 'action-pending'
-  | 'action-assigned'
-  | 'action-approve';
+  | 'action-create';
+
+// ─── Các tab cũ (comment lại để sau này bật) ───
+// | 'report-overview'
+// | 'report-by-dept'
+// | 'report-by-time'
+// | 'report-leaderboard'
+// | 'action-pending'
+// | 'action-assigned'
+// | 'action-approve';
 
 interface VtSidebarProps {
   activeTab: VtSidebarTab;
   onChangeTab: (tab: VtSidebarTab) => void;
-  pendingCount: number;    // Chờ phân công PVT
-  approveCount: number;    // Chờ phê duyệt
+  // ─── Không dùng nữa ───
+  // pendingCount: number;
+  // approveCount: number;
+  pendingCount?: number;    // giữ optional để không phá vỡ type bên ngoài
+  approveCount?: number;    // giữ optional để không phá vỡ type bên ngoài
   isMobileOpen: boolean;
   onCloseMobile: () => void;
 }
@@ -39,10 +44,10 @@ interface VtSidebarProps {
 export const VtSidebar: React.FC<VtSidebarProps> = ({
   activeTab,
   onChangeTab,
-  pendingCount,
-  approveCount,
   isMobileOpen,
   onCloseMobile,
+  // pendingCount,
+  // approveCount,
 }) => {
   const handleClick = (tab: VtSidebarTab) => {
     onChangeTab(tab);
@@ -51,10 +56,11 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
 
   return (
     <aside
-      className={`w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${isMobileOpen ? 'block' : 'hidden lg:block'
-        }`}
+      className={`w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${
+        isMobileOpen ? 'block' : 'hidden lg:block'
+      }`}
     >
-      {/* Header đỏ */}
+      {/* Header đỏ — đơn giản, không có "BÀN LÀM VIỆC" */}
       <div
         className="px-4 py-3.5 text-white"
         style={{
@@ -67,19 +73,38 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
             <Building className="w-4 h-4 text-amber-300" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold tracking-widest uppercase text-amber-200">
-              Viện trưởng
-            </div>
-            <div className="text-xs font-black text-white truncate">
-              BÀN LÀM VIỆC
+            <div className="text-xs font-black text-white truncate uppercase tracking-wide">
+              QUẢN LÝ CÔNG VĂN
             </div>
           </div>
         </div>
       </div>
 
-      {/* MENU */}
+      {/* MENU — chỉ 2 mục */}
       <nav className="p-3 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
-        {/* ═══ SECTION 1: BÁO CÁO ═══ */}
+        <div className="space-y-0.5">
+          <MenuItem
+            icon={FileText}
+            label="Tất cả công văn"
+            isActive={activeTab === 'action-all'}
+            onClick={() => handleClick('action-all')}
+          />
+          <MenuItem
+            icon={Plus}
+            label="Tạo công văn mới"
+            isActive={activeTab === 'action-create'}
+            onClick={() => handleClick('action-create')}
+            accent
+          />
+        </div>
+
+        {/* ═══════════════════════════════════════════════════
+            CÁC MỤC CŨ — COMMENT LẠI, BẬT KHI CẦN
+            ═══════════════════════════════════════════════════ */}
+
+        {/*
+        <div className="border-t border-slate-100" />
+
         <div>
           <div className="px-3 py-1.5 flex items-center gap-2">
             <span className="w-1 h-3 rounded-full" style={{ backgroundColor: '#B71C1C' }} />
@@ -87,7 +112,6 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
               📊 Báo cáo
             </span>
           </div>
-
           <div className="space-y-0.5">
             <MenuItem
               icon={LayoutDashboard}
@@ -116,10 +140,8 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
           </div>
         </div>
 
-        {/* Divider */}
         <div className="border-t border-slate-100" />
 
-        {/* ═══ SECTION 2: THAO TÁC NGHIỆP VỤ ═══ */}
         <div>
           <div className="px-3 py-1.5 flex items-center gap-2">
             <span className="w-1 h-3 rounded-full" style={{ backgroundColor: '#FFD700' }} />
@@ -127,7 +149,6 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
               ⚙️ Thao tác nghiệp vụ
             </span>
           </div>
-
           <div className="space-y-0.5">
             <MenuItem
               icon={FileText}
@@ -166,6 +187,7 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
             />
           </div>
         </div>
+        */}
       </nav>
     </aside>
   );
@@ -206,7 +228,7 @@ const MenuItem: React.FC<MenuItemProps> = ({
         isActive
           ? 'bg-red-50 text-red-900 font-bold border shadow-2xs'
           : 'text-slate-700 hover:bg-slate-50 font-medium border border-transparent'
-        }`}
+      }`}
       style={
         isActive
           ? { borderColor: '#B71C1C', backgroundColor: '#FEF2F2' }
@@ -221,7 +243,7 @@ const MenuItem: React.FC<MenuItemProps> = ({
               : accent
               ? 'bg-amber-50 text-amber-700 border-amber-200'
               : 'bg-slate-50 text-slate-600 border-slate-200 group-hover:bg-white'
-            }`}
+          }`}
           style={isActive ? { backgroundColor: '#B71C1C' } : undefined}
         >
           <Icon className="w-3.5 h-3.5" />

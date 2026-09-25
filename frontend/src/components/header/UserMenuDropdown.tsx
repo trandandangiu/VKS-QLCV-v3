@@ -1,19 +1,14 @@
 // src/components/header/UserMenuDropdown.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';   // 🎯 THÊM LẠI
 import {
   ChevronDown,
   LogOut,
   User as UserIcon,
   KeyRound,
-  Crown,
-  Users,
-  Briefcase,
   Shield,
-  LayoutDashboard,
-  Eye,
-  ChevronRight,
-  Sparkles,
+  Eye,          // 🎯 THÊM — icon cho "Trang công khai"
+  ChevronRight, // 🎯 THÊM — mũi tên chỉ
 } from 'lucide-react';
 import { User } from '../../types/auth';
 
@@ -24,6 +19,9 @@ interface UserMenuDropdownProps {
   onOpenChangePassword: () => void;
 }
 
+// ============================================
+// ROLE LABEL — ngắn gọn, chỉ hiện chức danh
+// ============================================
 const getRoleLabel = (role?: string): string => {
   switch (role) {
     case 'ADMIN': return 'Quản trị viên';
@@ -73,9 +71,8 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
+  const navigate = useNavigate();   // 🎯 THÊM LẠI
 
-  // Close on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -88,7 +85,6 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
     }
   }, [isOpen]);
 
-  // Close on Escape
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setIsOpen(false);
@@ -105,27 +101,11 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
   const roleColor = getRoleColor(currentUser.role);
   const roleBadge = getRoleBadgeClass(currentUser.role);
 
+  // 🎯 Hàm chuyển trang
   const handleNavigate = (path: string) => {
     setIsOpen(false);
     navigate(path);
   };
-
-  // Build quick links theo role
-  const quickLinks: { to: string; icon: React.ElementType; label: string; color: string }[] = [];
-  quickLinks.push({ to: '/', icon: Eye, label: 'Trang công khai', color: 'text-emerald-600' });
-
-  if (currentUser.role === 'VIEN_TRUONG' || currentUser.role === 'ADMIN') {
-    quickLinks.push({ to: '/vt', icon: Crown, label: 'Bàn làm việc Viện trưởng', color: 'text-amber-600' });
-  }
-  if (currentUser.role === 'PHO_VIEN_TRUONG' || currentUser.role === 'ADMIN') {
-    quickLinks.push({ to: '/pvt', icon: Users, label: 'Bàn làm việc Phó Viện trưởng', color: 'text-orange-600' });
-  }
-  if (currentUser.role === 'TRUONG_PHONG' || currentUser.role === 'ADMIN') {
-    quickLinks.push({ to: '/tp', icon: Briefcase, label: 'Bàn làm việc Trưởng phòng', color: 'text-blue-600' });
-  }
-  if (currentUser.role === 'ADMIN') {
-    quickLinks.push({ to: '/admin', icon: LayoutDashboard, label: 'Quản trị hệ thống', color: 'text-red-600' });
-  }
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -134,7 +114,6 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
         onClick={() => setIsOpen(prev => !prev)}
         className="group flex items-center gap-2.5 pl-1.5 pr-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 transition cursor-pointer text-xs shadow-xs"
       >
-        {/* Avatar */}
         <div
           className={`w-8 h-8 rounded-xl bg-gradient-to-br ${roleColor} flex items-center justify-center shadow-md border border-white/30 group-hover:scale-105 transition`}
         >
@@ -143,11 +122,10 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
           </span>
         </div>
 
-        {/* Name + Role */}
         <div className="text-left hidden sm:block min-w-0">
-          <div className="text-xs font-bold text-white truncate max-w-[130px]">
+          {/* <div className="text-xs font-bold text-white truncate max-w-[130px]">
             {currentUser.fullName}
-          </div>
+          </div> */}
           <div className="flex items-center gap-1 mt-0.5">
             <span
               className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${roleBadge}`}
@@ -167,7 +145,7 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-fadeIn font-sans">
+        <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-fadeIn font-sans">
           {/* Header gradient */}
           <div className="relative px-4 py-4 bg-gradient-to-br from-red-900 via-red-800 to-amber-900 text-white">
             <div className="absolute inset-0 opacity-10 pointer-events-none">
@@ -193,12 +171,12 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
                 <div className="text-[10px] font-bold text-amber-200 uppercase tracking-wider">
                   {getRoleLabel(currentUser.role)}
                 </div>
-                <div className="text-sm font-black text-white truncate">
+                {/* <div className="text-sm font-black text-white truncate">
                   {currentUser.fullName}
-                </div>
-                <div className="text-[11px] text-red-100 truncate font-mono mt-0.5">
+                </div> */}
+                {/* <div className="text-[11px] text-red-100 truncate font-mono mt-0.5">
                   {currentUser.email || currentUser.username}
-                </div>
+                </div> */}
               </div>
             </div>
           </div>
@@ -235,27 +213,29 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
           {/* Divider */}
           <div className="border-t border-slate-100" />
 
-          {/* Quick links */}
+          {/* 🎯 SECTION: Điều hướng nhanh — CHỈ CÓ "Trang công khai" */}
           <div className="py-1.5">
-            <div className="px-4 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-              <Sparkles className="w-3 h-3" />
-              Chuyển trang nhanh
+            <div className="px-4 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Điều hướng
             </div>
 
-            {quickLinks.map(link => {
-              const Icon = link.icon;
-              return (
-                <button
-                  key={link.to}
-                  onClick={() => handleNavigate(link.to)}
-                  className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-red-700 transition font-medium group cursor-pointer"
-                >
-                  <Icon className={`w-4 h-4 shrink-0 ${link.color}`} />
-                  <span className="flex-1 text-left">{link.label}</span>
-                  <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-red-500 group-hover:translate-x-0.5 transition" />
-                </button>
-              );
-            })}
+            <button
+              onClick={() => handleNavigate('/')}
+              className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-red-700 transition font-medium group cursor-pointer"
+            >
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0">
+                <Eye className="w-3.5 h-3.5 text-emerald-600" />
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <div className="text-xs font-bold text-slate-800 group-hover:text-red-700 transition">
+                  Trang công khai
+                </div>
+                <div className="text-[10px] text-slate-500 truncate">
+                  Xem danh sách công văn công khai
+                </div>
+              </div>
+              <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-red-500 group-hover:translate-x-0.5 transition shrink-0" />
+            </button>
           </div>
 
           {/* Divider */}
@@ -315,7 +295,6 @@ const MenuButton: React.FC<MenuButtonProps> = ({
         <div className="text-[10px] text-slate-500 truncate">{description}</div>
       )}
     </div>
-    <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-red-500 group-hover:translate-x-0.5 transition shrink-0" />
   </button>
 );
 

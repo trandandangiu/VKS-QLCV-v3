@@ -179,7 +179,7 @@ export const TpSidebar: React.FC<TpSidebarProps> = ({
             />
             <MenuItem
               icon={Search}
-              label="Chờ PVT duyệt"
+              label="Chờ Phó viện trưởng duyệt"
               isActive={activeTab === 'action-waiting-pvt'}
               onClick={() => handleClick('action-waiting-pvt')}
               badge={counts.waitingPvt}

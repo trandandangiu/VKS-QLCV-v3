@@ -85,49 +85,6 @@ export const TpDashboardHome: React.FC<TpDashboardHomeProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Hero header */}
-      <div
-        className="relative overflow-hidden rounded-3xl text-white p-6 sm:p-7 shadow-xl"
-        style={{
-          backgroundImage: 'linear-gradient(135deg, #B71C1C 0%, #7F0E0E 100%)',
-        }}
-      >
-        {/* Pattern */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <svg width="100%" height="100%">
-            <defs>
-              <pattern id="dots-tp" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-                <circle cx="2" cy="2" r="1.5" fill="white" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#dots-tp)" />
-          </svg>
-        </div>
-
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="px-2.5 py-1 bg-white/15 backdrop-blur-sm rounded-full border border-white/25 text-[10px] font-black tracking-widest uppercase text-amber-100 flex items-center gap-1">
-                <Building className="w-3 h-3" />
-                {tpUser?.roomCode || 'TP'}
-              </span>
-              {pvtManager && (
-                <span className="px-2.5 py-1 bg-emerald-500/20 backdrop-blur-sm rounded-full border border-emerald-400/40 text-[10px] font-bold text-emerald-100 flex items-center gap-1">
-                  <User className="w-3 h-3" />
-                  PVT: {pvtManager.fullName}
-                </span>
-              )}
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              Bàn làm việc <span style={{ color: '#FFD700' }}>{tpUser?.fullName || 'Trưởng phòng'}</span>
-            </h1>
-            <p className="text-xs text-red-100 mt-1 font-medium">
-              Xử lý công văn & báo cáo tiến độ lên Phó Viện trưởng
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <KpiCard label="Tổng nhận" value={kpis.total} icon={FileText} color="slate" onClick={() => onNavigateTab('action-all')} />

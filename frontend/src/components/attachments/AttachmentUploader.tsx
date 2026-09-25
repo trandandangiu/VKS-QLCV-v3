@@ -1,72 +1,35 @@
 // src/components/attachments/AttachmentUploader.tsx
-import React, { useState, useRef } from 'react';
-import {
-  Upload,
-  FileText,
-  X,
-  AlertCircle,
-  Loader2,
-  Paperclip,
-  Image as ImageIcon,
-  FileSpreadsheet,
-  File,
-} from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Upload, FileText, X, Plus, Loader2 } from 'lucide-react';
 import { apiClient } from '../../services/apiClient';
 
-const FILE_CATEGORIES = [
-  { value: 'ORIGINAL', label: 'Bản gốc', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { value: 'DRAFT', label: 'Dự thảo', color: 'bg-amber-100 text-amber-800 border-amber-200' },
-  { value: 'REPORT', label: 'Báo cáo', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  { value: 'OTHER', label: 'Khác', color: 'bg-slate-100 text-slate-700 border-slate-200' },
-];
-
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-
-const getFileIcon = (fileName: string) => {
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  if (['pdf'].includes(ext || '')) return FileText;
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) return ImageIcon;
-  if (['xls', 'xlsx', 'csv'].includes(ext || '')) return FileSpreadsheet;
-  return File;
-};
-
-const getFileColor = (fileName: string) => {
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  if (ext === 'pdf') return 'bg-red-100 text-red-700 border-red-200';
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) return 'bg-purple-100 text-purple-700 border-purple-200';
-  if (['xls', 'xlsx', 'csv'].includes(ext || '')) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-  return 'bg-slate-100 text-slate-700 border-slate-200';
-};
-
-const formatSize = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
 export interface AttachmentItem {
-  id: string;
+  id?: string;
+  file?: File;              // File chưa upload (pending)
   fileName: string;
   fileSize: number;
   fileType: string;
-  fileCategory: string;
-  url?: string;
+  fileCategory?: string;
+  description?: string;
   uploading?: boolean;
   error?: string;
-  file?: File;           // ← THÊM: giữ File object để upload sau
 }
 
 interface AttachmentUploaderProps {
-  dispatchId?: string;                 // Nếu có → upload ngay lên server
-  attachments: AttachmentItem[];        // State từ parent
+  dispatchId?: string;                       // Nếu có → upload ngay lên server
+  attachments: AttachmentItem[];
   onChange: (items: AttachmentItem[]) => void;
-  category?: string;                    // Loại mặc định
-  showCategorySelect?: boolean;         // Hiện dropdown chọn loại
+  category?: string;                         // "ORIGINAL" | "DRAFT" | "REPORT" | ...
+  showCategorySelect?: boolean;
   label?: string;
   hint?: string;
   required?: boolean;
-  disabled?: boolean;
+  maxSizeMB?: number;                        // default 20
+  accept?: string;                           // default pdf, word, excel, ảnh
 }
+
+const DEFAULT_ACCEPT =
+  '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv';
 
 export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
   dispatchId,
@@ -75,210 +38,287 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
   category = 'ORIGINAL',
   showCategorySelect = false,
   label = 'File đính kèm',
-  hint = 'Hỗ trợ PDF, Word, Excel, ảnh. Tối đa 20MB/file',
+  hint = '',
   required = false,
-  disabled = false,
+  maxSizeMB = 20,
+  accept = DEFAULT_ACCEPT,
 }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(category);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSelectFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const hasFiles = attachments.length > 0;
 
-    const newItems: AttachmentItem[] = [];
+  // ============================================
+  // FORMAT SIZE
+  // ============================================
+  const formatSize = (bytes: number) => {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  };
 
-    for (const file of Array.from(files)) {
-      if (file.size > MAX_FILE_SIZE) {
-        newItems.push({
-          id: `tmp-${Date.now()}-${Math.random()}`,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-          fileCategory: selectedCategory,
-          error: `File vượt quá ${formatSize(MAX_FILE_SIZE)}`,
-        });
-        continue;
-      }
-      newItems.push({
-        id: `tmp-${Date.now()}-${Math.random()}`,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        fileCategory: selectedCategory,
-        file,          // ← THÊM: giữ File object
-      });
+  // ============================================
+  // HANDLE FILES
+  // ============================================
+  const handleFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files);
+    const maxBytes = maxSizeMB * 1024 * 1024;
 
-      // Nếu có dispatchId → upload ngay
-      if (dispatchId) {
-        const itemId = newItems[newItems.length - 1].id;
-        // Cập nhật trạng thái uploading
-        onChange([...attachments, ...newItems]);
-        newItems[newItems.length - 1].uploading = true;
+    // Tạo item tạm
+    const newItems: AttachmentItem[] = arr.map(f => ({
+      file: f,
+      fileName: f.name,
+      fileSize: f.size,
+      fileType: f.type || 'application/octet-stream',
+      fileCategory: selectedCategory,
+      uploading: !!dispatchId,   // chỉ uploading nếu upload ngay
+      error: f.size > maxBytes ? `Vượt quá ${maxSizeMB}MB` : undefined,
+    }));
+
+    // Nếu có dispatchId → upload ngay
+    if (dispatchId) {
+      // Hiển thị trạng thái uploading trước
+      const withPlaceholders = [...attachments, ...newItems];
+      onChange(withPlaceholders);
+
+      // Upload tuần tự
+      for (let i = 0; i < newItems.length; i++) {
+        const item = newItems[i];
+        if (item.error) continue;
 
         try {
           const res = await apiClient.uploadAttachment(
             dispatchId,
-            file,
-            selectedCategory
+            item.file!,
+            selectedCategory,
+            item.description
           );
-          if (res.success && res.attachment) {
-            // Update item với data thật từ server
-            const updated = [...attachments, ...newItems].map(it =>
-              it.id === itemId
-                ? { ...res.attachment, uploading: false }
-                : it
+          if (res?.success && res.attachment) {
+            // Cập nhật lại item với id từ server
+            onChange(
+              attachments.concat(
+                newItems.map((it, idx) =>
+                  idx === i
+                    ? {
+                        id: res.attachment.id,
+                        fileName: res.attachment.fileName,
+                        fileSize: res.attachment.fileSize,
+                        fileType: res.attachment.fileType,
+                        fileCategory: res.attachment.fileCategory,
+                        description: res.attachment.description,
+                        uploading: false,
+                      }
+                    : it
+                )
+              )
             );
-            onChange(updated);
           } else {
-            const updated = [...attachments, ...newItems].map(it =>
-              it.id === itemId
-                ? { ...it, uploading: false, error: res.message || 'Upload lỗi' }
-                : it
+            onChange(
+              attachments.concat(
+                newItems.map((it, idx) =>
+                  idx === i
+                    ? { ...it, uploading: false, error: res?.message || 'Upload lỗi' }
+                    : it
+                )
+              )
             );
-            onChange(updated);
           }
         } catch (err: any) {
-          const updated = [...attachments, ...newItems].map(it =>
-            it.id === itemId
-              ? { ...it, uploading: false, error: err.message || 'Upload lỗi' }
-              : it
+          onChange(
+            attachments.concat(
+              newItems.map((it, idx) =>
+                idx === i
+                  ? { ...it, uploading: false, error: err?.message || 'Upload lỗi' }
+                  : it
+              )
+            )
           );
-          onChange(updated);
         }
       }
-    }
-
-    // Nếu không upload ngay → chỉ thêm vào state
-    if (!dispatchId) {
+    } else {
+      // Không có dispatchId → chỉ lưu vào state, upload sau
       onChange([...attachments, ...newItems]);
     }
   };
 
-  const handleRemove = async (item: AttachmentItem) => {
-    // Nếu là file đã upload → gọi API xóa
-    if (!item.id.startsWith('tmp-') && dispatchId) {
-      const ok = await apiClient.deleteAttachment(item.id);
-      if (!ok) {
-        alert('Không thể xóa file');
-        return;
-      }
+  // ============================================
+  // DRAG & DROP
+  // ============================================
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  const handleDragLeave = () => setIsDragging(false);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files?.length) {
+      handleFiles(e.dataTransfer.files);
     }
-    onChange(attachments.filter(it => it.id !== item.id));
   };
 
-  return (
-    <div className="space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Paperclip className="w-3.5 h-3.5 text-slate-500" />
-          <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-            {label} {required && <span className="text-rose-500">*</span>}
-          </label>
-        </div>
+  // ============================================
+  // REMOVE
+  // ============================================
+  const handleRemove = async (idx: number) => {
+    const item = attachments[idx];
+    // Nếu đã có id trên server → xoá mềm
+    if (item.id) {
+      try {
+        await apiClient.deleteAttachment(item.id);
+      } catch (err) {
+        console.error('Lỗi xoá file:', err);
+      }
+    }
+    onChange(attachments.filter((_, i) => i !== idx));
+  };
 
-        {showCategorySelect && (
+  // ============================================
+  // RENDER
+  // ============================================
+  return (
+    <div className="space-y-2">
+      {/* Header: label + category select */}
+      <div className="flex items-center justify-between">
+        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+          {label} {required && <span className="text-rose-500">*</span>}
+        </label>
+
+        {showCategorySelect && !hasFiles && (
           <select
             value={selectedCategory}
             onChange={e => setSelectedCategory(e.target.value)}
-            className="px-2.5 py-1 text-[11px] font-bold border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+            // className="px-2 py-1 text-[11px] border border-slate-300 rounded-lg bg-white font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-red-500/20"
           >
-            {FILE_CATEGORIES.map(c => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
+            {/* <option value="ORIGINAL">Bản gốc</option>
+            <option value="DRAFT">Bản nháp</option>
+            <option value="REPORT">Báo cáo</option>
+            <option value="APPROVAL">Phê duyệt</option>
+            <option value="REJECTION">Từ chối</option>
+            <option value="OTHER">Khác</option> */}
           </select>
         )}
       </div>
 
-      {/* Upload zone */}
-      <div
-        onClick={() => !disabled && fileInputRef.current?.click()}
-        onDragOver={e => {
-          e.preventDefault();
-          if (!disabled) e.currentTarget.classList.add('border-red-500', 'bg-red-50');
-        }}
-        onDragLeave={e => {
-          e.currentTarget.classList.remove('border-red-500', 'bg-red-50');
-        }}
-        onDrop={e => {
-          e.preventDefault();
-          e.currentTarget.classList.remove('border-red-500', 'bg-red-50');
-          if (!disabled) handleSelectFiles(e.dataTransfer.files);
-        }}
-        className={`border-2 border-dashed rounded-xl p-5 text-center transition cursor-pointer ${disabled
-          ? 'opacity-50 cursor-not-allowed border-slate-200 bg-slate-50'
-          : 'border-slate-300 bg-slate-50 hover:border-red-500 hover:bg-red-50/30'
+      {/* ============================================
+          STATE 1: CHƯA CÓ FILE → HIỆN FORM UPLOAD
+          ============================================ */}
+      {!hasFiles && (
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`w-full border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition ${
+            isDragging
+              ? 'border-red-500 bg-red-50'
+              : 'border-slate-300 bg-slate-50 hover:border-red-400 hover:bg-red-50/30'
           }`}
-      >
-        <Upload className="w-7 h-7 text-slate-400 mx-auto mb-2" />
-        <div className="text-xs font-bold text-slate-700 mb-0.5">
-          Kéo thả file hoặc bấm để chọn
+        >
+          <Upload className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+          <p className="text-xs font-bold text-slate-700">
+            
+          </p>
+          <p className="text-[11px] text-slate-500 mt-1">{hint}</p>
+
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept={accept}
+            className="hidden"
+            onChange={e => {
+              if (e.target.files?.length) {
+                handleFiles(e.target.files);
+                e.target.value = ''; // reset để chọn lại cùng file
+              }
+            }}
+          />
         </div>
-        <div className="text-[10px] text-slate-500">{hint}</div>
+      )}
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
-          onChange={e => handleSelectFiles(e.target.files)}
-          className="hidden"
-          disabled={disabled}
-        />
-      </div>
-
-      {/* File list */}
-      {attachments.length > 0 && (
+      {/* ============================================
+          STATE 2: ĐÃ CÓ FILE → CHỈ HIỆN DANH SÁCH FILE
+          ============================================ */}
+      {hasFiles && (
         <div className="space-y-1.5">
-          {attachments.map(item => {
-            const Icon = getFileIcon(item.fileName);
-            const color = getFileColor(item.fileName);
-
-            return (
-              <div
-                key={item.id}
-                className={`flex items-center gap-2.5 p-2 rounded-lg border ${item.error ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'
-                  }`}
-              >
-                <div className={`w-8 h-8 rounded-lg ${color} border flex items-center justify-center shrink-0`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold text-slate-800 truncate">
-                    {item.fileName}
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                    <span>{formatSize(item.fileSize)}</span>
-                    {item.uploading && (
-                      <span className="flex items-center gap-1 text-blue-600">
-                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                        Đang upload...
-                      </span>
-                    )}
-                    {item.error && (
-                      <span className="flex items-center gap-1 text-rose-600 font-bold">
-                        <AlertCircle className="w-2.5 h-2.5" />
-                        {item.error}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleRemove(item)}
-                  disabled={item.uploading}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Xóa file"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+          {attachments.map((item, idx) => (
+            <div
+              key={item.id || `pending-${idx}`}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border ${
+                item.error
+                  ? 'bg-rose-50 border-rose-200'
+                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100/70'
+              } transition`}
+            >
+              {/* Icon */}
+              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0">
+                {item.uploading ? (
+                  <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                ) : (
+                  <FileText className="w-4 h-4 text-slate-500" />
+                )}
               </div>
-            );
-          })}
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-slate-900 truncate">
+                  {item.fileName}
+                </div>
+                <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                  <span>{formatSize(item.fileSize)}</span>
+                  {item.fileCategory && (
+                    <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px] font-bold uppercase">
+                      {item.fileCategory}
+                    </span>
+                  )}
+                  {item.uploading && (
+                    <span className="text-blue-600 font-medium">Đang tải lên...</span>
+                  )}
+                  {item.error && (
+                    <span className="text-rose-600 font-medium">{item.error}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Remove */}
+              <button
+                type="button"
+                onClick={() => handleRemove(idx)}
+                disabled={item.uploading}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Xoá file"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+
+          {/* Nút "Thêm file" — mở lại khung chọn */}
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 border border-dashed border-slate-300 hover:border-red-400 rounded-xl transition cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Thêm file khác
+          </button>
+
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept={accept}
+            className="hidden"
+            onChange={e => {
+              if (e.target.files?.length) {
+                handleFiles(e.target.files);
+                e.target.value = '';
+              }
+            }}
+          />
         </div>
       )}
     </div>

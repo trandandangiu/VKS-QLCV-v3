@@ -85,11 +85,11 @@ export const TpHeroHeader: React.FC<TpHeroHeaderProps> = ({
                                 </span>
                             )}
                         </div>
-
+{/* 
                         <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
                             {getGreeting()},{' '}
                             <span style={{ color: '#FFD700' }}>{userName}</span>
-                        </h1>
+                        </h1> */}
 
                         <div className="flex items-center gap-4 mt-2 text-xs text-red-100 flex-wrap">
                             <div className="flex items-center gap-1.5">

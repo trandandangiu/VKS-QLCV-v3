@@ -123,7 +123,7 @@ router.get(
  * /api/dispatches:
  * tags: [Dispatches]
  *   post:
- *     summary: Tạo công văn mới
+ *     summary: mới
  *     requestBody:
  *       content:
  *         application/json:

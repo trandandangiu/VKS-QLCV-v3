@@ -65,7 +65,7 @@ export const useDispatches = (options: { includeDeleted?: boolean } = {}) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await apiClient.getDispatches({ 
+      const data = await apiClient.getDispatches({
         limit: 500,
         includeDeleted: options.includeDeleted === true,
       });
@@ -221,36 +221,118 @@ export const useDispatches = (options: { includeDeleted?: boolean } = {}) => {
   // ============================================
   // CRUD — GỌI API
   // ============================================
-  const addDispatch = useCallback(async (dispatchData: Partial<Dispatch>): Promise<boolean> => {
+  /**
+   * addDispatch — tạo mới công văn
+   * Trả về true nếu thành công, false nếu thất bại.
+   * Nếu có file đính kèm (`__attachments`), sẽ upload sau khi tạo.
+   */
+// frontend/src/hooks/useDispatches.ts
+
+const addDispatch = useCallback(
+  async (
+    dispatchData: Partial<Dispatch> & {
+      __attachments?: any[];
+      __assignPvt?: { pvtId: string; pvtName: string; roomCode: string; isPrimary?: boolean };
+      __assignTp?: { tpId: string; tpName: string; roomCode: string; isPrimary?: boolean };
+    }
+  ): Promise<boolean> => {
     try {
-      const created = await apiClient.createDispatch(dispatchData);
-      if (created) {
-        setDispatches(prev => [created, ...prev]);
-        return true;
+      // 1. Tách phần mở rộng
+      const { __attachments, __assignPvt, __assignTp, ...payload } = dispatchData;
+
+      // 2. Tạo dispatch
+      const created = await apiClient.createDispatch(payload as Partial<Dispatch>);
+      if (!created) {
+        console.error('Tạo công văn thất bại');
+        return false;
       }
-      return false;
+
+      // 3. Phân công PVT (nếu có)
+      if (__assignPvt) {
+        try {
+          await apiClient.assignToPvts(created.id, {
+            pvts: [{
+              pvtId: __assignPvt.pvtId,
+              pvtName: __assignPvt.pvtName,
+              roomCode: __assignPvt.roomCode,
+              isPrimary: __assignPvt.isPrimary ?? true,
+            }],
+          });
+        } catch (err) {
+          console.error('Lỗi phân công PVT:', err);
+        }
+      }
+
+      // 4. Phân công TP (nếu có)
+      if (__assignTp) {
+        try {
+          await apiClient.assignToTps(created.id, {
+            tps: [{
+              tpId: __assignTp.tpId,
+              tpName: __assignTp.tpName,
+              roomCode: __assignTp.roomCode,
+              isPrimary: __assignTp.isPrimary ?? true,
+            }],
+          });
+        } catch (err) {
+          console.error('Lỗi phân công TP:', err);
+        }
+      }
+
+      // 5. Upload attachments (nếu có)
+      if (Array.isArray(__attachments) && __attachments.length > 0) {
+        for (const item of __attachments) {
+          if (item?.file instanceof File) {
+            try {
+              await apiClient.uploadAttachment(
+                created.id,
+                item.file,
+                item.fileCategory || 'ORIGINAL',
+                item.description
+              );
+            } catch (uploadErr) {
+              console.error('Lỗi upload file đính kèm:', uploadErr);
+            }
+          }
+        }
+      }
+
+      // 6. Cập nhật state cục bộ
+      setDispatches(prev => [created, ...prev]);
+      return true;
     } catch (e) {
       console.error('Lỗi thêm công văn:', e);
       return false;
     }
-  }, []);
+  },
+  []
+);
 
-  const updateDispatch = useCallback(async (id: string, updates: Partial<Dispatch>): Promise<boolean> => {
-    try {
-      const updated = await apiClient.updateDispatch(id, updates);
-      if (updated) {
-        setDispatches(prev =>
-          prev.map(d => (d.id === id ? { ...d, ...updated } : d))
-        );
-        return true;
+  /**
+   * updateDispatch — cập nhật công văn
+   */
+  const updateDispatch = useCallback(
+    async (id: string, updates: Partial<Dispatch>): Promise<boolean> => {
+      try {
+        const updated = await apiClient.updateDispatch(id, updates);
+        if (updated) {
+          setDispatches(prev =>
+            prev.map(d => (d.id === id ? { ...d, ...updated } : d))
+          );
+          return true;
+        }
+        return false;
+      } catch (e) {
+        console.error('Lỗi cập nhật công văn:', e);
+        return false;
       }
-      return false;
-    } catch (e) {
-      console.error('Lỗi cập nhật công văn:', e);
-      return false;
-    }
-  }, []);
+    },
+    []
+  );
 
+  /**
+   * deleteDispatch — xoá mềm công văn
+   */
   const deleteDispatch = useCallback(async (id: string): Promise<boolean> => {
     try {
       const success = await apiClient.deleteDispatch(id);
@@ -266,24 +348,33 @@ export const useDispatches = (options: { includeDeleted?: boolean } = {}) => {
     }
   }, []);
 
-  const bulkDeleteDispatches = useCallback(async (ids: string[]): Promise<boolean> => {
-    try {
-      let allSuccess = true;
-      for (const id of ids) {
-        const success = await apiClient.deleteDispatch(id);
-        if (!success) allSuccess = false;
+  /**
+   * bulkDeleteDispatches — xoá nhiều công văn
+   */
+  const bulkDeleteDispatches = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      try {
+        let allSuccess = true;
+        for (const id of ids) {
+          const success = await apiClient.deleteDispatch(id);
+          if (!success) allSuccess = false;
+        }
+        if (allSuccess) {
+          setDispatches(prev => prev.filter(d => !ids.includes(d.id)));
+          setSelectedIds([]);
+        }
+        return allSuccess;
+      } catch (e) {
+        console.error('Lỗi xóa nhiều công văn:', e);
+        return false;
       }
-      if (allSuccess) {
-        setDispatches(prev => prev.filter(d => !ids.includes(d.id)));
-        setSelectedIds([]);
-      }
-      return allSuccess;
-    } catch (e) {
-      console.error('Lỗi xóa nhiều công văn:', e);
-      return false;
-    }
-  }, []);
+    },
+    []
+  );
 
+  /**
+   * clearAllDispatches — xoá tất cả
+   */
   const clearAllDispatches = useCallback(async (): Promise<boolean> => {
     try {
       const ids = dispatches.map(d => d.id);
@@ -294,46 +385,53 @@ export const useDispatches = (options: { includeDeleted?: boolean } = {}) => {
     }
   }, [dispatches, bulkDeleteDispatches]);
 
+  /**
+   * restoreSampleDispatches — không còn sample, chỉ reload
+   */
   const restoreSampleDispatches = useCallback(async (): Promise<void> => {
-    // Không còn sample — chỉ reload
     await loadDispatches();
   }, [loadDispatches]);
 
-  const bulkUpdateStatus = useCallback(async (ids: string[], status: DispatchStatus): Promise<void> => {
-    try {
-      for (const id of ids) {
-        await apiClient.updateDispatch(id, { trangThai: status } as any);
+  /**
+   * bulkUpdateStatus — cập nhật trạng thái nhiều công văn
+   */
+  const bulkUpdateStatus = useCallback(
+    async (ids: string[], status: DispatchStatus): Promise<void> => {
+      try {
+        for (const id of ids) {
+          await apiClient.updateDispatch(id, { trangThai: status } as any);
+        }
+        await loadDispatches();
+        setSelectedIds([]);
+      } catch (e) {
+        console.error('Lỗi cập nhật trạng thái:', e);
       }
-      await loadDispatches();
-      setSelectedIds([]);
-    } catch (e) {
-      console.error('Lỗi cập nhật trạng thái:', e);
-    }
-  }, [loadDispatches]);
+    },
+    [loadDispatches]
+  );
 
   // ============================================
   // COLUMNS
   // ============================================
-  const addCustomColumn = useCallback((newCol: {
-    label: string;
-    type: string;
-    description?: string;
-  }) => {
-    const id = `custom_${Date.now()}`;
-    setColumns(prev => [
-      ...prev,
-      {
-        id,
-        label: newCol.label,
-        type: newCol.type as any,
-        description: newCol.description,
-        visible: true,
-        isCustom: true,
-        required: false,
-        width: '150px',
-      },
-    ]);
-  }, []);
+  const addCustomColumn = useCallback(
+    (newCol: { label: string; type: string; description?: string }) => {
+      const id = `custom_${Date.now()}`;
+      setColumns(prev => [
+        ...prev,
+        {
+          id,
+          label: newCol.label,
+          type: newCol.type as any,
+          description: newCol.description,
+          visible: true,
+          isCustom: true,
+          required: false,
+          width: '150px',
+        },
+      ]);
+    },
+    []
+  );
 
   const toggleColumnVisibility = useCallback((colId: string) => {
     setColumns(prev =>
@@ -352,22 +450,24 @@ export const useDispatches = (options: { includeDeleted?: boolean } = {}) => {
   // ============================================
   // EXCEL IMPORT
   // ============================================
-  const commitExcelImport = useCallback(async (
-    analysis: ExcelImportAnalysis,
-    strategy: ReconciliationStrategy,
-    itemActions?: any
-  ) => {
-    try {
-      // Tạo từng dispatch mới từ analysis
-      const items = analysis.newItems || [];
-      for (const item of items) {
-        await apiClient.createDispatch(item);
+  const commitExcelImport = useCallback(
+    async (
+      analysis: ExcelImportAnalysis,
+      strategy: ReconciliationStrategy,
+      itemActions?: any
+    ) => {
+      try {
+        const items = analysis.newItems || [];
+        for (const item of items) {
+          await apiClient.createDispatch(item);
+        }
+        await loadDispatches();
+      } catch (e) {
+        console.error('Lỗi import Excel:', e);
       }
-      await loadDispatches();
-    } catch (e) {
-      console.error('Lỗi import Excel:', e);
-    }
-  }, [loadDispatches]);
+    },
+    [loadDispatches]
+  );
 
   // ============================================
   // SORT
@@ -375,7 +475,8 @@ export const useDispatches = (options: { includeDeleted?: boolean } = {}) => {
   const handleSort = useCallback((columnId: string) => {
     setSortConfig(prev => ({
       key: columnId,
-      direction: prev.key === columnId && prev.direction === 'asc' ? 'desc' : 'asc',
+      direction:
+        prev.key === columnId && prev.direction === 'asc' ? 'desc' : 'asc',
     }));
   }, []);
 

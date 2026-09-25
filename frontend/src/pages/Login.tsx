@@ -8,11 +8,8 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  ShieldCheck,
   KeyRound,
-  QrCode
 } from 'lucide-react';
-import { GoogleAuthModal } from '../components/GoogleAuthModal';
 import { apiClient } from '../services/apiClient';
 
 export const Login: React.FC = () => {
@@ -22,30 +19,19 @@ export const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [totpInput, setTotpInput] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   const handleFormLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Tạm bỏ verify TOTP server-side
-    if (!totpInput.trim() || totpInput.length !== 6) {
-      setError('Vui lòng nhập mã xác thực 6 số');
-      return;
-    }
-
     setIsLoading(true);
     try {
       const res = await login(username, password);
       if (res.success) {
-        // Lấy role từ user vừa login
         const currentUser = apiClient.getCurrentUser();
         const userRole = currentUser?.roles?.[0]?.code || currentUser?.role;
-        
         redirectByRole(userRole, username);
       } else {
         setError(res.message || 'Tên đăng nhập hoặc mật khẩu không đúng');
@@ -55,6 +41,9 @@ export const Login: React.FC = () => {
     }
   };
 
+  // 🎯 PVT + TP → public home (/)
+  //    ADMIN → /admin
+  //    VT → /vt
   const redirectByRole = (role?: string, fallbackUsername?: string) => {
     switch (role) {
       case 'ADMIN':
@@ -64,12 +53,10 @@ export const Login: React.FC = () => {
         navigate('/vt');
         break;
       case 'PHO_VIEN_TRUONG':
-        // ✅ LUÔN dùng /pvt để match route /pvt/*
-        navigate('/pvt');
+        navigate('/');          // ← PVT → public home
         break;
       case 'TRUONG_PHONG':
-        // ✅ LUÔN dùng /tp để match route /tp/*
-        navigate('/tp');
+        navigate('/');          // ← TP → public home
         break;
       default:
         navigate('/');
@@ -82,7 +69,7 @@ export const Login: React.FC = () => {
         className="flex-1 w-full min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-12 relative overflow-hidden bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage: 'url(/background.jpg)',
-          backgroundColor: '#9A1010'
+          backgroundColor: '#9A1010',
         }}
       >
         <div className="absolute inset-0 bg-gradient-to-t from-red-950/45 via-black/15 to-black/35 pointer-events-none" />
@@ -99,20 +86,17 @@ export const Login: React.FC = () => {
               />
             </div>
 
-            {/* Agency Name (h3 placed above h2, now larger, elegant official typography) */}
-            <h3 className="text-xl sm:text-2xl lg:text-3xl font-extrabold uppercase tracking-[0.08em] sm:tracking-[0.14em] text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-200 to-amber-400 drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)] mb-3 leading-snug max-w-xl text-center">
+            <h3 className="text-xs sm:text-sm lg:text-base font-semibold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-amber-100 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] mb-3 leading-relaxed max-w-xl text-center">
               VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
             </h3>
 
-            {/* Subtle decorative divider */}
             <div className="flex items-center justify-center gap-3 w-48 mb-3">
               <span className="h-px w-full bg-gradient-to-r from-transparent via-amber-300/80 to-transparent" />
               <span className="w-1.5 h-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,0.8)]" />
               <span className="h-px w-full bg-gradient-to-r from-transparent via-amber-300/80 to-transparent" />
             </div>
 
-            {/* System Title (h2, smaller than h3, crisp, modern and prestigious) */}
-            <h2 className="text-sm sm:text-base lg:text-lg font-semibold uppercase tracking-[0.2em] sm:tracking-[0.25em] text-amber-100 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] leading-relaxed">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold uppercase tracking-[0.08em] sm:tracking-[0.14em] text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-200 to-amber-400 drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)] leading-snug">
               Hệ thống báo cáo công việc
             </h2>
           </div>
@@ -190,48 +174,11 @@ export const Login: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                      <span>Mã xác thực</span>
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-7">
-                      <input
-                        type="text"
-                        maxLength={6}
-                        required
-                        value={totpInput}
-                        onChange={e => setTotpInput(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Mã 6 chữ số"
-                        className="w-full px-3 py-2.5 text-sm text-center tracking-wider font-sans font-bold rounded-lg border border-slate-300 bg-white focus:border-red-600 focus:ring-2 focus:ring-red-100 focus:outline-none transition placeholder:font-normal placeholder:tracking-normal"
-                      />
-                    </div>
-
-                    <div className="col-span-5">
-                      <button
-                        type="button"
-                        onClick={() => setIsQrModalOpen(true)}
-                        className="w-full py-2.5 px-2 bg-gradient-to-r from-red-600 to-red-800 hover:from-red-700 hover:to-red-900 text-white rounded-lg font-semibold text-xs transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                        title="Quét mã QR bằng Google Authenticator"
-                      >
-                        <QrCode className="w-4 h-4 shrink-0 text-amber-300" />
-                        <span className="truncate">Quét mã QR</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
                 <button
                   type="submit"
                   disabled={isLoading}
                   className="w-full py-2.5 px-4 text-sm font-bold text-white rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 uppercase tracking-wide disabled:opacity-75 mt-3"
-                  style={{
-                    backgroundColor: '#B71C1C'
-                  }}
+                  style={{ backgroundColor: '#B71C1C' }}
                 >
                   <KeyRound className="w-4 h-4" />
                   <span>{isLoading ? 'Đang xác thực...' : 'ĐĂNG NHẬP'}</span>
@@ -241,12 +188,6 @@ export const Login: React.FC = () => {
           </div>
         </div>
       </main>
-
-      <GoogleAuthModal
-        isOpen={isQrModalOpen}
-        onClose={() => setIsQrModalOpen(false)}
-        onSelectCode={(code) => setTotpInput(code)}
-      />
     </div>
   );
 };

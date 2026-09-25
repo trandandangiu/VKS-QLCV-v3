@@ -18,9 +18,8 @@ export const usersService = {
     const skip = (page - 1) * limit;
 
     const where = {
-      deletedAt: null,  // Không lấy user đã xóa mềm
+      deletedAt: null,  // ← ĐÃ BỊ XÓA
     };
-
     // 1.1. Filter theo permission
     const perms = currentUser.permissions || [];
 
@@ -116,12 +115,12 @@ export const usersService = {
       prisma.user.count({ where }),
     ]);
 
- 
+
     // 1.4. Format — thêm `role` string từ roles[0]
     const formatted = users.map(u => {
       const roles = u.userRoles.map(ur => ur.role);
       const primaryRole = roles[0]?.code || 'TRUONG_PHONG';
-      
+
       return {
         ...u,
         roles,
@@ -172,7 +171,7 @@ export const usersService = {
 
     // 2.1. Check quyền xem
     const perms = currentUser.permissions || [];
-    
+
     if (!perms.includes('user:view:all')) {
       if (perms.includes('user:view:department')) {
         // PVT: chỉ xem user trong phòng phụ trách
@@ -182,10 +181,10 @@ export const usersService = {
         });
         const deptIds = managedDepts.map(d => d.id);
 
-        const canView = 
+        const canView =
           user.id === currentUser.id ||
           deptIds.includes(user.departmentId);
-        
+
         if (!canView) {
           throw { status: 403, message: 'Không có quyền xem user này' };
         }
@@ -362,7 +361,7 @@ export const usersService = {
 
     // 4.2. Check quyền sửa
     const perms = currentUser.permissions || [];
-    
+
     if (!perms.includes('user:update:all')) {
       if (perms.includes('user:update:own')) {
         if (userId !== currentUser.id) {
@@ -413,11 +412,14 @@ export const usersService = {
   },
 
   // ============================================
-  // 5. XÓA MỀM USER
+  // 5. XÓA USER (SOFT DELETE + GIẢI PHÓNG UNIQUE)
   // ============================================
   async deleteUser(userId, currentUser) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        userRoles: { include: { role: true } },
+      },
     });
 
     if (!user || user.deletedAt) {
@@ -432,13 +434,58 @@ export const usersService = {
       throw { status: 400, message: 'Không thể xóa tài khoản Admin' };
     }
 
-    // Xóa mềm
+    // Không xóa admin cuối cùng
+    const isTargetAdmin = user.userRoles.some(ur => ur.role.code === 'ADMIN');
+    if (isTargetAdmin) {
+      const adminCount = await prisma.user.count({
+        where: {
+          deletedAt: null,
+          userRoles: { some: { role: { code: 'ADMIN' } } },
+        },
+      });
+      if (adminCount <= 1) {
+        throw {
+          status: 400,
+          message: 'Không thể xóa quản trị viên cuối cùng của hệ thống',
+        };
+      }
+    }
+
+    // 🔑 KEY: Tạo suffix để "nhả" unique constraint
+    //    Dùng timestamp để không bao giờ trùng, kể cả xóa cùng user 2 lần
+    const stamp = Date.now();
+    const deletedUsername = `${user.username}__deleted_${stamp}`;
+    const deletedEmail = user.email
+      ? `${user.email}__deleted_${stamp}`
+      : null;
+
+    // Cắt bớt nếu vượt quá giới hạn cột (VD username max 50 ký tự)
+    // Nếu schema của bạn không giới hạn → có thể bỏ đoạn này
+    const MAX_USERNAME_LEN = 100;
+    const MAX_EMAIL_LEN = 200;
+    const finalUsername =
+      deletedUsername.length > MAX_USERNAME_LEN
+        ? deletedUsername.slice(0, MAX_USERNAME_LEN - 20) + `__d_${stamp}`
+        : deletedUsername;
+    const finalEmail =
+      deletedEmail && deletedEmail.length > MAX_EMAIL_LEN
+        ? deletedEmail.slice(0, MAX_EMAIL_LEN - 20) + `__d_${stamp}`
+        : deletedEmail;
+
+    // Soft delete + đổi username/email để nhả unique
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
         data: {
           active: false,
           deletedAt: new Date(),
+
+          // ⭐ QUAN TRỌNG: đổi để giải phóng unique
+          username: finalUsername,
+          email: finalEmail,
+
+          // Bonus: đổi fullName để hiển thị rõ trong log (nếu muốn)
+          // fullName: `${user.fullName} (đã xóa ${new Date().toLocaleDateString('vi-VN')})`,
         },
       });
 
@@ -449,14 +496,25 @@ export const usersService = {
           action: 'DELETE_USER',
           entityType: 'user',
           entityId: userId,
-          oldValue: { username: user.username, fullName: user.fullName },
+          oldValue: {
+            username: user.username,
+            email: user.email,
+            fullName: user.fullName,
+          },
+          newValue: {
+            username: finalUsername,
+            email: finalEmail,
+            deletedAt: new Date().toISOString(),
+          },
         },
       });
     });
 
     return {
       success: true,
-      message: `Đã vô hiệu hóa tài khoản "${user.fullName}"`,
+      message: `Đã xóa tài khoản "${user.fullName}". ` +
+        `Username "${user.username}" và email đã được giải phóng, ` +
+        `có thể tạo lại.`,
     };
   },
 
@@ -609,7 +667,7 @@ export const usersService = {
 
     return {
       success: true,
-      message: newActive 
+      message: newActive
         ? `Đã mở khóa tài khoản "${user.fullName}"`
         : `Đã khóa tài khoản "${user.fullName}"`,
       active: newActive,

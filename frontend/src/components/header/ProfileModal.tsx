@@ -228,7 +228,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             />
 
             {/* Role — read only */}
-            <InfoRow
+            {/* <InfoRow
               icon={Shield}
               label="Vai trò hệ thống"
               value={`${user.role || '—'}${user.roomCode ? ` • ${user.roomCode}` : ''}`}
@@ -260,7 +260,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             />
 
             {/* Position — editable */}
-            <EditableRow
+            {/* <EditableRow
               icon={Briefcase}
               label="Chức danh"
               value={user.position || 'Chưa cập nhật'}
@@ -268,7 +268,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               onChange={v => setFormData({ ...formData, position: v })}
               isEditing={isEditing}
               placeholder="Kiểm sát viên"
-            />
+            /> */}
 
             {/* Department — read only */}
             <InfoRow
