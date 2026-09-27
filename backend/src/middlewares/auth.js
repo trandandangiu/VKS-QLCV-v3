@@ -8,16 +8,22 @@ export async function authenticate(req, res, next) {
   let token = null;
 
   // 1. Thử đọc từ header Authorization
+  // 1. Header Authorization
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.slice(7).trim();
   }
 
-  // 2. Nếu không có header → thử cookie
+  // 2. ⭐ Query param (cho SSE EventSource)
+  if (!token && req.query.token) {
+    token = String(req.query.token);
+  }
+
+  // 3. Cookie
   if (!token) {
     token = req.cookies?.accessToken
-         || req.cookies?.token
-         || req.cookies?.jwt;
+      || req.cookies?.token
+      || req.cookies?.jwt;
   }
 
   if (!token) {
@@ -102,4 +108,80 @@ export function authorize(...roles) {
 
     next();
   };
+}
+
+// ═══════════════════════════════════════════════════════════
+// ⭐ OPTIONAL AUTH — Cho phép KHÁCH truy cập
+// ═══════════════════════════════════════════════════════════
+export async function optionalAuth(req, res, next) {
+  let token = null;
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.slice(7).trim();
+  }
+  if (!token && req.query.token) {
+    token = String(req.query.token);
+  }
+  if (!token) {
+    token = req.cookies?.accessToken
+      || req.cookies?.token
+      || req.cookies?.jwt;
+  }
+
+  // Không có token → KHÁCH, vẫn cho qua
+  if (!token) {
+    req.user = null;
+    req.isGuest = true;
+    return next();
+  }
+
+  // Có token → thử verify, nếu sai thì coi như khách
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id || decoded.userId },
+      include: {
+        userRoles: {
+          include: {
+            role: {
+              include: {
+                rolePermissions: {
+                  include: { permission: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user || user.deletedAt || !user.active) {
+      req.user = null;
+      req.isGuest = true;
+      return next();
+    }
+
+    req.user = {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      roles: user.userRoles.map(ur => ur.role.code),
+      role: user.userRoles[0]?.role.code,
+      permissions: Array.from(
+        new Set(
+          user.userRoles.flatMap(ur =>
+            ur.role.rolePermissions.map(rp => rp.permission.code)
+          )
+        )
+      ),
+    };
+    req.isGuest = false;
+    return next();
+  } catch (err) {
+    req.user = null;
+    req.isGuest = true;
+    return next();
+  }
 }

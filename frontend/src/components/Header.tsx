@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserMenuDropdown } from './header/UserMenuDropdown';
+import { NotificationBell } from './header/NotificationBell';
+import { PushPermissionBanner } from './header/PushPermissionBanner';
 import { ProfileModal } from './header/ProfileModal';
 import { ChangePasswordModal } from './header/ChangePasswordModal';
 
@@ -48,6 +50,7 @@ export const Header: React.FC = () => {
 
           {/* User Menu */}
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <UserMenuDropdown
               currentUser={currentUser}
               onLogout={handleLogout}
@@ -57,6 +60,7 @@ export const Header: React.FC = () => {
           </div>
         </div>
       </div>
+      <PushPermissionBanner />
 
       {/* Modals */}
       <ProfileModal

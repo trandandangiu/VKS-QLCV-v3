@@ -1,48 +1,50 @@
 // backend/src/services/dispatches.service.js
 import prisma from '../config/prisma.js';
+import { createAndPushNotification } from './notification.helper.js';
 
 export const dispatchesService = {
   // ============================================
   // 1. LẤY DANH SÁCH (FILTER THEO ROLE)
+  // ⭐ Cho phép KHÁCH truy cập (không cần login)
   // ============================================
   async getDispatches(currentUser, filters = {}) {
     const page = parseInt(filters.page) || 1;
     const limit = parseInt(filters.limit) || 20;
     const skip = (page - 1) * limit;
 
+    // ⭐ Phát hiện khách
+    const isGuest = !currentUser || !currentUser.id;
+
     const where = {};
 
-    // Chỉ filter deletedAt = null nếu KHÔNG yêu cầu include deleted
-    // Admin có thể truyền includeDeleted=true để xem cả CV đã xoá mềm
     if (filters.includeDeleted !== 'true' && filters.includeDeleted !== true) {
       where.deletedAt = null;
     }
 
-    // 1.1. Phân quyền
-    const perms = currentUser.permissions || [];
-
-    if (perms.includes('dispatch:view:all')) {
-      // Admin, VT: xem tất cả
-    } else if (perms.includes('dispatch:view:department')) {
-      // PVT: xem công văn được giao cho mình
-      where.dispatchPvts = {
-        some: { pvtId: currentUser.id },
-      };
-    } else if (perms.includes('dispatch:view:assigned')) {
-      // TP: xem công văn được giao
-      where.dispatchTps = {
-        some: { tpId: currentUser.id },
-      };
+    // ═══════════════════════════════════════════════════════
+    // PHÂN QUYỀN
+    // ═══════════════════════════════════════════════════════
+    if (isGuest) {
+      // 🌐 KHÁCH: xem TẤT CẢ công văn, không filter
     } else {
-      // Mặc định: chỉ xem của mình
-      where.OR = [
-        { createdById: currentUser.id },
-        { dispatchPvts: { some: { pvtId: currentUser.id } } },
-        { dispatchTps: { some: { tpId: currentUser.id } } },
-      ];
+      const perms = currentUser.permissions || [];
+
+      if (perms.includes('dispatch:view:all')) {
+        // Admin, VT
+      } else if (perms.includes('dispatch:view:department')) {
+        where.dispatchPvts = { some: { pvtId: currentUser.id } };
+      } else if (perms.includes('dispatch:view:assigned')) {
+        where.dispatchTps = { some: { tpId: currentUser.id } };
+      } else {
+        where.OR = [
+          { createdById: currentUser.id },
+          { dispatchPvts: { some: { pvtId: currentUser.id } } },
+          { dispatchTps: { some: { tpId: currentUser.id } } },
+        ];
+      }
     }
 
-    // 1.2. Filter theo query
+    // Filter search
     if (filters.search) {
       const searchOR = [
         { soCongVan: { contains: filters.search, mode: 'insensitive' } },
@@ -56,19 +58,13 @@ export const dispatchesService = {
         delete where.OR;
       } else if (where.dispatchPvts || where.dispatchTps) {
         where.AND = [searchOR];
-        // Giữ dispatchPvts/Tps
       } else {
         where.OR = searchOR;
       }
     }
 
-    if (filters.trangThai) {
-      where.trangThai = filters.trangThai;
-    }
-
-    if (filters.mucDoKhan) {
-      where.mucDoKhan = filters.mucDoKhan;
-    }
+    if (filters.trangThai) where.trangThai = filters.trangThai;
+    if (filters.mucDoKhan) where.mucDoKhan = filters.mucDoKhan;
 
     if (filters.assignedPvtId) {
       where.dispatchPvts = {
@@ -96,7 +92,6 @@ export const dispatchesService = {
       if (filters.dateTo) where.ngayGui.lte = new Date(filters.dateTo);
     }
 
-    // 1.3. Query
     const [dispatches, total] = await Promise.all([
       prisma.dispatch.findMany({
         where,
@@ -111,12 +106,8 @@ export const dispatchesService = {
           createdBy: {
             select: { id: true, username: true, fullName: true },
           },
-          dispatchPvts: {
-            orderBy: { isPrimary: 'desc' },
-          },
-          dispatchTps: {
-            orderBy: { isPrimary: 'desc' },
-          },
+          dispatchPvts: { orderBy: { isPrimary: 'desc' } },
+          dispatchTps: { orderBy: { isPrimary: 'desc' } },
           _count: {
             select: { attachments: true, reports: true },
           },
@@ -125,6 +116,7 @@ export const dispatchesService = {
       prisma.dispatch.count({ where }),
     ]);
 
+    // ⭐ KHÔNG ẩn gì cả — trả hết
     return {
       dispatches,
       pagination: {
@@ -138,8 +130,12 @@ export const dispatchesService = {
 
   // ============================================
   // 2. LẤY CHI TIẾT
+  // ⭐ Cho phép KHÁCH truy cập
   // ============================================
   async getDispatchById(dispatchId, currentUser) {
+    // ⭐ Phát hiện khách
+    const isGuest = !currentUser || !currentUser.id;
+
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
       include: {
@@ -172,7 +168,12 @@ export const dispatchesService = {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    // Check quyền xem
+    // Khách → trả hết, không cần check quyền
+    if (isGuest) {
+      return dispatch;
+    }
+
+    // User login → check quyền
     const perms = currentUser.permissions || [];
 
     if (!perms.includes('dispatch:view:all')) {
@@ -191,6 +192,7 @@ export const dispatchesService = {
 
   // ============================================
   // 3. TẠO CÔNG VĂN
+  // ⭐ Broadcast thông báo đặt ĐÚNG CHỖ ở đây
   // ============================================
   async createDispatch(data, currentUser) {
     const {
@@ -263,6 +265,71 @@ export const dispatchesService = {
       },
     });
 
+    // ═══════════════════════════════════════════
+    // 🔔 BROADCAST THÔNG BÁO CÔNG VĂN MỚI
+    // Gửi cho tất cả VT, PVT, TP (trừ người tạo)
+    // ═══════════════════════════════════════════
+    // ═══════════════════════════════════════════
+    // 🔔 BROADCAST THÔNG BÁO CÔNG VĂN MỚI
+    // Gửi cho tất cả VT, PVT, TP (trừ người tạo)
+    // ═══════════════════════════════════════════
+    try {
+      const allUsers = await prisma.user.findMany({
+        where: {
+          deletedAt: null,
+          active: true,
+          id: { not: currentUser.id },
+        },
+        include: {
+          userRoles: {
+            include: { role: true },
+          },
+        },
+      });
+
+      const targetUsers = allUsers.filter(u =>
+        u.userRoles.some(ur =>
+          ur.role.code === 'VIEN_TRUONG' ||
+          ur.role.code === 'PHO_VIEN_TRUONG' ||
+          ur.role.code === 'TRUONG_PHONG'
+        )
+      );
+
+      console.log(`🔔 Broadcast công văn mới "${soCongVan}" đến ${targetUsers.length} users`);
+
+      for (const u of targetUsers) {
+        try {
+          await createAndPushNotification(null, {
+            userId: u.id,
+            dispatchId: dispatch.id,
+            type: 'DISPATCH_CREATED',
+            title: '📋 Công văn mới',
+            content: `${soCongVan} — "${tenCongVan}" (tạo bởi ${currentUser.fullName})`,
+          });
+        } catch (e) {
+          console.error(`❌ Lỗi notif cho ${u.id}:`, e.message);
+        }
+      }
+    } catch (notifErr) {
+      console.error('❌ Lỗi broadcast:', notifErr.message);
+    }
+
+    // ⭐ BROADCAST cho TẤT CẢ (user login + khách đã subscribe push)
+    try {
+      await createAndPushNotification(null, {
+        userId: null,
+        broadcast: true,
+        dispatchId: dispatch.id,
+        type: 'DISPATCH_CREATED',
+        title: '📋 Công văn mới',
+        content: `${soCongVan} — "${tenCongVan}"`,
+        url: '/',
+      });
+      console.log(`📢 [PUSH] Đã broadcast công văn mới "${soCongVan}" cho tất cả thiết bị`);
+    } catch (err) {
+      console.error('❌ Lỗi broadcast push cho khách:', err.message);
+    }
+
     return dispatch;
   },
 
@@ -272,6 +339,10 @@ export const dispatchesService = {
   async updateDispatch(dispatchId, data, currentUser) {
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
+      include: {
+        dispatchPvts: true,
+        dispatchTps: true,
+      },
     });
 
     if (!dispatch || dispatch.deletedAt) {
@@ -282,15 +353,19 @@ export const dispatchesService = {
     const perms = currentUser.permissions || [];
 
     if (!perms.includes('dispatch:update:all')) {
-      if (!perms.includes('dispatch:update:assigned')) {
+      if (perms.includes('dispatch:update:assigned')) {
+        const canEdit =
+          dispatch.createdById === currentUser.id ||
+          dispatch.dispatchPvts?.some?.(dp => dp.pvtId === currentUser.id) ||
+          dispatch.dispatchTps?.some?.(dt => dt.tpId === currentUser.id);
+
+        if (!canEdit) {
+          throw { status: 403, message: 'Không có quyền sửa công văn này' };
+        }
+      } else {
         if (dispatch.createdById !== currentUser.id) {
           throw { status: 403, message: 'Không có quyền sửa' };
         }
-      } else {
-        const canEdit =
-          dispatch.dispatchPvts?.some?.(dp => dp.pvtId === currentUser.id) ||
-          dispatch.dispatchTps?.some?.(dt => dt.tpId === currentUser.id);
-        // Sẽ check sau khi load
       }
     }
 
@@ -364,26 +439,32 @@ export const dispatchesService = {
 
   // ============================================
   // 6. THỐNG KÊ
+  // ⭐ Cho phép KHÁCH truy cập
   // ============================================
   async getStats(currentUser) {
+    // ⭐ Phát hiện khách
+    const isGuest = !currentUser || !currentUser.id;
+
     const where = { deletedAt: null };
 
-    const perms = currentUser.permissions || [];
-    if (perms.includes('dispatch:view:all')) {
-      // Tất cả
-    } else if (perms.includes('dispatch:view:department')) {
-      where.dispatchPvts = { some: { pvtId: currentUser.id } };
-    } else if (perms.includes('dispatch:view:assigned')) {
-      where.dispatchTps = { some: { tpId: currentUser.id } };
+    if (!isGuest) {
+      const perms = currentUser.permissions || [];
+      if (perms.includes('dispatch:view:all')) {
+        // Tất cả
+      } else if (perms.includes('dispatch:view:department')) {
+        where.dispatchPvts = { some: { pvtId: currentUser.id } };
+      } else if (perms.includes('dispatch:view:assigned')) {
+        where.dispatchTps = { some: { tpId: currentUser.id } };
+      }
     }
+    // Khách → không filter
 
-    // ✅ THÊM DÒNG NÀY — khai báo today
     const today = new Date();
-    today.setHours(0, 0, 0, 0);   // Đầu ngày hôm nay
+    today.setHours(0, 0, 0, 0);
 
     const in3Days = new Date();
     in3Days.setDate(in3Days.getDate() + 3);
-    in3Days.setHours(23, 59, 59, 999);  // Cuối ngày thứ 3
+    in3Days.setHours(23, 59, 59, 999);
 
     const [total, dangXuLy, hoanThanh, quaHan, sapDenHan, chuaToiHan] =
       await Promise.all([
@@ -423,7 +504,8 @@ export const dispatchesService = {
       tyLeHoanThanh: total > 0 ? Math.round((hoanThanh / total) * 100) : 0,
     };
   },
-    // ============================================
+
+  // ============================================
   // 7. ĐÁNH DẤU HOÀN THÀNH (PVT/TP tự chốt)
   // ============================================
   async markComplete(dispatchId, currentUser, note) {

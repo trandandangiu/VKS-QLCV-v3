@@ -18,6 +18,8 @@ import reportsRoutes from './routes/reports.routes.js';
 import statsRoutes from './routes/stats.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import notificationsRoutes from './routes/notifications.routes.js';
+import sseRoutes from './routes/sse.routes.js';
+import pushRoutes from './routes/push.routes.js';
 
 import { errorHandler, notFound } from './middlewares/error.js';
 
@@ -25,7 +27,23 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  origin: (origin, callback) => {
+    // Cho phép request không có origin (mobile native, curl)
+    if (!origin) return callback(null, true);
+
+    // Cho phép: Cloudflare + localhost + LAN
+    const allowed =
+      origin.endsWith('.trycloudflare.com') ||       // Cloudflare Tunnel
+      origin.startsWith('http://localhost') ||
+      origin.startsWith('https://localhost') ||
+      /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin);
+
+    if (allowed) {
+      return callback(null, true);
+    }
+    console.warn('⚠️  CORS blocked:', origin);
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -35,8 +53,8 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const color = res.statusCode >= 500 ? '\x1b[31m'
-                : res.statusCode >= 400 ? '\x1b[33m'
-                : '\x1b[32m';
+      : res.statusCode >= 400 ? '\x1b[33m'
+        : '\x1b[32m';
     console.log(`${color}${res.statusCode}\x1b[0m ${req.method} ${req.originalUrl} - ${Date.now() - start}ms`);
   });
   next();
@@ -65,6 +83,8 @@ app.use('/api/permissions', permissionsRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/sse', sseRoutes);
+app.use('/api/push', pushRoutes);
 app.use('/api', assignmentsRoutes);
 app.use('/api', attachmentsRoutes);
 app.use('/api', reportsRoutes);

@@ -156,6 +156,7 @@ model User {
   auditLogs         AuditLog[]
   sessions          Session[]
   exports           Export[]
+  pushSubscriptions PushSubscription[]
 
   @@index([role])
   @@index([roomCode])
@@ -561,4 +562,34 @@ model SystemSetting {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
+}
+// ============================================
+// 20. PUSH_SUBSCRIPTIONS — Đăng ký nhận Web Push
+// ============================================
+model PushSubscription {
+  id     String  @id @default(uuid())
+  
+  // ⭐ Cho phép NULL — khách cũng subscribe được
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // ⭐ Đánh dấu khách
+  isGuest Boolean @default(false) @map("is_guest")
+  
+  // ⭐ Loại subscription (để filter sau này)
+  subscriptionType String @default("ALL") @map("subscription_type")
+
+  endpoint String @unique @db.Text
+  p256dh   String @db.Text
+  auth     String @db.Text
+
+  userAgent  String? @map("user_agent")
+  deviceType String? @map("device_type")
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastUsedAt DateTime @default(now()) @map("last_used_at")
+
+  @@index([userId])
+  @@index([isGuest])
+  @@map("push_subscriptions")
 }

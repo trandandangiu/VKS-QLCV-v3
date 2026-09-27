@@ -9,12 +9,9 @@ const TOKEN_KEY = 'access_token';
 const USER_KEY = 'current_user';
 
 // ============================================
-// HELPER — Fetch với token
+// ⭐ REQUEST — Ném lỗi thật lên FE
 // ============================================
-async function request<T>(
-  url: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY);
 
   const headers: Record<string, string> = {
@@ -31,21 +28,40 @@ async function request<T>(
     headers,
   });
 
-  // Handle 401 — token hết hạn
-  if (res.status === 401) {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-  }
-
-  // Check content-type
+  // ⭐ ĐỌC BODY 1 LẦN DUY NHẤT
+  let body: any = null;
   const contentType = res.headers.get('content-type');
-  if (!contentType || !contentType.includes('application/json')) {
-    const text = await res.text();
-    console.error(`Backend trả về không phải JSON (${res.status}):`, text.substring(0, 200));
-    throw new Error(`Server trả về lỗi ${res.status}`);
+  try {
+    if (contentType?.includes('application/json')) {
+      body = await res.json();
+    } else {
+      body = await res.text();
+    }
+  } catch (parseErr) {
+    console.error('Lỗi parse response:', parseErr);
+    body = null;
   }
 
-  return await res.json();
+  // ⭐ NÉM LỖI THẬT LÊN FE
+  if (!res.ok) {
+    // Xóa token khi 401 — buộc login lại
+    if (res.status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    }
+
+    const message =
+      (typeof body === 'object' && body?.message) ||
+      (typeof body === 'string' && body) ||
+      `Lỗi server (${res.status})`;
+
+    const error: any = new Error(message);
+    error.status = res.status;
+    error.body = body;
+    throw error;
+  }
+
+  return body as T;
 }
 
 // ============================================
@@ -104,146 +120,111 @@ export const apiClient = {
     }
   },
 
+  // ⭐ fetchCurrentUser — ném lỗi để AuthContext xử lý
   async fetchCurrentUser(): Promise<User | null> {
-    try {
-      const data = await request<{ success: boolean; user: User }>('/auth/me');
-      if (data.success && data.user) {
-        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-        return data.user;
-      }
-      return null;
-    } catch (e) {
-      console.error('Lỗi khi fetch current user:', e);
-      return null;
+    const data = await request<{ success: boolean; user: User }>('/auth/me');
+    if (data.success && data.user) {
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      return data.user;
     }
+    return null;
   },
 
   async logout(): Promise<void> {
     try {
       await request('/auth/logout', { method: 'POST' });
     } catch (e) {
-      // Bỏ qua
+      // Bỏ qua lỗi logout
+      console.error('Logout error:', e);
     } finally {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
     }
   },
 
+  // ⭐ changePassword — ném lỗi để UI hiển thị
   async changePassword(
     oldPassword: string,
     newPassword: string
   ): Promise<{ success: boolean; message?: string }> {
-    try {
-      return await request('/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({ oldPassword, newPassword }),
-      });
-    } catch (e: any) {
-      return { success: false, message: e.message };
-    }
+    return await request('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ oldPassword, newPassword }),
+    });
   },
 
   // ============================================
   // 2. USERS
   // ============================================
+  // ⭐ getAllUsers — ném lỗi, caller tự catch
   async getAllUsers(params?: {
     page?: number;
     limit?: number;
     search?: string;
     role?: string;
   }): Promise<User[]> {
-    try {
-      const query = new URLSearchParams();
-      if (params?.page) query.set('page', String(params.page));
-      if (params?.limit) query.set('limit', String(params.limit));
-      if (params?.search) query.set('search', params.search);
-      if (params?.role) query.set('role', params.role);
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.search) query.set('search', params.search);
+    if (params?.role) query.set('role', params.role);
 
-      const data = await request<{ success: boolean; users: User[] }>(
-        `/users?${query.toString()}`
-      );
-      return data.success ? data.users : [];
-    } catch (e) {
-      console.error('Lỗi khi lấy danh sách users:', e);
-      return [];
-    }
+    const data = await request<{ success: boolean; users: User[] }>(
+      `/users?${query.toString()}`
+    );
+    return data.success ? data.users : [];
   },
 
   async createUser(
     userData: Partial<User & { password?: string; roleIds?: number[] }>
   ): Promise<{ success: boolean; user?: User; message?: string }> {
-    try {
-      return await request('/users', {
-        method: 'POST',
-        body: JSON.stringify(userData),
-      });
-    } catch (e: any) {
-      return { success: false, message: e.message };
-    }
+    return await request('/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
   },
 
   async updateUser(
     id: string,
     updates: Partial<User & { password?: string }>
   ): Promise<User | null> {
-    try {
-      const data = await request<{ success: boolean; user: User }>(`/users/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      });
-      return data.success ? data.user : null;
-    } catch (e) {
-      console.error('Lỗi khi cập nhật user:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; user: User }>(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+    return data.success ? data.user : null;
   },
 
   async deleteUser(id: string): Promise<{ success: boolean; message?: string }> {
-    try {
-      return await request(`/users/${id}`, { method: 'DELETE' });
-    } catch (e: any) {
-      return { success: false, message: e.message };
-    }
+    return await request(`/users/${id}`, { method: 'DELETE' });
   },
 
   async resetPassword(
     id: string,
     newPassword?: string
   ): Promise<{ success: boolean; message?: string; newPassword?: string }> {
-    try {
-      return await request(`/users/${id}/reset-password`, {
-        method: 'POST',
-        body: JSON.stringify({ newPassword }),
-      });
-    } catch (e: any) {
-      return { success: false, message: e.message };
-    }
+    return await request(`/users/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword }),
+    });
   },
 
   async assignRoles(
     userId: string,
     roleIds: number[]
   ): Promise<{ success: boolean; message?: string }> {
-    try {
-      return await request(`/users/${userId}/roles`, {
-        method: 'PUT',
-        body: JSON.stringify({ roleIds }),
-      });
-    } catch (e: any) {
-      return { success: false, message: e.message };
-    }
+    return await request(`/users/${userId}/roles`, {
+      method: 'PUT',
+      body: JSON.stringify({ roleIds }),
+    });
   },
 
   async toggleActive(
     userId: string
   ): Promise<{ success: boolean; message?: string; active?: boolean }> {
-    try {
-      return await request(`/users/${userId}/toggle-active`, {
-        method: 'PATCH',
-      });
-    } catch (e: any) {
-      return { success: false, message: e.message };
-    }
+    return await request(`/users/${userId}/toggle-active`, {
+      method: 'PATCH',
+    });
   },
 
   // ============================================
@@ -264,92 +245,77 @@ export const apiClient = {
     dateTo?: string;
     includeDeleted?: boolean;
   }): Promise<Dispatch[]> {
-    try {
-      const query = new URLSearchParams();
-      if (params?.page) query.set('page', String(params.page));
-      if (params?.limit) query.set('limit', String(params.limit));
-      if (params?.search) query.set('search', params.search);
-      if (params?.trangThai) query.set('trangThai', params.trangThai);
-      if (params?.mucDoKhan) query.set('mucDoKhan', params.mucDoKhan);
-      if (params?.role) query.set('role', params.role);
-      if (params?.userId) query.set('userId', params.userId);
-      if (params?.roomCode) query.set('roomCode', params.roomCode);
-      if (params?.assignedPvtId) query.set('assignedPvtId', params.assignedPvtId);
-      if (params?.assignedTpId) query.set('assignedTpId', params.assignedTpId);
-      if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
-      if (params?.dateTo) query.set('dateTo', params.dateTo);
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.search) query.set('search', params.search);
+    if (params?.trangThai) query.set('trangThai', params.trangThai);
+    if (params?.mucDoKhan) query.set('mucDoKhan', params.mucDoKhan);
+    if (params?.role) query.set('role', params.role);
+    if (params?.userId) query.set('userId', params.userId);
+    if (params?.roomCode) query.set('roomCode', params.roomCode);
+    if (params?.assignedPvtId) query.set('assignedPvtId', params.assignedPvtId);
+    if (params?.assignedTpId) query.set('assignedTpId', params.assignedTpId);
+    if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
+    if (params?.dateTo) query.set('dateTo', params.dateTo);
 
-      const data = await request<{ success: boolean; dispatches: Dispatch[] }>(
-        `/dispatches?${query.toString()}`
-      );
-      return data.success ? data.dispatches : [];
-    } catch (e) {
-      console.error('Lỗi khi tải danh sách công văn:', e);
-      return [];
-    }
+    const data = await request<{ success: boolean; dispatches: Dispatch[] }>(
+      `/dispatches?${query.toString()}`
+    );
+    return data.success ? data.dispatches : [];
   },
 
   async getDispatchById(id: string): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${id}`
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi lấy chi tiết công văn:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${id}`
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async createDispatch(dispatchData: Partial<Dispatch>): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        '/dispatches',
-        {
-          method: 'POST',
-          body: JSON.stringify(dispatchData),
-        }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi tạo công văn:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      '/dispatches',
+      {
+        method: 'POST',
+        body: JSON.stringify(dispatchData),
+      }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async updateDispatch(
     id: string,
     updates: Partial<Dispatch>
   ): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${id}`,
-        {
-          method: 'PUT',
-          body: JSON.stringify(updates),
-        }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi cập nhật công văn:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      }
+    );
+    return data.success ? data.dispatch : null;
   },
+
   async markComplete(
     id: string,
     note?: string
   ): Promise<{ success: boolean; message?: string; dispatch?: Dispatch }> {
-    try {
-      return await request(`/dispatches/${id}/complete`, {
-        method: 'PATCH',
-        body: JSON.stringify({ note }),
-      });
-    } catch (e: any) {
-      return { success: false, message: e.message };
-    }
+    return await request(`/dispatches/${id}/complete`, {
+      method: 'PATCH',
+      body: JSON.stringify({ note }),
+    });
   },
+
+  async deleteDispatch(id: string): Promise<boolean> {
+    const data = await request<{ success: boolean }>(`/dispatches/${id}`, {
+      method: 'DELETE',
+    });
+    return !!data.success;
+  },
+
   // ============================================
-  // 9. ATTACHMENTS — File đính kèm
+  // 4. ATTACHMENTS
   // ============================================
   async uploadAttachment(
     dispatchId: string,
@@ -357,105 +323,88 @@ export const apiClient = {
     fileCategory: string = 'ORIGINAL',
     description?: string
   ): Promise<any> {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('fileCategory', fileCategory);
-      if (description) formData.append('description', description);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('fileCategory', fileCategory);
+    if (description) formData.append('description', description);
 
-      const token = localStorage.getItem(TOKEN_KEY);
-      const res = await fetch(
-        `${API_BASE}/dispatches/${dispatchId}/attachments`,
-        {
-          method: 'POST',
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: formData,
-        }
-      );
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(
+      `${API_BASE}/dispatches/${dispatchId}/attachments`,
+      {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      }
+    );
 
-      const data = await res.json();
-      return data;
-    } catch (e: any) {
-      console.error('Lỗi upload attachment:', e);
-      return { success: false, message: e.message };
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      }
+      throw new Error(data?.message || `Upload lỗi (${res.status})`);
     }
+
+    return data;
   },
 
   async getAttachments(dispatchId: string): Promise<any[]> {
-    try {
-      const data = await request<{ success: boolean; attachments: any[] }>(
-        `/dispatches/${dispatchId}/attachments`
-      );
-      return data.success ? data.attachments : [];
-    } catch (e) {
-      console.error('Lỗi lấy attachments:', e);
-      return [];
-    }
+    const data = await request<{ success: boolean; attachments: any[] }>(
+      `/dispatches/${dispatchId}/attachments`
+    );
+    return data.success ? data.attachments : [];
   },
 
   async downloadAttachment(attachmentId: string): Promise<void> {
-    try {
-      const token = localStorage.getItem(TOKEN_KEY);
-      const res = await fetch(
-        `${API_BASE}/attachments/${attachmentId}/download`,
-        {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
-      if (!res.ok) throw new Error('Download failed');
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-
-      // Lấy tên file từ header Content-Disposition hoặc dùng mặc định
-      const contentDisposition = res.headers.get('content-disposition');
-      let fileName = 'attachment';
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (match) fileName = decodeURIComponent(match[1]);
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(
+      `${API_BASE}/attachments/${attachmentId}/download`,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       }
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('Lỗi download:', e);
-      throw e;
+    );
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      }
+      throw new Error(`Không tải được file (${res.status})`);
     }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+
+    const contentDisposition = res.headers.get('content-disposition');
+    let fileName = 'attachment';
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match) fileName = decodeURIComponent(match[1]);
+    }
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 
   async deleteAttachment(attachmentId: string): Promise<boolean> {
-    try {
-      const data = await request<{ success: boolean }>(
-        `/attachments/${attachmentId}`,
-        { method: 'DELETE' }
-      );
-      return !!data.success;
-    } catch (e) {
-      console.error('Lỗi xóa attachment:', e);
-      return false;
-    }
-  },
-
-  async deleteDispatch(id: string): Promise<boolean> {
-    try {
-      const data = await request<{ success: boolean }>(`/dispatches/${id}`, {
-        method: 'DELETE',
-      });
-      return !!data.success;
-    } catch (e) {
-      console.error('Lỗi khi xóa công văn:', e);
-      return false;
-    }
+    const data = await request<{ success: boolean }>(
+      `/attachments/${attachmentId}`,
+      { method: 'DELETE' }
+    );
+    return !!data.success;
   },
 
   // ============================================
-  // 4. ASSIGNMENTS
+  // 5. ASSIGNMENTS
   // ============================================
   async assignToPvts(
     dispatchId: string,
@@ -466,16 +415,11 @@ export const apiClient = {
       mucDoKhan?: string;
     }
   ): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${dispatchId}/assign-pvts`,
-        { method: 'POST', body: JSON.stringify(payload) }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi phân công PVT:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${dispatchId}/assign-pvts`,
+      { method: 'POST', body: JSON.stringify(payload) }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async assignToTps(
@@ -486,90 +430,60 @@ export const apiClient = {
       hanBaoCaoXuLy?: string;
     }
   ): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${dispatchId}/assign-tps`,
-        { method: 'POST', body: JSON.stringify(payload) }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi phân công TP:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${dispatchId}/assign-tps`,
+      { method: 'POST', body: JSON.stringify(payload) }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async tpNumber(
     dispatchId: string,
     payload: { soCongVanTP: string; ngayDanhSo?: string }
   ): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${dispatchId}/tp-number`,
-        { method: 'POST', body: JSON.stringify(payload) }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi đánh số:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${dispatchId}/tp-number`,
+      { method: 'POST', body: JSON.stringify(payload) }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async tpSubmit(
     dispatchId: string,
     payload: { baoCaoTienDo: string; tienDo?: number }
   ): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${dispatchId}/tp-submit`,
-        { method: 'POST', body: JSON.stringify(payload) }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi TP gửi PVT:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${dispatchId}/tp-submit`,
+      { method: 'POST', body: JSON.stringify(payload) }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async pvtSubmit(
     dispatchId: string,
     payload: { pvtChiDao: string }
   ): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${dispatchId}/pvt-submit`,
-        { method: 'POST', body: JSON.stringify(payload) }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi PVT trình VT:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${dispatchId}/pvt-submit`,
+      { method: 'POST', body: JSON.stringify(payload) }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async vtAgree(dispatchId: string): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${dispatchId}/vt-agree`,
-        { method: 'POST' }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi VT đồng ý:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${dispatchId}/vt-agree`,
+      { method: 'POST' }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async vtDisagree(dispatchId: string, reason: string): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${dispatchId}/vt-disagree`,
-        { method: 'POST', body: JSON.stringify({ reason }) }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi VT không đồng ý:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${dispatchId}/vt-disagree`,
+      { method: 'POST', body: JSON.stringify({ reason }) }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async pvtDisagree(
@@ -577,80 +491,75 @@ export const apiClient = {
     reason: string,
     tpId?: string
   ): Promise<Dispatch | null> {
-    try {
-      const data = await request<{ success: boolean; dispatch: Dispatch }>(
-        `/dispatches/${dispatchId}/pvt-disagree`,
-        { method: 'POST', body: JSON.stringify({ reason, tpId }) }
-      );
-      return data.success ? data.dispatch : null;
-    } catch (e) {
-      console.error('Lỗi khi PVT không đồng ý:', e);
-      return null;
-    }
+    const data = await request<{ success: boolean; dispatch: Dispatch }>(
+      `/dispatches/${dispatchId}/pvt-disagree`,
+      { method: 'POST', body: JSON.stringify({ reason, tpId }) }
+    );
+    return data.success ? data.dispatch : null;
   },
 
   async getHistory(dispatchId: string): Promise<any[]> {
-    try {
-      const data = await request<{ success: boolean; history: any[] }>(
-        `/dispatches/${dispatchId}/history`
-      );
-      return data.success ? data.history : [];
-    } catch (e) {
-      console.error('Lỗi khi lấy lịch sử:', e);
-      return [];
-    }
+    const data = await request<{ success: boolean; history: any[] }>(
+      `/dispatches/${dispatchId}/history`
+    );
+    return data.success ? data.history : [];
   },
 
   // ============================================
-  // 5. STATS
+  // 6. STATS
   // ============================================
   async getVTDashboardStats(): Promise<VTDashboardStatsResponse | null> {
-    try {
-      const data = await request<VTDashboardStatsResponse>('/stats/vt-overview');
-      return data.success ? data : null;
-    } catch (e) {
-      console.error('Lỗi khi lấy thống kê VT:', e);
-      return null;
-    }
+    const data = await request<VTDashboardStatsResponse>('/stats/vt-overview');
+    return data.success ? data : null;
   },
 
   async getChartData(): Promise<any | null> {
-    try {
-      const data = await request<any>('/stats/chart');
-      return data.success ? data : null;
-    } catch (e) {
-      console.error('Lỗi khi lấy chart data:', e);
-      return null;
-    }
+    const data = await request<any>('/stats/chart');
+    return data.success ? data : null;
   },
 
   // ============================================
-  // 6. NOTIFICATIONS
+  // 7. NOTIFICATIONS
   // ============================================
   async getNotifications(params?: { page?: number; isRead?: boolean }): Promise<any[]> {
-    try {
-      const query = new URLSearchParams();
-      if (params?.page) query.set('page', String(params.page));
-      if (params?.isRead !== undefined) query.set('isRead', String(params.isRead));
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.isRead !== undefined) query.set('isRead', String(params.isRead));
 
-      const data = await request<{ success: boolean; notifications: any[] }>(
-        `/notifications?${query.toString()}`
-      );
-      return data.success ? data.notifications : [];
-    } catch (e) {
-      console.error('Lỗi khi lấy thông báo:', e);
-      return [];
-    }
+    const data = await request<{ success: boolean; notifications: any[] }>(
+      `/notifications?${query.toString()}`
+    );
+    return data.success ? data.notifications : [];
   },
 
   async getUnreadCount(): Promise<number> {
-    try {
-      const data = await request<{ success: boolean; unreadCount: number }>(
-        '/notifications/unread-count'
-      );
-      return data.success ? data.unreadCount : 0;
-    } catch (e) {
-      return 0;
-    }
+    const data = await request<{ success: boolean; unreadCount: number }>(
+      '/notifications/unread-count'
+    );
+    return data.success ? data.unreadCount : 0;
+  },
+
+  async markNotificationRead(id: string): Promise<boolean> {
+    const data = await request<{ success: boolean }>(
+      `/notifications/${id}/read`,
+      { method: 'PATCH' }
+    );
+    return !!data.success;
+  },
+
+  async markAllNotificationsRead(): Promise<boolean> {
+    const data = await request<{ success: boolean }>(
+      '/notifications/read-all',
+      { method: 'PATCH' }
+    );
+    return !!data.success;
+  },
+
+  async deleteNotification(id: string): Promise<boolean> {
+    const data = await request<{ success: boolean }>(
+      `/notifications/${id}`,
+      { method: 'DELETE' }
+    );
+    return !!data.success;
   },
 };

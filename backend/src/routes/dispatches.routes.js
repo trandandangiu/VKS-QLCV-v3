@@ -1,12 +1,12 @@
 // backend/src/routes/dispatches.routes.js
 import express from 'express';
 import { dispatchesController } from '../controllers/dispatches.controller.js';
-import { authenticate } from '../middlewares/auth.js';
+import { authenticate, optionalAuth } from '../middlewares/auth.js';
 import { requirePermission } from '../middlewares/permission.js';
 
 const router = express.Router();
 
-router.use(authenticate);
+// router.use(authenticate);
 
 // ============================================
 // 1. GET /api/dispatches
@@ -62,12 +62,7 @@ router.use(authenticate);
  */
 router.get(
   '/',
-  requirePermission(
-    'dispatch:view:all',
-    'dispatch:view:department',
-    'dispatch:view:assigned',
-    'dispatch:view:own'
-  ),
+  optionalAuth,
   dispatchesController.getDispatches
 );
 
@@ -86,6 +81,7 @@ router.get(
  */
 router.get(
   '/stats',
+  optionalAuth,
   dispatchesController.getStats
 );
 
@@ -112,9 +108,9 @@ router.get(
  */
 router.get(
   '/:id',
+  optionalAuth,
   dispatchesController.getDispatchById
 );
-
 // ============================================
 // 4. POST /api/dispatches
 // ============================================
@@ -157,6 +153,7 @@ router.get(
  */
 router.post(
   '/',
+  authenticate,                          // ⭐ THÊM — chạy trước
   requirePermission('dispatch:create'),
   dispatchesController.createDispatch
 );
@@ -196,7 +193,7 @@ router.post(
  */
 router.put(
   '/:id',
-  requirePermission('dispatch:update:all', 'dispatch:update:assigned'),
+  requirePermission('dispatch:update:all', 'dispatch:update:assigned'),  // ← Thiếu authenticate
   dispatchesController.updateDispatch
 );
 
@@ -221,6 +218,7 @@ router.put(
  */
 router.delete(
   '/:id',
+  authenticate,                          // ⭐ THÊM
   requirePermission('dispatch:delete'),
   dispatchesController.deleteDispatch
 );
@@ -231,6 +229,6 @@ router.delete(
 // ============================================
 router.patch(
   '/:id/complete',
-  dispatchesController.markComplete
+  dispatchesController.markComplete      // ← KHÔNG có authenticate!
 );
 export default router;
