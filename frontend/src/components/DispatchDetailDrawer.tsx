@@ -1,24 +1,17 @@
 // src/components/DispatchDetailDrawer.tsx
 import React, { useEffect, useState, useRef } from 'react';
-import { formatDate } from '../utils/format';
 import {
-  X, Clock, AlertTriangle, Building2, User, Calendar, Flame,
-  Paperclip, Download, FileText, Loader2, CheckCircle2,
-  AlertCircle, Save, Users, Upload, Trash2, Plus,
+  X, Flame, Paperclip, Download, FileText, Loader2, CheckCircle2,
+  AlertCircle, Upload, Trash2, Plus, UserCheck, Pencil, Check,
+  ExternalLink, RotateCcw,CornerDownRight, 
 } from 'lucide-react';
 import { ColumnDefinition, Dispatch } from '../types/dispatch';
 import { apiClient } from '../services/apiClient';
 import { calculateTimeRemaining } from '../services/excelService';
 
-interface DispatchDetailDrawerProps {
-  dispatch: Dispatch | null;
-  onClose: () => void;
-  columns: ColumnDefinition[];
-  onUpdate?: (id: string, updates: Partial<Dispatch>) => void | Promise<void>;
-  canEdit?: boolean;
-  onMarkComplete?: (d: Dispatch) => void | Promise<void>;
-}
-
+// ============================================
+// TYPES
+// ============================================
 interface Attachment {
   id: string;
   fileName: string;
@@ -29,25 +22,36 @@ interface Attachment {
   createdAt?: string;
 }
 
-interface DepartmentOption {
+interface PvtUser {
   id: string;
-  code: string;
-  name: string;
+  fullName: string;
+  roomCode?: string;
+}
+interface TpUser {
+  id: string;
+  fullName: string;
+  roomCode?: string;
+  department?: { name: string };
 }
 
-interface EditForm {
-  soCongVan: string;
-  tenCongVan: string;
-  ngayGui: string;
-  ngayPhatHanh: string;
-  hanBaoCaoXuLy: string;
-  donViBanHanh: string;
-  donViThucHien: string;
-  nguoiThucHien: string;
-  mucDoKhan: string;
-  ghiChu: string;
+interface DispatchDetailDrawerProps {
+  dispatch: Dispatch | null;
+  onClose: () => void;
+  columns: ColumnDefinition[];
+  onUpdate?: (id: string, updates: Partial<Dispatch>) => void | Promise<void>;
+  canEdit?: boolean;
+  onMarkComplete?: (d: Dispatch) => void | Promise<void>;
+  onReopen?: (d: Dispatch) => void | Promise<void>;
+  onDelete?: (d: Dispatch) => void | Promise<void>;
 }
 
+const MAX_FILE_SIZE_MB = 20;
+const ACCEPT_TYPES =
+  '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar';
+
+// ============================================
+// HELPERS
+// ============================================
 const toDateInput = (val?: string | null): string => {
   if (!val) return '';
   try {
@@ -59,117 +63,137 @@ const toDateInput = (val?: string | null): string => {
   }
 };
 
-const MAX_FILE_SIZE_MB = 20;
-const ACCEPT_TYPES = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar';
+const formatDateVN = (val?: string | null): string => {
+  if (!val) return '—';
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${d.getFullYear()}`;
+  } catch {
+    return val;
+  }
+};
 
+const formatSize = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+};
+
+// ============================================
+// MAIN
+// ============================================
 export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
   dispatch,
   onClose,
-  columns,
   onUpdate,
   canEdit = false,
   onMarkComplete,
+  onReopen,
+  onDelete,
 }) => {
-  // ═══════════════════════════════════════════
-  // STATE
-  // ═══════════════════════════════════════════
+  const [localDispatch, setLocalDispatch] = useState<Dispatch | null>(null);
+
+  // Attachments
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
-  const [filesError, setFilesError] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [uploadingCount, setUploadingCount] = useState(0);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadCategory, setUploadCategory] = useState<string>('ORIGINAL');
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [localDispatch, setLocalDispatch] = useState<Dispatch | null>(null);
-  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isCompleting, setIsCompleting] = useState(false);
+  // Users để chọn PVT / TP
+  const [pvtUsers, setPvtUsers] = useState<PvtUser[]>([]);
+  const [tpUsers, setTpUsers] = useState<TpUser[]>([]);
 
-  const [form, setForm] = useState<EditForm>({
-    soCongVan: '',
+  // Actions
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
+  const [toast, setToast] = useState<{
+    msg: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
+
+  // Edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [form, setForm] = useState({
     tenCongVan: '',
-    ngayGui: '',
-    ngayPhatHanh: '',
-    hanBaoCaoXuLy: '',
     donViBanHanh: '',
-    donViThucHien: '',
-    nguoiThucHien: '',
-    mucDoKhan: 'THUONG',
+    hanBaoCaoXuLy: '',
     ghiChu: '',
+    assignedPvtId: '',
+    assignedTpId: '',
+    nguoiThucHien: '',
   });
 
-  const [isDirty, setIsDirty] = useState(false);
-
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
+  const showToast = (
+    msg: string,
+    type: 'success' | 'error' | 'info' = 'success'
+  ) => {
+    setToast({ msg, type });
     setTimeout(() => setToast(null), 2500);
   };
 
-  // ═══════════════════════════════════════════
-  // SYNC localDispatch + form
-  // ═══════════════════════════════════════════
+  // ===== SYNC WHEN DISPATCH CHANGES =====
   useEffect(() => {
     setLocalDispatch(dispatch);
+    setIsEditing(false);
     setIsDirty(false);
-
     if (dispatch) {
-      const currentDeptName =
-        (dispatch as any).donViThucHien ||
-        dispatch.assignedTpName ||
-        '';
-
       setForm({
-        soCongVan: dispatch.soCongVan || '',
         tenCongVan: dispatch.tenCongVan || '',
-        ngayGui: toDateInput(dispatch.ngayGui),
-        ngayPhatHanh: toDateInput(dispatch.ngayPhatHanh),
-        hanBaoCaoXuLy: toDateInput(dispatch.hanBaoCaoXuLy),
         donViBanHanh: dispatch.donViBanHanh || '',
-        donViThucHien: currentDeptName,
-        nguoiThucHien: dispatch.nguoiThucHien || '',
-        mucDoKhan: dispatch.mucDoKhan || 'THUONG',
+        hanBaoCaoXuLy: toDateInput(dispatch.hanBaoCaoXuLy),
         ghiChu: dispatch.ghiChu || '',
+        assignedPvtId: dispatch.assignedPvtId || '',
+        assignedTpId: dispatch.assignedTpId || '',
+        nguoiThucHien: dispatch.nguoiThucHien || '',
       });
     }
   }, [dispatch?.id]);
 
-  // ═══════════════════════════════════════════
-  // LOAD DEPARTMENTS
-  // ═══════════════════════════════════════════
+  // ===== LOAD PVT + TP USERS =====
   useEffect(() => {
-    if (!dispatch) return;
     (async () => {
       try {
-        const res = await fetch('/api/departments');
-        const data = await res.json();
-        if (data.success && Array.isArray(data.departments)) {
-          setDepartments(
-            data.departments
-              .filter((d: any) => d.active !== false)
-              .map((d: any) => ({ id: d.id, code: d.code, name: d.name }))
-          );
-        }
-      } catch (e) {
-        console.error('Lỗi load departments:', e);
+        const [pvts, tps] = await Promise.all([
+          apiClient.getAllUsers({ role: 'PHO_VIEN_TRUONG', limit: 100 }),
+          apiClient.getAllUsers({ role: 'TRUONG_PHONG', limit: 100 }),
+        ]);
+        setPvtUsers(
+          (pvts || []).map(u => ({
+            id: u.id,
+            fullName: u.fullName,
+            roomCode: u.roomCode,
+          }))
+        );
+        setTpUsers(
+          (tps || []).map(u => ({
+            id: u.id,
+            fullName: u.fullName,
+            roomCode: u.roomCode,
+            department: u.department ? { name: u.department.name } : undefined,
+          }))
+        );
+      } catch (err) {
+        console.error('Lỗi load PVT/TP:', err);
       }
     })();
-  }, [dispatch?.id]);
+  }, []);
 
-  // ═══════════════════════════════════════════
-  // LOAD ATTACHMENTS
-  // ═══════════════════════════════════════════
+  // ===== LOAD ATTACHMENTS =====
   const loadAttachments = async (dispatchId: string) => {
     setLoadingFiles(true);
-    setFilesError(null);
     try {
       const items = await apiClient.getAttachments(dispatchId);
       setAttachments(items || []);
-    } catch (err: any) {
-      setFilesError(err?.message || 'Không tải được danh sách file');
+    } catch {
       setAttachments([]);
     } finally {
       setLoadingFiles(false);
@@ -177,672 +201,702 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
   };
 
   useEffect(() => {
-    if (!dispatch) {
-      setAttachments([]);
-      setFilesError(null);
-      return;
-    }
-    loadAttachments(dispatch.id);
+    if (dispatch?.id) loadAttachments(dispatch.id);
+    else setAttachments([]);
   }, [dispatch?.id]);
 
-  // ESC để đóng
+  // ===== ESC CLOSE =====
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && dispatch) onClose();
+      if (e.key === 'Escape') {
+        if (isEditing) setIsEditing(false);
+        else onClose();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dispatch, onClose]);
+  }, [onClose, isEditing]);
 
   if (!dispatch || !localDispatch) return null;
 
   const d = localDispatch;
-  const customColumns = columns.filter(c => c.isCustom);
   const isCompleted = d.trangThai === 'HOAN_THANH';
+  const statusInfo = calculateTimeRemaining(
+    d.hanBaoCaoXuLy,
+    d.trangThai,
+    d.thoiHanXuLy
+  );
 
-  // ═══════════════════════════════════════════
-  // FORM HANDLERS
-  // ═══════════════════════════════════════════
-  const updateForm = <K extends keyof EditForm>(key: K, value: EditForm[K]) => {
+  const statusTone =
+    statusInfo.status === 'QUA_HAN'
+      ? 'text-rose-700'
+      : statusInfo.status === 'SAP_DEN_HAN'
+        ? 'text-amber-700'
+        : statusInfo.status === 'HOAN_THANH'
+          ? 'text-emerald-700'
+          : 'text-slate-700';
+
+  // ===== EDIT HANDLERS =====
+  const updateField = (key: keyof typeof form, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
     setIsDirty(true);
   };
 
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setIsDirty(false);
+    setForm({
+      tenCongVan: d.tenCongVan || '',
+      donViBanHanh: d.donViBanHanh || '',
+      hanBaoCaoXuLy: toDateInput(d.hanBaoCaoXuLy),
+      ghiChu: d.ghiChu || '',
+      assignedPvtId: d.assignedPvtId || '',
+      assignedTpId: d.assignedTpId || '',
+      nguoiThucHien: d.nguoiThucHien || '',
+    });
+  };
+
   const handleSave = async () => {
     if (!onUpdate) return;
-    if (!form.soCongVan.trim()) {
-      showToast('Vui lòng nhập số công văn', 'error');
-      return;
-    }
     if (!form.tenCongVan.trim()) {
       showToast('Vui lòng nhập nội dung công văn', 'error');
       return;
     }
-
     setIsSaving(true);
     try {
-      const payload: Partial<Dispatch & { donViThucHien?: string }> = {
-        soCongVan: form.soCongVan.trim(),
-        tenCongVan: form.tenCongVan.trim(),
-        ngayGui: form.ngayGui || undefined,
-        ngayPhatHanh: form.ngayPhatHanh || undefined,
-        hanBaoCaoXuLy: form.hanBaoCaoXuLy || undefined,
-        donViBanHanh: form.donViBanHanh.trim(),
-        nguoiThucHien: form.nguoiThucHien.trim(),
-        mucDoKhan: form.mucDoKhan as any,
-        ghiChu: form.ghiChu,
-      };
+      const originalPvtId = d.assignedPvtId || '';
+      const originalTpId = d.assignedTpId || '';
 
-      if (form.donViThucHien) {
-        (payload as any).donViThucHien = form.donViThucHien;
-        const matchedDept = departments.find(
-          dep => dep.name === form.donViThucHien || dep.code === form.donViThucHien
-        );
-        if (matchedDept) {
-          payload.assignedTpName = matchedDept.name;
+      // ⭐ Local dispatch mới để update state liên tục
+      const updated: Partial<Dispatch> = {};
+
+      // 1. Update các field cơ bản
+      const payload: Partial<Dispatch> = {
+        tenCongVan: form.tenCongVan.trim(),
+        donViBanHanh: form.donViBanHanh.trim(),
+        hanBaoCaoXuLy: form.hanBaoCaoXuLy || undefined,
+        ghiChu: form.ghiChu,
+        nguoiThucHien: form.nguoiThucHien.trim() || undefined,
+      };
+      await onUpdate(d.id, payload);
+      Object.assign(updated, payload);
+
+      // 2. Đổi PVT → gọi assignToPvts
+      if (form.assignedPvtId && form.assignedPvtId !== originalPvtId) {
+        const pvt = pvtUsers.find(u => u.id === form.assignedPvtId);
+        if (!pvt) {
+          throw new Error('Không tìm thấy Phó Viện trưởng đã chọn');
         }
+
+        // ⭐ KHÔNG nuốt lỗi — throw ra để user biết
+        const res = await apiClient.assignToPvts(d.id, {
+          pvts: [
+            {
+              pvtId: pvt.id,
+              pvtName: pvt.fullName,
+              roomCode: pvt.roomCode || '',
+              isPrimary: true,
+            },
+          ],
+        });
+
+        if (!res) throw new Error('Giao PVT thất bại');
+
+        updated.assignedPvtId = res.assignedPvtId || pvt.id;
+        updated.assignedPvtName = res.assignedPvtName || pvt.fullName;
+        updated.trangThai = res.trangThai || 'CHO_PVT_XU_LY';
       }
 
-      await onUpdate(dispatch.id, payload);
+      // 3. Đổi TP → gọi assignToTps
+      if (form.assignedTpId && form.assignedTpId !== originalTpId) {
+        const tp = tpUsers.find(u => u.id === form.assignedTpId);
+        if (!tp) {
+          throw new Error('Không tìm thấy Trưởng phòng đã chọn');
+        }
 
-      setLocalDispatch(prev => prev ? { ...prev, ...payload } : prev);
+        // ⭐ Lấy roomCode: ưu tiên tp.roomCode, fallback department.name match
+        const tpRoomCode =
+          tp.roomCode ||
+          (tp.department as any)?.code ||
+          (tp.department?.name || '').match(/TP\d+/i)?.[0]?.toUpperCase() ||
+          '';
+
+        // ⭐ KHÔNG nuốt lỗi
+        const res = await apiClient.assignToTps(d.id, {
+          tps: [
+            {
+              tpId: tp.id,
+              tpName: tp.fullName,
+              roomCode: tpRoomCode,
+              isPrimary: true,
+            },
+          ],
+        });
+
+        if (!res) throw new Error('Giao Trưởng phòng thất bại');
+
+        updated.assignedTpId = res.assignedTpId || tp.id;
+        updated.assignedTpName = res.assignedTpName || tp.fullName;
+        updated.trangThai = res.trangThai || 'CHO_TP_XU_LY';
+      }
+
+      // 4. Update local state với TẤT CẢ thay đổi
+      setLocalDispatch(prev => (prev ? { ...prev, ...updated } : prev));
+      setIsEditing(false);
       setIsDirty(false);
-      showToast('✅ Đã lưu vào cơ sở dữ liệu', 'success');
-
-      setTimeout(() => onClose(), 400);
+      showToast('Đã lưu thay đổi', 'success');
     } catch (err: any) {
-      showToast('❌ Lỗi lưu: ' + (err?.message || ''), 'error');
+      console.error('Lỗi lưu:', err);
+      showToast(err?.message || 'Không thể lưu thay đổi', 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
+  // ===== MARK COMPLETE =====
   const handleMarkComplete = async () => {
     if (!onMarkComplete) return;
     if (!window.confirm(`Đánh dấu HOÀN THÀNH công văn "${d.soCongVan}"?`)) return;
-
     setIsCompleting(true);
     try {
       await onMarkComplete(d);
-      showToast('✅ Đã đánh dấu hoàn thành', 'success');
-      setLocalDispatch(prev => prev ? { ...prev, trangThai: 'HOAN_THANH' } : prev);
+      setLocalDispatch(prev =>
+        prev ? { ...prev, trangThai: 'HOAN_THANH', tienDo: 100 } : prev
+      );
+      showToast('Đã đánh dấu hoàn thành', 'success');
     } catch (err: any) {
-      showToast('❌ Lỗi: ' + (err?.message || ''), 'error');
+      showToast(err?.message || 'Lỗi', 'error');
     } finally {
       setIsCompleting(false);
     }
   };
 
-  // ═══════════════════════════════════════════
-  // ⭐ UPLOAD FILE
-  // ═══════════════════════════════════════════
-  const handleUploadFiles = async (files: FileList | File[]) => {
-    if (!canEdit) {
-      showToast('Bạn không có quyền tải file lên', 'error');
+  // ===== REOPEN (bỏ hoàn thành) =====
+  const handleReopen = async () => {
+    if (!onReopen) return;
+    if (
+      !window.confirm(
+        `Mở lại công văn "${d.soCongVan}"?\n\nCông văn sẽ quay về trạng thái đang xử lý.`
+      )
+    )
       return;
-    }
 
+    setIsReopening(true);
+    try {
+      await onReopen(d);
+      // Local fallback — parent có thể ghi đè bằng dispatch thật
+      setLocalDispatch(prev =>
+        prev
+          ? {
+            ...prev,
+            trangThai: 'DANG_XU_LY',
+            tienDo: 0,
+            completedAt: undefined,
+          }
+          : prev
+      );
+      showToast('Đã mở lại công văn', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Không thể mở lại', 'error');
+    } finally {
+      setIsReopening(false);
+    }
+  };
+
+  // ===== DELETE DISPATCH =====
+  const handleDelete = async () => {
+    if (!onDelete) return;
+
+    if (
+      !window.confirm(
+        `Xoá công văn "${d.soCongVan}"?\n\nCông văn sẽ bị ẩn khỏi danh sách.`
+      )
+    )
+      return;
+
+    setIsDeleting(true);
+    try {
+      await onDelete(d);
+      showToast('Đã xoá công văn', 'success');
+      setTimeout(() => onClose(), 400);
+    } catch (err: any) {
+      showToast(err?.message || 'Không thể xoá công văn', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // ===== UPLOAD / DOWNLOAD / DELETE FILE =====
+  const handleUploadFiles = async (files: FileList | File[]) => {
+    if (!canEdit) return showToast('Bạn không có quyền tải file lên', 'error');
     const arr = Array.from(files);
     const maxBytes = MAX_FILE_SIZE_MB * 1024 * 1024;
-
-    // Lọc file hợp lệ
-    const validFiles: File[] = [];
-    for (const f of arr) {
+    const valid = arr.filter(f => {
       if (f.size > maxBytes) {
         showToast(`File "${f.name}" vượt quá ${MAX_FILE_SIZE_MB}MB`, 'error');
-        continue;
+        return false;
       }
-      validFiles.push(f);
-    }
+      return true;
+    });
+    if (!valid.length) return;
 
-    if (validFiles.length === 0) return;
-
-    setUploadingCount(validFiles.length);
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const file of validFiles) {
+    setUploadingCount(valid.length);
+    let ok = 0;
+    let fail = 0;
+    for (const f of valid) {
       try {
-        const res = await apiClient.uploadAttachment(
-          dispatch.id,
-          file,
-          uploadCategory
-        );
-        if (res?.success) {
-          successCount++;
-          // Thêm vào danh sách ngay lập tức
-          if (res.attachment) {
-            setAttachments(prev => [res.attachment, ...prev]);
-          }
-        } else {
-          failCount++;
-        }
-      } catch (err: any) {
-        console.error('Lỗi upload file:', file.name, err);
-        failCount++;
+        const res = await apiClient.uploadAttachment(d.id, f, 'ORIGINAL');
+        if (res?.success) ok++;
+        else fail++;
+      } catch {
+        fail++;
       }
     }
-
     setUploadingCount(0);
 
-    if (successCount > 0 && failCount === 0) {
-      showToast(`✅ Đã tải lên ${successCount} file`, 'success');
-    } else if (successCount > 0 && failCount > 0) {
-      showToast(`Tải lên ${successCount} file, ${failCount} file lỗi`, 'info');
-    } else {
-      showToast('❌ Không thể tải file lên', 'error');
-    }
+    // ⭐ Reload list NGAY, đợi xong mới show toast
+    await loadAttachments(d.id);
 
-    // Reload lại để đồng bộ
-    await loadAttachments(dispatch.id);
+    if (ok > 0 && fail === 0) showToast(`Đã tải lên ${ok} file`, 'success');
+    else if (ok > 0) showToast(`Tải lên ${ok} file, ${fail} lỗi`, 'info');
+    else showToast('Không thể tải file lên', 'error');
   };
 
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      handleUploadFiles(e.target.files);
-      e.target.value = ''; // reset
-    }
-  };
-
-  // ⭐ DRAG & DROP
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (canEdit) setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (!canEdit) return;
-    if (e.dataTransfer.files?.length) {
-      handleUploadFiles(e.dataTransfer.files);
+  const handleDownload = async (att: Attachment, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setDownloadingId(att.id);
+    try {
+      await apiClient.downloadAttachment(att.id);
+    } catch (err: any) {
+      showToast(err?.message || 'Không tải được file', 'error');
+    } finally {
+      setDownloadingId(null);
     }
   };
 
-  // ⭐ XÓA FILE
-  const handleDeleteAttachment = async (att: Attachment) => {
+  const handleDeleteAttachment = async (
+    att: Attachment,
+    e?: React.MouseEvent
+  ) => {
+    e?.stopPropagation();
     if (!canEdit) return;
     if (!window.confirm(`Xóa file "${att.fileName}"?`)) return;
 
     try {
       const ok = await apiClient.deleteAttachment(att.id);
       if (ok) {
-        setAttachments(prev => prev.filter(a => a.id !== att.id));
-        showToast('✅ Đã xóa file', 'success');
+        // ⭐ Reload list trước, show toast sau
+        await loadAttachments(d.id);
+        showToast('Đã xóa file', 'success');
       } else {
-        showToast('❌ Không thể xóa file', 'error');
+        showToast('Không thể xóa file', 'error');
       }
     } catch (err: any) {
-      showToast('❌ Lỗi: ' + (err?.message || ''), 'error');
+      showToast(err?.message || 'Lỗi', 'error');
     }
   };
 
-  const handleDownload = async (att: Attachment) => {
-    setDownloadingId(att.id);
-    try {
-      await apiClient.downloadAttachment(att.id);
-    } catch (err: any) {
-      showToast('Không tải được file: ' + (err?.message || ''), 'error');
-    } finally {
-      setDownloadingId(null);
-    }
+  /**
+   * Mở file trong tab mới.
+   * Backend nhận `?token=` để auth (không cần header) và `?inline=1` để xem trực tiếp.
+   * Chrome sẽ tự render PDF/ảnh inline, file Office sẽ tải về.
+   */
+  const handleOpenFile = (att: Attachment) => {
+    const token = apiClient.getToken();
+    const params = new URLSearchParams();
+    if (token) params.set('token', token);
+    params.set('inline', '1');
+
+    const url = `/api/attachments/${att.id}/download?${params.toString()}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const formatSize = (bytes?: number) => {
-    if (!bytes) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-  };
-
-  // ═══════════════════════════════════════════
-  // RENDER HELPERS
-  // ═══════════════════════════════════════════
-  const FieldLabel: React.FC<{ icon?: React.ReactNode; children: React.ReactNode; required?: boolean }> = ({
-    icon, children, required,
-  }) => (
-    <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide flex items-center gap-1 mb-1">
-      {icon} {children}
-      {required && <span className="text-rose-500">*</span>}
-    </label>
-  );
-
-  const inputClass =
-    'w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white disabled:bg-slate-50 disabled:text-slate-600 disabled:cursor-not-allowed';
-
-  const isUploading = uploadingCount > 0;
-
+  // ============================================
+  // RENDER
+  // ============================================
   return (
     <>
       <div
-        className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-xs flex justify-end"
+        className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex justify-end"
         onClick={onClose}
       >
         <div
-          className="bg-white w-full sm:max-w-xl h-full shadow-2xl flex flex-col overflow-hidden animate-slideInRight"
-          onClick={(e) => e.stopPropagation()}
+          className="bg-white w-full sm:max-w-lg h-full shadow-2xl flex flex-col overflow-hidden"
+          onClick={e => e.stopPropagation()}
         >
-          {/* HEADER */}
+          {/* ════════ HEADER ════════ */}
           <div
-            className="px-4 sm:px-6 py-4 flex items-center justify-between text-white border-b shrink-0"
-            style={{ backgroundColor: '#B71C1C', borderColor: '#7F0E0E' }}
+            className="px-4 py-3 text-white shrink-0"
+            style={{ backgroundColor: '#B71C1C' }}
           >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-bold bg-white/20 border border-white/30 px-2.5 py-0.5 rounded text-white">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <span className="text-sm font-bold font-mono bg-white/20 border border-white/30 px-2.5 py-0.5 rounded">
                   {d.soCongVan || '—'}
                 </span>
                 {d.mucDoKhan && d.mucDoKhan !== 'THUONG' && (
-                  <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-700 text-white flex items-center gap-1 border border-rose-800">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-700/80 border border-rose-300/50 flex items-center gap-0.5">
                     <Flame className="w-3 h-3" /> {d.mucDoKhan}
                   </span>
                 )}
-                {isDirty && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-400 text-amber-950 border border-amber-300">
+                {isDirty && !isCompleted && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-400 text-amber-950">
                     ● Chưa lưu
                   </span>
                 )}
               </div>
-              <h2 className="text-sm font-bold text-white mt-1 line-clamp-1">
-                Chi tiết công văn gửi Lãnh đạo
-              </h2>
+              <button
+                onClick={onClose}
+                className="text-white/80 hover:text-white p-1.5 rounded hover:bg-white/10 shrink-0 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="text-white/80 hover:text-white p-1.5 rounded-lg transition cursor-pointer shrink-0 ml-2"
-              title="Đóng (ESC)"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="text-[11px] text-white/85 mt-1">Chi tiết công văn</div>
           </div>
 
-          {/* BODY */}
-          <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 text-sm">
+          {/* ════════ BODY ════════ */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 text-xs">
+            {/* ───── SECTION 1: THÔNG TIN ───── */}
+            <Section
+              icon={FileText}
+              title="Thông tin công văn"
+              action={
+                canEdit && onUpdate ? (
+                  isEditing ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={handleCancelEdit}
+                        className="p-1 rounded hover:bg-slate-200 text-slate-500 cursor-pointer"
+                        title="Hủy"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={isSaving || !isDirty}
+                        className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 cursor-pointer"
+                        title="Lưu"
+                      >
+                        {isSaving ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-500 cursor-pointer"
+                      title="Sửa"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )
+                ) : null
+              }
+            >
+              <Field label="Nội dung">
+                {isEditing ? (
+                  <textarea
+                    rows={2}
+                    value={form.tenCongVan}
+                    onChange={e => updateField('tenCongVan', e.target.value)}
+                    className={inputCls}
+                    placeholder="Trích yếu nội dung công văn..."
+                  />
+                ) : (
+                  <span className="font-semibold text-slate-800">
+                    {d.tenCongVan || '—'}
+                  </span>
+                )}
+              </Field>
 
-            {/* Số công văn */}
-            <div>
-              <FieldLabel required>Số công văn</FieldLabel>
-              <input
-                type="text"
-                value={form.soCongVan}
-                onChange={e => updateForm('soCongVan', e.target.value)}
-                disabled={!canEdit}
-                className={inputClass}
-                placeholder="VD: 142/BC-UBND"
-              />
-            </div>
+              <Field label="Đơn vị ban hành">
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={form.donViBanHanh}
+                    onChange={e => updateField('donViBanHanh', e.target.value)}
+                    className={inputCls}
+                    placeholder="UBND, Bộ Tư pháp..."
+                  />
+                ) : (
+                  <span className="font-medium text-slate-800">
+                    {d.donViBanHanh || '—'}
+                  </span>
+                )}
+              </Field>
 
-            {/* Nội dung */}
-            <div>
-              <FieldLabel required>Nội dung công văn</FieldLabel>
-              <textarea
-                rows={3}
-                value={form.tenCongVan}
-                onChange={e => updateForm('tenCongVan', e.target.value)}
-                disabled={!canEdit}
-                className={inputClass}
-                placeholder="Trích yếu nội dung công văn..."
-              />
-            </div>
-
-            {/* Ngày tháng */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-              <div>
-                <FieldLabel icon={<Calendar className="w-3 h-3" />}>Ngày gửi</FieldLabel>
-                <input
-                  type="date"
-                  value={form.ngayGui}
-                  onChange={e => updateForm('ngayGui', e.target.value)}
-                  disabled={!canEdit}
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <FieldLabel icon={<Calendar className="w-3 h-3" />}>Ngày phát hành</FieldLabel>
-                <input
-                  type="date"
-                  value={form.ngayPhatHanh}
-                  onChange={e => updateForm('ngayPhatHanh', e.target.value)}
-                  disabled={!canEdit}
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <FieldLabel icon={<Clock className="w-3 h-3 text-blue-600" />}>
-                  Hạn báo cáo, xử lý
-                </FieldLabel>
-                <input
-                  type="date"
-                  value={form.hanBaoCaoXuLy}
-                  onChange={e => updateForm('hanBaoCaoXuLy', e.target.value)}
-                  disabled={!canEdit}
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <FieldLabel icon={<AlertTriangle className="w-3 h-3 text-amber-500" />}>
-                  Tình trạng thời hạn
-                </FieldLabel>
-                {(() => {
-                  const { text, status } = calculateTimeRemaining(
-                    form.hanBaoCaoXuLy,
-                    d.trangThai,
-                    d.thoiHanXuLy
-                  );
-                  const colorClass =
-                    status === 'QUA_HAN' ? 'text-rose-700'
-                      : status === 'SAP_DEN_HAN' ? 'text-amber-700'
-                        : status === 'HOAN_THANH' ? 'text-emerald-700'
-                          : 'text-slate-900';
-                  return <p className={`text-xs font-bold pt-1 ${colorClass}`}>{text}</p>;
-                })()}
-              </div>
-            </div>
-
-            {/* Mức độ khẩn */}
-            <div>
-              <FieldLabel icon={<Flame className="w-3 h-3 text-rose-500" />}>
-                Mức độ khẩn
-              </FieldLabel>
-              <select
-                value={form.mucDoKhan}
-                onChange={e => updateForm('mucDoKhan', e.target.value)}
-                disabled={!canEdit}
-                className={inputClass}
-              >
-                <option value="THUONG">Thường</option>
-                <option value="KHAN">Khẩn</option>
-                <option value="THUONG_KHAN">Thượng khẩn</option>
-                <option value="HOA_TOC">Hỏa tốc</option>
-              </select>
-            </div>
-
-            {/* ĐƠN VỊ BAN HÀNH */}
-            <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/40">
-              <FieldLabel icon={<Building2 className="w-3.5 h-3.5 text-blue-600" />}>
-                Đơn vị ban hành
-              </FieldLabel>
-              <input
-                type="text"
-                value={form.donViBanHanh}
-                onChange={e => updateForm('donViBanHanh', e.target.value)}
-                disabled={!canEdit}
-                className={inputClass}
-                placeholder="VD: UBND Tỉnh, Bộ Tư pháp, VKSND Tối cao..."
-              />
-              <p className="text-[10px] text-blue-700/70 mt-1 italic">
-                Nơi gửi công văn đến (nhập tự do)
-              </p>
-            </div>
-
-            {/* ĐƠN VỊ THỰC HIỆN */}
-            <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40">
-              <FieldLabel icon={<Users className="w-3.5 h-3.5 text-emerald-600" />}>
-                Đơn vị thực hiện
-              </FieldLabel>
-              <select
-                value={form.donViThucHien}
-                onChange={e => updateForm('donViThucHien', e.target.value)}
-                disabled={!canEdit}
-                className={inputClass}
-              >
-                <option value="">-- Chưa phân công --</option>
-                {departments.map(dep => (
-                  <option key={dep.id} value={dep.name}>
-                    {dep.name} ({dep.code})
-                  </option>
-                ))}
-              </select>
-              <p className="text-[10px] text-emerald-700/70 mt-1 italic">
-                Phòng ban / đơn vị chịu trách nhiệm xử lý
-              </p>
-            </div>
-
-            {/* Người thực hiện */}
-            <div>
-              <FieldLabel icon={<User className="w-3.5 h-3.5" />}>
-                Người thực hiện
-              </FieldLabel>
-              <input
-                type="text"
-                value={form.nguoiThucHien}
-                onChange={e => updateForm('nguoiThucHien', e.target.value)}
-                disabled={!canEdit}
-                className={inputClass}
-                placeholder="Họ tên cán bộ / KSV thụ lý"
-              />
-            </div>
-
-            {/* PVT (read-only) */}
-            {d.assignedPvtName && (
-              <div className="p-3 rounded-xl border border-blue-200 bg-blue-50">
-                <span className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider block mb-1">
-                  Lãnh đạo viện xử lý
-                </span>
-                <p className="font-bold text-xs text-blue-900">{d.assignedPvtName}</p>
-              </div>
-            )}
-
-            {/* Ghi chú */}
-            <div>
-              <FieldLabel>Ghi chú</FieldLabel>
-              <textarea
-                rows={3}
-                value={form.ghiChu}
-                onChange={e => updateForm('ghiChu', e.target.value)}
-                disabled={!canEdit}
-                className={inputClass}
-                placeholder="Ghi chú xử lý..."
-              />
-            </div>
-
-            {/* ═══════════════════════════════════════════
-                ⭐ FILE ĐÍNH KÈM — ĐÃ THÊM UPLOAD
-                ═══════════════════════════════════════════ */}
-            <div className="border-t border-slate-200 pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-900 flex items-center gap-1.5">
-                  <Paperclip className="w-3.5 h-3.5" />
-                  File đính kèm
-                  {!loadingFiles && attachments.length > 0 && (
-                    <span className="ml-1 text-[10px] font-black bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded-full">
-                      {attachments.length}
+              <div className="grid grid-cols-3 gap-2">
+                <MiniField label="Ngày ban hành">
+                  <span className="text-slate-800">{formatDateVN(d.ngayGui)}</span>
+                </MiniField>
+                <MiniField label="Hạn báo cáo">
+                  {isEditing ? (
+                    <input
+                      type="date"
+                      value={form.hanBaoCaoXuLy}
+                      onChange={e => updateField('hanBaoCaoXuLy', e.target.value)}
+                      className={inputCls}
+                    />
+                  ) : (
+                    <span className="text-slate-800">
+                      {formatDateVN(d.hanBaoCaoXuLy)}
                     </span>
                   )}
-                </h3>
-
-                {/* ⭐ Category select + nút chọn file */}
-                {canEdit && (
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={uploadCategory}
-                      onChange={e => setUploadCategory(e.target.value)}
-                      className="px-2 py-1 text-[10px] font-bold border border-slate-300 rounded-lg bg-white text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    >
-                      <option value="ORIGINAL">Bản gốc</option>
-                      <option value="DRAFT">Dự thảo</option>
-                      <option value="REPORT">Báo cáo</option>
-                      <option value="APPROVAL">Phê duyệt</option>
-                      <option value="OTHER">Khác</option>
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition cursor-pointer disabled:opacity-50 shadow-xs active:scale-95"
-                      title="Chọn file để tải lên"
-                    >
-                      {isUploading ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Đang tải ({uploadingCount})
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-3 h-3" />
-                          Tải file lên
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
+                </MiniField>
+                <MiniField label="Tình trạng">
+                  <span className={`font-bold ${statusTone}`}>
+                    {statusInfo.text}
+                  </span>
+                </MiniField>
               </div>
+            </Section>
 
-              {/* ⭐ Drag & Drop zone */}
-              {canEdit && (
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`mb-3 border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition ${
-                    isDragging
-                      ? 'border-indigo-500 bg-indigo-50 scale-[1.01]'
-                      : 'border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/40'
-                  }`}
-                >
-                  <Upload className={`w-6 h-6 mx-auto mb-1.5 ${isDragging ? 'text-indigo-600' : 'text-slate-400'}`} />
-                  <p className="text-xs font-bold text-slate-700">
-                    {isDragging ? '📥 Thả file vào đây' : 'Kéo thả file hoặc bấm để chọn'}
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    Hỗ trợ PDF, Word, Excel, ảnh — Tối đa {MAX_FILE_SIZE_MB}MB/file
-                  </p>
-                </div>
-              )}
+            {/* ───── SECTION 2: PHÂN CÔNG XỬ LÝ ───── */}
+            <Section icon={UserCheck} title="Phân công xử lý">
+              <Field label="Phó viện trưởng phụ trách">
+                {isEditing ? (
+                  <select
+                    value={form.assignedPvtId}
+                    onChange={e => updateField('assignedPvtId', e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">— Chưa phân công —</option>
+                    {pvtUsers.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.roomCode ? `${p.roomCode} — ` : ''}
+                        {p.fullName}
+                      </option>
+                    ))}
+                  </select>
+                ) : d.assignedPvtName ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-50 text-purple-800 border border-purple-200 rounded-md font-semibold">
+                    <UserCheck className="w-3.5 h-3.5" />
+                    {d.assignedPvtName}
+                  </span>
+                ) : (
+                  <span className="italic text-slate-400">Chưa phân công</span>
+                )}
+              </Field>
 
-              {/* Hidden input */}
+              <Field label="Trưởng phòng thực hiện">
+                {isEditing ? (
+                  <select
+                    value={form.assignedTpId}
+                    onChange={e => updateField('assignedTpId', e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">— Chưa phân công —</option>
+                    {tpUsers.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.department?.name || t.roomCode || '—'} — {t.fullName}
+                      </option>
+                    ))}
+                  </select>
+                ) : d.assignedTpName ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md font-semibold">
+                    {/* ⭐ Đổi icon + màu cho khớp bảng */}
+                    <CornerDownRight className="w-3.5 h-3.5" />
+                    {d.assignedTpName}
+                  </span>
+                ) : (
+                  <span className="italic text-slate-400">Chưa phân công</span>
+                )}
+              </Field>
+
+              <Field label="Người thực hiện">
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={form.nguoiThucHien}
+                    onChange={e => updateField('nguoiThucHien', e.target.value)}
+                    className={inputCls}
+                    placeholder="Họ tên cán bộ / Kiểm sát viên..."
+                  />
+                ) : (
+                  <span className="text-slate-800 font-medium">
+                    {d.nguoiThucHien || '—'}
+                  </span>
+                )}
+              </Field>
+
+              <Field label="Ghi chú">
+                {isEditing ? (
+                  <textarea
+                    rows={2}
+                    value={form.ghiChu}
+                    onChange={e => updateField('ghiChu', e.target.value)}
+                    className={inputCls}
+                    placeholder="Ghi chú xử lý..."
+                  />
+                ) : (
+                  <span className="text-slate-600">{d.ghiChu || '—'}</span>
+                )}
+              </Field>
+            </Section>
+
+            {/* ───── SECTION 3: FILE ĐÍNH KÈM ───── */}
+            <Section
+              icon={Paperclip}
+              title={`File đính kèm${attachments.length ? ` (${attachments.length})` : ''
+                }`}
+              action={
+                canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingCount > 0}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition cursor-pointer disabled:opacity-50"
+                  >
+                    {uploadingCount > 0 ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Đang tải ({uploadingCount})
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-3 h-3" />
+                        Tải lên
+                      </>
+                    )}
+                  </button>
+                ) : null
+              }
+            >
               <input
                 ref={fileInputRef}
                 type="file"
                 multiple
                 accept={ACCEPT_TYPES}
-                onChange={handleFileInputChange}
+                onChange={e => {
+                  if (e.target.files?.length) handleUploadFiles(e.target.files);
+                  e.target.value = '';
+                }}
                 className="hidden"
               />
 
-              {/* Loading */}
               {loadingFiles && (
-                <div className="flex items-center justify-center gap-2 py-6 text-slate-500">
+                <div className="flex items-center justify-center py-4 text-slate-400 gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-xs">Đang tải file...</span>
+                  <span className="text-[11px]">Đang tải...</span>
                 </div>
               )}
 
-              {/* Error */}
-              {!loadingFiles && filesError && (
-                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-700">
-                  ⚠️ {filesError}
+              {!loadingFiles && attachments.length === 0 && (
+                <div
+                  onDragOver={e => {
+                    e.preventDefault();
+                    if (canEdit) setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={e => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (canEdit && e.dataTransfer.files?.length)
+                      handleUploadFiles(e.dataTransfer.files);
+                  }}
+                  onClick={() => canEdit && fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-lg p-4 text-center transition ${!canEdit
+                    ? 'border-slate-200 bg-slate-50 cursor-default'
+                    : isDragging
+                      ? 'border-indigo-500 bg-indigo-50 cursor-pointer'
+                      : 'border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/40 cursor-pointer'
+                    }`}
+                >
+                  <Upload
+                    className={`w-5 h-5 mx-auto mb-1 ${isDragging ? 'text-indigo-600' : 'text-slate-400'
+                      }`}
+                  />
+                  <p className="text-[11px] font-semibold text-slate-600">
+                    {!canEdit
+                      ? 'Chưa có file đính kèm'
+                      : isDragging
+                        ? 'Thả file vào đây'
+                        : 'Kéo thả hoặc bấm để chọn file'}
+                  </p>
+                  {canEdit && (
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      PDF, Word, Excel, ảnh — tối đa {MAX_FILE_SIZE_MB}MB
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* Empty */}
-              {!loadingFiles && !filesError && attachments.length === 0 && (
-                <div className="text-center py-6 text-slate-400">
-                  <Paperclip className="w-6 h-6 mx-auto mb-1.5 opacity-40" />
-                  <p className="text-xs italic">Chưa có file đính kèm</p>
-                </div>
-              )}
-
-              {/* ⭐ Danh sách file */}
-              {!loadingFiles && !filesError && attachments.length > 0 && (
-                <div className="space-y-2">
-                  {attachments.map(att => {
-                    const isDownloading = downloadingId === att.id;
-                    return (
-                      <div
-                        key={att.id}
-                        className="flex items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition"
-                      >
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-                            <FileText className="w-4 h-4 text-indigo-600" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-semibold text-slate-900 truncate" title={att.fileName}>
-                              {att.fileName}
-                            </div>
-                            <div className="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap">
-                              {att.fileSize && <span>{formatSize(att.fileSize)}</span>}
-                              {att.fileCategory && (
-                                <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[9px] font-bold">
-                                  {att.fileCategory}
-                                </span>
-                              )}
-                              {att.uploaderName && (
-                                <span className="text-slate-400">• {att.uploaderName}</span>
-                              )}
-                            </div>
-                          </div>
+              {!loadingFiles && attachments.length > 0 && (
+                <div className="space-y-1.5">
+                  {attachments.map(att => (
+                    <div
+                      key={att.id}
+                      onClick={() => handleOpenFile(att)}
+                      className="flex items-center gap-2 px-2.5 py-2 bg-white rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 cursor-pointer transition group"
+                      title="Bấm để mở trong tab mới"
+                    >
+                      <div className="w-7 h-7 rounded-md bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                        <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className="text-[11px] font-semibold text-slate-800 truncate"
+                          title={att.fileName}
+                        >
+                          {att.fileName}
                         </div>
-
-                        <div className="flex items-center gap-1 shrink-0">
-                          {/* Nút tải về */}
-                          <button
-                            onClick={() => handleDownload(att)}
-                            disabled={isDownloading}
-                            className="p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition cursor-pointer"
-                            title="Tải xuống"
-                          >
-                            {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                          </button>
-
-                          {/* ⭐ Nút xóa file */}
-                          {canEdit && (
-                            <button
-                              onClick={() => handleDeleteAttachment(att)}
-                              className="p-1.5 rounded-lg bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 hover:border-rose-300 transition cursor-pointer"
-                              title="Xóa file"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                        <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                          {att.fileSize && <span>{formatSize(att.fileSize)}</span>}
+                          {att.fileCategory && (
+                            <span className="px-1 py-0.5 bg-slate-100 rounded text-[9px] font-bold text-slate-600">
+                              {att.fileCategory}
+                            </span>
                           )}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="p-1.5 rounded-md text-slate-400 group-hover:text-indigo-600 transition">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </span>
 
-            {/* Custom Fields */}
-            {customColumns.length > 0 && (
-              <div className="space-y-2 pt-4 border-t border-slate-200">
-                <span className="text-xs font-bold uppercase tracking-wider text-purple-900 block">
-                  Thông tin bổ sung
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  {customColumns.map(c => (
-                    <div key={c.id} className={`p-2.5 rounded-lg bg-slate-50 border border-slate-200 ${c.type === 'file' ? 'sm:col-span-2' : ''}`}>
-                      <span className="text-[11px] text-slate-500 block font-medium">{c.label}</span>
-                      <span className="font-semibold text-slate-800">
-                        {d.customFields?.[c.id] || '(Chưa có)'}
-                      </span>
+                        <button
+                          onClick={e => handleDownload(att, e)}
+                          disabled={downloadingId === att.id}
+                          className="p-1.5 rounded-md text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 cursor-pointer"
+                          title="Tải về"
+                        >
+                          {downloadingId === att.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+
+                        {canEdit && (
+                          <button
+                            onClick={e => handleDeleteAttachment(att, e)}
+                            className="p-1.5 rounded-md text-rose-500 hover:bg-rose-50 cursor-pointer"
+                            title="Xóa"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </Section>
           </div>
 
-          {/* FOOTER */}
-          <div className="bg-slate-50 px-4 sm:px-6 py-3 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+          {/* ════════ FOOTER ════════ */}
+          <div className="px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2">
-              {canEdit && !isCompleted && onMarkComplete && (
+              {/* ⭐ Chưa hoàn thành → nút "Đánh dấu hoàn thành" */}
+              {!isCompleted && canEdit && onMarkComplete && (
                 <button
-                  type="button"
                   onClick={handleMarkComplete}
-                  disabled={isCompleting}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition cursor-pointer active:scale-95 disabled:opacity-50"
+                  disabled={isCompleting || isDeleting || isReopening}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer disabled:opacity-50"
                 >
                   {isCompleting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -853,62 +907,129 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 </button>
               )}
 
-              {isCompleted && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+              {/* ⭐ Đã hoàn thành + có quyền mở lại → nút "Bỏ hoàn thành" */}
+              {isCompleted && canEdit && onReopen && (
+                <button
+                  onClick={handleReopen}
+                  disabled={isReopening || isDeleting || isCompleting}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition cursor-pointer disabled:opacity-50"
+                  title="Mở lại công văn để tiếp tục xử lý"
+                >
+                  {isReopening ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  )}
+                  Bỏ hoàn thành
+                </button>
+              )}
+
+              {/* ⭐ Đã hoàn thành + không có quyền mở lại → badge tĩnh */}
+              {isCompleted && (!canEdit || !onReopen) && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <CheckCircle2 className="w-4 h-4" />
                   Đã hoàn thành
                 </span>
               )}
-            </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-200 transition cursor-pointer border border-slate-300"
-              >
-                Đóng
-              </button>
-
-              {canEdit && onUpdate && (
+              {/* Nút Xoá */}
+              {canEdit && onDelete && (
                 <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving || !isDirty}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg bg-red-700 hover:bg-red-800 text-white shadow-xs transition cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={!isDirty ? 'Chưa có thay đổi' : 'Lưu vào cơ sở dữ liệu'}
+                  onClick={handleDelete}
+                  disabled={isDeleting || isCompleting || isReopening}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition cursor-pointer disabled:opacity-50"
+                  title="Xoá công văn (ẩn khỏi danh sách)"
                 >
-                  {isSaving ? (
+                  {isDeleting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <Save className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   )}
-                  Lưu
+                  Xoá
                 </button>
               )}
             </div>
+
+            <button
+              onClick={onClose}
+              className="px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer"
+            >
+              Đóng
+            </button>
           </div>
         </div>
       </div>
 
       {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-[60] animate-fadeIn">
-          <div className={`px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${
-            toast.type === 'success'
+        <div className="fixed bottom-6 right-6 z-[70]">
+          <div
+            className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
               ? 'bg-slate-900 text-white border-slate-700'
               : toast.type === 'error'
-              ? 'bg-rose-600 text-white border-rose-700'
-              : 'bg-blue-600 text-white border-blue-700'
-          }`}>
-            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                ? 'bg-rose-600 text-white border-rose-700'
+                : 'bg-blue-600 text-white border-blue-700'
+              }`}
+          >
+            {toast.type === 'success' && (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            )}
             {toast.type === 'error' && <AlertCircle className="w-4 h-4" />}
-            <span>{toast.message}</span>
+            <span>{toast.msg}</span>
           </div>
         </div>
       )}
     </>
   );
 };
+
+// ============================================
+// REUSABLE SUB-COMPONENTS
+// ============================================
+const inputCls =
+  'w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white';
+
+interface SectionProps {
+  icon: React.ElementType;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}
+const Section: React.FC<SectionProps> = ({ icon: Icon, title, action, children }) => (
+  <section className="border border-slate-200 rounded-xl bg-white overflow-hidden">
+    <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+      <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-600 uppercase tracking-wider">
+        <Icon className="w-3.5 h-3.5" />
+        {title}
+      </div>
+      {action}
+    </div>
+    <div className="p-3 space-y-2.5">{children}</div>
+  </section>
+);
+
+const Field: React.FC<{ label: string; children: React.ReactNode }> = ({
+  label,
+  children,
+}) => (
+  <div>
+    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+      {label}
+    </div>
+    {children}
+  </div>
+);
+
+const MiniField: React.FC<{ label: string; children: React.ReactNode }> = ({
+  label,
+  children,
+}) => (
+  <div>
+    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+      {label}
+    </div>
+    <div className="text-[11px]">{children}</div>
+  </div>
+);
 
 export default DispatchDetailDrawer;

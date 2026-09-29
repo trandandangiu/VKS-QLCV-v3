@@ -3,6 +3,7 @@ import express from 'express';
 import { usersController } from '../controllers/users.controller.js';
 import { authenticate, optionalAuth } from '../middlewares/auth.js';
 import { requirePermission } from '../middlewares/permission.js';
+import prisma from '../config/prisma.js';
 import {
   validateCreateUser,
   validateUpdateUser,
@@ -34,12 +35,62 @@ router.get(
 // ============================================
 // POST /api/users — CẦN LOGIN
 // ============================================
+// ============================================
+// POST /api/users/verify-pvt-username
+// Public — dùng để khách xác thực khi xem công văn của PVT
+// ============================================
 router.post(
-  '/',
-  authenticate,
-  requirePermission('user:create'),
-  validateCreateUser,
-  usersController.createUser
+  '/verify-pvt-username',
+  async (req, res) => {
+    try {
+      const { username, pvtId } = req.body || {};
+
+      if (!username || !pvtId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Thiếu thông tin xác thực',
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { username: username.trim().toLowerCase() },
+        include: {
+          userRoles: { include: { role: true } },
+        },
+      });
+
+      if (!user || user.deletedAt || !user.active) {
+        return res.json({ success: false, message: 'Tên đăng nhập không tồn tại' });
+      }
+
+      // Check đúng PVT này
+      if (user.id !== pvtId) {
+        return res.json({
+          success: false,
+          message: 'Tên đăng nhập không khớp với lãnh đạo đã chọn',
+        });
+      }
+
+      // Check có role PHO_VIEN_TRUONG
+      const isPvt = user.userRoles.some(ur => ur.role.code === 'PHO_VIEN_TRUONG');
+      if (!isPvt) {
+        return res.json({ success: false, message: 'Tài khoản không phải Phó Viện trưởng' });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Xác thực thành công',
+        pvt: {
+          id: user.id,
+          fullName: user.fullName,
+          roomCode: user.roomCode,
+        },
+      });
+    } catch (err) {
+      console.error('[VERIFY_PVT]', err);
+      res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+    }
+  }
 );
 
 // ============================================

@@ -52,14 +52,17 @@ export const attachmentsController = {
         req.user
       );
 
-      // Set headers
+      // ⭐ inline=1 → mở xem trực tiếp trên Chrome
+      //    mặc định      → tải về máy
+      const isInline = req.query.inline === '1';
+      const disposition = isInline ? 'inline' : 'attachment';
+
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="${encodeURIComponent(attachment.fileName)}"`
+        `${disposition}; filename="${encodeURIComponent(attachment.fileName)}"`
       );
       res.setHeader('Content-Type', attachment.fileType);
 
-      // Stream file
       const fileStream = fs.createReadStream(attachment.filePath);
       fileStream.pipe(res);
     } catch (err) {

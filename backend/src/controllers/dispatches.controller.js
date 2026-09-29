@@ -109,4 +109,16 @@ export const dispatchesController = {
       next(err);
     }
   },
+  async reopenDispatch(req, res, next) {
+    try {
+      const result = await dispatchesService.reopenDispatch(
+        req.params.id,
+        req.user,
+        req.body?.note
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

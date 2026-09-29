@@ -116,9 +116,40 @@ export const dispatchesService = {
       prisma.dispatch.count({ where }),
     ]);
 
-    // ⭐ KHÔNG ẩn gì cả — trả hết
+    // ═══════════════════════════════════════════════════════
+    // ⭐ ĐẾM LẠI ATTACHMENT CHƯA XOÁ CHO TỪNG DISPATCH
+    // Lý do: Prisma 6.x không hỗ trợ `where` trong `_count.select`
+    //        → `_count.attachments` đếm cả file đã xoá mềm
+    //        → Drawer load (filter isDeleted: false) bị lệch số
+    // ═══════════════════════════════════════════════════════
+    const dispatchIds = dispatches.map(d => d.id);
+
+    const attachCounts =
+      dispatchIds.length > 0
+        ? await prisma.attachment.groupBy({
+          by: ['dispatchId'],
+          where: {
+            dispatchId: { in: dispatchIds },
+            isDeleted: false,
+          },
+          _count: { _all: true },
+        })
+        : [];
+
+    const attachCountMap = new Map(
+      attachCounts.map(a => [a.dispatchId, a._count._all])
+    );
+
+    const dispatchesWithCount = dispatches.map(d => ({
+      ...d,
+      _count: {
+        ...(d._count || {}),
+        attachments: attachCountMap.get(d.id) || 0,
+      },
+    }));
+
     return {
-      dispatches,
+      dispatches: dispatchesWithCount,
       pagination: {
         page,
         limit,
@@ -167,6 +198,20 @@ export const dispatchesService = {
     if (!dispatch || dispatch.deletedAt) {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
+
+    // ⭐ Đếm lại attachment chưa xoá (chính xác)
+    const realAttachCount = await prisma.attachment.count({
+      where: {
+        dispatchId: dispatch.id,
+        isDeleted: false,
+      },
+    });
+
+    // Gán vào _count nếu có
+    dispatch._count = {
+      ...(dispatch._count || {}),
+      attachments: realAttachCount,
+    };
 
     // Khách → trả hết, không cần check quyền
     if (isGuest) {
@@ -269,10 +314,6 @@ export const dispatchesService = {
     // 🔔 BROADCAST THÔNG BÁO CÔNG VĂN MỚI
     // Gửi cho tất cả VT, PVT, TP (trừ người tạo)
     // ═══════════════════════════════════════════
-    // ═══════════════════════════════════════════
-    // 🔔 BROADCAST THÔNG BÁO CÔNG VĂN MỚI
-    // Gửi cho tất cả VT, PVT, TP (trừ người tạo)
-    // ═══════════════════════════════════════════
     try {
       const allUsers = await prisma.user.findMany({
         where: {
@@ -288,14 +329,17 @@ export const dispatchesService = {
       });
 
       const targetUsers = allUsers.filter(u =>
-        u.userRoles.some(ur =>
-          ur.role.code === 'VIEN_TRUONG' ||
-          ur.role.code === 'PHO_VIEN_TRUONG' ||
-          ur.role.code === 'TRUONG_PHONG'
+        u.userRoles.some(
+          ur =>
+            ur.role.code === 'VIEN_TRUONG' ||
+            ur.role.code === 'PHO_VIEN_TRUONG' ||
+            ur.role.code === 'TRUONG_PHONG'
         )
       );
 
-      console.log(`🔔 Broadcast công văn mới "${soCongVan}" đến ${targetUsers.length} users`);
+      console.log(
+        `🔔 Broadcast công văn mới "${soCongVan}" đến ${targetUsers.length} users`
+      );
 
       for (const u of targetUsers) {
         try {
@@ -325,7 +369,9 @@ export const dispatchesService = {
         content: `${soCongVan} — "${tenCongVan}"`,
         url: '/',
       });
-      console.log(`📢 [PUSH] Đã broadcast công văn mới "${soCongVan}" cho tất cả thiết bị`);
+      console.log(
+        `📢 [PUSH] Đã broadcast công văn mới "${soCongVan}" cho tất cả thiết bị`
+      );
     } catch (err) {
       console.error('❌ Lỗi broadcast push cho khách:', err.message);
     }
@@ -372,14 +418,27 @@ export const dispatchesService = {
     // Build update data
     const updateData = {};
     const allowed = [
-      'soCongVan', 'tenCongVan', 'ngayGui', 'ngayPhatHanh',
-      'hanBaoCaoXuLy', 'donViBanHanh', 'nguoiThucHien', 'ghiChu',
-      'mucDoKhan', 'loaiCongVan', 'customFields', 'tags',
+      'soCongVan',
+      'tenCongVan',
+      'ngayGui',
+      'ngayPhatHanh',
+      'hanBaoCaoXuLy',
+      'donViBanHanh',
+      'nguoiThucHien',
+      'ghiChu',
+      'mucDoKhan',
+      'loaiCongVan',
+      'customFields',
+      'tags',
     ];
 
     allowed.forEach(field => {
       if (data[field] !== undefined) {
-        if (field === 'ngayGui' || field === 'ngayPhatHanh' || field === 'hanBaoCaoXuLy') {
+        if (
+          field === 'ngayGui' ||
+          field === 'ngayPhatHanh' ||
+          field === 'hanBaoCaoXuLy'
+        ) {
           updateData[field] = data[field] ? new Date(data[field]) : null;
         } else {
           updateData[field] = data[field];
@@ -509,6 +568,11 @@ export const dispatchesService = {
   // 7. ĐÁNH DẤU HOÀN THÀNH (PVT/TP tự chốt)
   // ============================================
   async markComplete(dispatchId, currentUser, note) {
+    // ⭐ Guard
+    if (!currentUser || !currentUser.id) {
+      throw { status: 401, message: 'Chưa đăng nhập' };
+    }
+
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
       include: {
@@ -525,7 +589,7 @@ export const dispatchesService = {
       throw { status: 400, message: 'Công văn đã hoàn thành' };
     }
 
-    // Check quyền: VT/PVT/TP đều có thể hoàn thành
+    // Check quyền
     const perms = currentUser.permissions || [];
     const isVtOrAdmin =
       perms.includes('dispatch:view:all') ||
@@ -569,6 +633,93 @@ export const dispatchesService = {
     return {
       success: true,
       message: 'Đã đánh dấu hoàn thành',
+      dispatch: updated,
+    };
+  },
+
+  // ============================================
+  // 8. MỞ LẠI CÔNG VĂN (UNDO HOÀN THÀNH)
+  // ============================================
+  async reopenDispatch(dispatchId, currentUser, note) {
+    if (!currentUser || !currentUser.id) {
+      throw { status: 401, message: 'Chưa đăng nhập' };
+    }
+
+    const dispatch = await prisma.dispatch.findUnique({
+      where: { id: dispatchId },
+      include: {
+        dispatchPvts: true,
+        dispatchTps: true,
+      },
+    });
+
+    if (!dispatch || dispatch.deletedAt) {
+      throw { status: 404, message: 'Không tìm thấy công văn' };
+    }
+
+    if (dispatch.trangThai !== 'HOAN_THANH') {
+      throw {
+        status: 400,
+        message: 'Công văn chưa hoàn thành, không thể mở lại',
+      };
+    }
+
+    // Check quyền
+    const perms = currentUser.permissions || [];
+    const isVtOrAdmin =
+      perms.includes('dispatch:view:all') ||
+      currentUser.roles?.includes('VIEN_TRUONG') ||
+      currentUser.roles?.includes('ADMIN');
+
+    const isAssignedPvt = dispatch.dispatchPvts.some(
+      dp => dp.pvtId === currentUser.id
+    );
+    const isAssignedTp = dispatch.dispatchTps.some(
+      dt => dt.tpId === currentUser.id
+    );
+
+    if (!isVtOrAdmin && !isAssignedPvt && !isAssignedTp) {
+      throw { status: 403, message: 'Bạn không có quyền mở lại công văn này' };
+    }
+
+    // ⭐ Quyết định trạng thái mở lại
+    let restoreStatus = 'DANG_XU_LY';
+
+    if (dispatch.dispatchTps?.length > 0) {
+      restoreStatus = 'CHO_PVT_DUYET';
+    } else if (dispatch.dispatchPvts?.length > 0) {
+      restoreStatus = 'CHO_TP_XU_LY';
+    }
+
+    const updated = await prisma.$transaction(async tx => {
+      const result = await tx.dispatch.update({
+        where: { id: dispatchId },
+        data: {
+          trangThai: restoreStatus,
+          tienDo: 0,
+          completedAt: null,
+          baoCaoTienDo: note || dispatch.baoCaoTienDo,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: currentUser.id,
+          userName: currentUser.fullName,
+          action: 'REOPEN_DISPATCH',
+          entityType: 'dispatch',
+          entityId: dispatchId,
+          oldValue: { trangThai: 'HOAN_THANH' },
+          newValue: { trangThai: restoreStatus, note },
+        },
+      });
+
+      return result;
+    });
+
+    return {
+      success: true,
+      message: 'Đã mở lại công văn',
       dispatch: updated,
     };
   },

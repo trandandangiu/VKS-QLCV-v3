@@ -112,14 +112,22 @@ async function main() {
   }
 
   // ROLE 2: VIEN_TRUONG
-  const vienTruongPerms = [
-    'user:view:all', 'user:view:own', 'user:create', 'user:update:all', 'user:delete', 'user:assign-role',
-    'dispatch:view:all', 'dispatch:create', 'dispatch:update:all', 'dispatch:delete', 'dispatch:export', 'dispatch:import',
-    'assignment:assign:pvt', 'assignment:agree', 'assignment:disagree', 'assignment:reassign', 'assignment:delegate',
-    'report:view:all', 'report:export',
-    'stats:view:all', 'stats:export',
-    'admin:database:view', 'admin:audit-logs:view',
-  ];
+const vienTruongPerms = [
+  'user:view:all', 'user:view:own', 'user:create', 'user:update:all', 'user:delete', 'user:assign-role',
+
+  'dispatch:view:all', 'dispatch:create', 'dispatch:update:all', 'dispatch:delete',
+  'dispatch:export', 'dispatch:import',
+
+  'assignment:assign:pvt',
+  'assignment:assign:tp',           // ⭐ THÊM DÒNG NÀY
+  'assignment:agree', 'assignment:disagree',
+  'assignment:reassign', 'assignment:delegate',
+
+  'report:view:all', 'report:export',
+  'stats:view:all', 'stats:export',
+
+  'admin:database:view', 'admin:audit-logs:view',
+];
 
   for (const code of vienTruongPerms) {
     const perm = await prisma.permission.findUnique({ where: { code } });

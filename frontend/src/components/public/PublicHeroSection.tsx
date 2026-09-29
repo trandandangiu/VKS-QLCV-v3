@@ -246,15 +246,7 @@ export const PublicHeroSection: React.FC<PublicHeroSectionProps> = ({
                     )}
 
                     {/* Nút bỏ lọc */}
-                    {selectedPvtId && onSelectPvt && (
-                      <button
-                        onClick={() => onSelectPvt(null)}
-                        className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold text-white bg-white/15 hover:bg-white/25 rounded border border-white/25 transition cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-
-                      </button>
-                    )}
+                    
                   </div>
                 </div>
 

@@ -228,6 +228,7 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
             type="file"
             multiple
             accept={accept}
+              data-attachment-input="true"  
             className="hidden"
             onChange={e => {
               if (e.target.files?.length) {

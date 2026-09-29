@@ -313,6 +313,15 @@ export const apiClient = {
     });
     return !!data.success;
   },
+  async reopenDispatch(
+    id: string,
+    note?: string
+  ): Promise<{ success: boolean; message?: string; dispatch?: Dispatch }> {
+    return await request(`/dispatches/${id}/reopen`, {
+      method: 'PATCH',
+      body: JSON.stringify({ note }),
+    });
+  },
 
   // ============================================
   // 4. ATTACHMENTS
@@ -598,5 +607,21 @@ export const apiClient = {
       { method: 'DELETE' }
     );
     return !!data.success;
+  },
+  // Public — không cần token
+  async verifyPvtUsername(
+    username: string,
+    pvtId: string
+  ): Promise<{ success: boolean; message?: string; pvt?: { id: string; fullName: string; roomCode?: string } }> {
+    try {
+      const res = await fetch(`${API_BASE}/users/verify-pvt-username`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, pvtId }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Lỗi kết nối' };
+    }
   },
 };

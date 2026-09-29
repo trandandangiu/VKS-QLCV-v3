@@ -8,7 +8,6 @@ import { ColumnDefinition, Dispatch } from '../types/dispatch';
 import {
   resolveDispatchStatus,
   parseExcelAndReconcile,
-  parsePastedTextAndReconcile,
 } from '../services/excelService';
 import { AttachmentUploader, AttachmentItem } from './attachments/AttachmentUploader';
 import { apiClient } from '../services/apiClient';
@@ -20,7 +19,6 @@ interface DispatchModalProps {
   dispatchToEdit: Dispatch | null;
   columns: ColumnDefinition[];
   onSave: (data: any) => Promise<boolean> | boolean | void;
-  /** Callback khi import nhiều dòng Excel — parent tự xử lý bulk */
   onBulkImport?: (items: Partial<Dispatch>[]) => Promise<boolean> | void;
 }
 
@@ -171,7 +169,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   const [selectedPvtId, setSelectedPvtId] = useState<string>('');
   const [selectedTpId, setSelectedTpId] = useState<string>('');
 
-  // 🎯 Excel Import
+  // Excel Import
   const excelInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importedItems, setImportedItems] = useState<Partial<Dispatch>[]>([]);
@@ -299,13 +297,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   const warnMeta = getWarningMeta(daysFromToday, isCompleted);
 
   // ============================================
-  // 🎯 HANDLE EXCEL IMPORT
-  //    - Đọc file
-  //    - parseExcelAndReconcile → analysis
-  //    - Lấy newItems (bỏ qua existingMatches)
-  //    - Lưu vào importedItems
-  //    - Nếu có 1 dòng → fill luôn vào form
-  //    - Nếu nhiều dòng → hiện preview
+  // HANDLE EXCEL IMPORT
   // ============================================
   const handleExcelFile = async (file: File) => {
     setIsImporting(true);
@@ -313,7 +305,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     try {
       const analysis = await parseExcelAndReconcile(file, [], customColumns);
 
-      // Chỉ lấy dòng mới (chưa tồn tại) — bỏ qua existingMatches
       const newItems = analysis.newItems || [];
 
       if (newItems.length === 0) {
@@ -321,7 +312,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         return;
       }
 
-      // Gán tạm các giá trị mặc định cho phân công (nếu user đã chọn)
       const pvtUser = pvtUsers.find(u => u.id === selectedPvtId);
       const tpUser = filteredTpUsers.find(u => u.id === selectedTpId);
       const enriched = newItems.map(item => ({
@@ -337,12 +327,10 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       setImportedItems(enriched);
       setImportedFileName(file.name);
 
-      // Nếu chỉ 1 dòng → fill luôn vào form
       if (newItems.length === 1) {
         const first = newItems[0];
         setFormData(prev => ({
           ...prev,
-          // Chỉ ghi đè những field CÓ giá trị trong Excel
           ...(first.ngayGui ? { ngayGui: first.ngayGui } : {}),
           ...(first.soCongVan ? { soCongVan: first.soCongVan } : {}),
           ...(first.ngayPhatHanh ? { ngayPhatHanh: first.ngayPhatHanh } : {}),
@@ -356,7 +344,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           customFields: { ...prev.customFields, ...(first.customFields || {}) },
         }));
       } else {
-        // Nhiều dòng → mở preview
         setImportPreviewOpen(true);
       }
     } catch (err: any) {
@@ -368,14 +355,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   };
 
   // ============================================
-  // 🎯 ÁP DỤNG 1 DÒNG TỪ PREVIEW
+  // ÁP DỤNG 1 DÒNG TỪ PREVIEW
   // ============================================
   const applyImportedItem = (idx: number) => {
     const item = importedItems[idx];
     if (!item) return;
     setFormData(prev => ({
       ...prev,
-      // Chỉ ghi đè những field CÓ giá trị trong Excel
       ...(item.ngayGui ? { ngayGui: item.ngayGui } : {}),
       ...(item.soCongVan ? { soCongVan: item.soCongVan } : {}),
       ...(item.ngayPhatHanh ? { ngayPhatHanh: item.ngayPhatHanh } : {}),
@@ -392,13 +378,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   };
 
   // ============================================
-  // 🎯 SUBMIT
+  // SUBMIT
   // ============================================
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (isSubmitting) return;
 
-    // Nếu đang có nhiều item import → bulk
+    // Bulk import
     if (importedItems.length > 1 && !dispatchToEdit) {
       setIsSubmitting(true);
       setErrorMsg(null);
@@ -406,7 +392,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         if (onBulkImport) {
           await onBulkImport(importedItems);
         } else {
-          // Fallback: submit từng cái qua onSave
           for (const item of importedItems) {
             await onSave(item);
           }
@@ -420,7 +405,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       return;
     }
 
-    // Validate như cũ
+    // Validate
     if (!formData.soCongVan?.trim()) {
       setErrorMsg('Vui lòng nhập Số công việc');
       return;
@@ -431,6 +416,16 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     }
     if (!formData.donViBanHanh?.trim()) {
       setErrorMsg('Vui lòng nhập Đơn vị ban hành');
+      return;
+    }
+
+    // Validate ngày (nếu có nhập tay sai)
+    if (formData.ngayGui && !/^\d{4}-\d{2}-\d{2}$/.test(formData.ngayGui)) {
+      setErrorMsg('Ngày tiếp nhận không hợp lệ (cần định dạng DD/MM/YYYY)');
+      return;
+    }
+    if (formData.hanBaoCaoXuLy && !/^\d{4}-\d{2}-\d{2}$/.test(formData.hanBaoCaoXuLy)) {
+      setErrorMsg('Hạn báo cáo không hợp lệ (cần định dạng DD/MM/YYYY)');
       return;
     }
 
@@ -500,7 +495,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               <p className="text-xs text-red-100">
                 {dispatchToEdit
                   ? `Đang sửa: ${dispatchToEdit.soCongVan}`
-                  : 'Nhập thông tin công việc mới'}
+                  : ''}
               </p>
             </div>
           </div>
@@ -525,162 +520,12 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             </div>
           )}
 
-          {/* ============================================
-              🎯 KHU VỰC IMPORT EXCEL (chỉ khi tạo mới)
-              ============================================ */}
-          {!dispatchToEdit && (
-            <div className="rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-300 flex items-center justify-center shrink-0">
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-emerald-900 uppercase tracking-wide">
-                      Nhập dữ liệu từ Excel
-                    </div>
-                    <div className="text-[11px] text-emerald-700 mt-0.5">
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <input
-                    ref={excelInputRef}
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    className="hidden"
-                    onChange={e => {
-                      const f = e.target.files?.[0];
-                      if (f) handleExcelFile(f);
-                      e.target.value = '';
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => excelInputRef.current?.click()}
-                    disabled={isImporting}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition cursor-pointer disabled:opacity-50 active:scale-95"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    {isImporting ? 'Đang đọc...' : 'Chọn file '}
-                  </button>
-
-                  {importedItems.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImportedItems([]);
-                        setImportedFileName('');
-                        setImportPreviewOpen(false);
-                        setImportError(null);
-                      }}
-                      className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-100 transition cursor-pointer"
-                      title="Xoá file đã import"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Trạng thái file đã import */}
-              {importedFileName && importedItems.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-emerald-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs">
-                      <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-                      <span className="font-bold text-emerald-900">{importedFileName}</span>
-                      <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded font-bold text-[10px]">
-                        {importedItems.length} dòng
-                      </span>
-                    </div>
-
-                    {importedItems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setImportPreviewOpen(!importPreviewOpen)}
-                        className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 cursor-pointer"
-                      >
-                        {importPreviewOpen ? 'Ẩn' : 'Xem'} danh sách
-                        {importPreviewOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                      </button>
-                    )}
-                  </div>
-
-                  {importedItems.length === 1 && (
-                    <p className="mt-1.5 text-[11px] text-emerald-700 italic">
-                      ✓ Đã tự động điền vào form bên dưới — chỉ các trường có trong file
-                    </p>
-                  )}
-
-                  {importedItems.length > 1 && (
-                    <p className="mt-1.5 text-[11px] text-emerald-700 italic">
-                      Khi bấm "Lưu công việc", toàn bộ {importedItems.length} dòng sẽ được tạo.
-                      Hoặc chọn 1 dòng bên dưới để điền vào form.
-                    </p>
-                  )}
-
-                  {/* Preview danh sách nhiều dòng */}
-                  {importPreviewOpen && importedItems.length > 1 && (
-                    <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-emerald-200 bg-white">
-                      <table className="w-full text-left text-[11px]">
-                        <thead className="bg-emerald-100 sticky top-0">
-                          <tr>
-                            <th className="px-2 py-1.5 font-bold text-emerald-900 w-8">#</th>
-                            <th className="px-2 py-1.5 font-bold text-emerald-900">Số CV</th>
-                            <th className="px-2 py-1.5 font-bold text-emerald-900">Trích yếu</th>
-                            <th className="px-2 py-1.5 font-bold text-emerald-900 w-24">Hạn</th>
-                            <th className="px-2 py-1.5 w-16"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-emerald-100">
-                          {importedItems.map((it, idx) => (
-                            <tr key={idx} className="hover:bg-emerald-50">
-                              <td className="px-2 py-1.5 text-slate-500">{idx + 1}</td>
-                              <td className="px-2 py-1.5 font-bold text-slate-900">
-                                {it.soCongVan || '—'}
-                              </td>
-                              <td className="px-2 py-1.5 text-slate-700 truncate max-w-xs">
-                                {it.tenCongVan || '—'}
-                              </td>
-                              <td className="px-2 py-1.5 text-slate-600 font-mono">
-                                {it.hanBaoCaoXuLy || '—'}
-                              </td>
-                              <td className="px-2 py-1.5 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => applyImportedItem(idx)}
-                                  className="px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 rounded"
-                                >
-                                  Điền
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {importError && (
-                <div className="mt-3 p-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-700 font-medium">
-                  {importError}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ===== HÀNG 1 ===== */}
-          {/* ===== HÀNG ĐẦU: NGÀY GỬI + SỐ CV + NGÀY PHÁT HÀNH + HẠN BÁO CÁO + ĐƠN VỊ BAN HÀNH ===== */}
+          {/* ===== HÀNG ĐẦU ===== */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="NGÀY TIẾP NHẬN" required>
-              <input
-                type="date"
-                value={formData.ngayGui || ''}
-                onChange={e => setFormData({ ...formData, ngayGui: e.target.value })}
+              <DateInput
+                value={formData.ngayGui}
+                onChange={v => setFormData({ ...formData, ngayGui: v })}
                 className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               />
             </Field>
@@ -695,25 +540,14 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               />
             </Field>
 
-            {/* <Field label="NGÀY PHÁT HÀNH">
-              <input
-                type="date"
-                value={formData.ngayPhatHanh || ''}
-                onChange={e => setFormData({ ...formData, ngayPhatHanh: e.target.value })}
-                className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              />
-            </Field> */}
-
             <Field label="HẠN BÁO CÁO, XỬ LÝ" required>
-              <input
-                type="date"
-                value={formData.hanBaoCaoXuLy || ''}
-                onChange={e => setFormData({ ...formData, hanBaoCaoXuLy: e.target.value })}
+              <DateInput
+                value={formData.hanBaoCaoXuLy}
+                onChange={v => setFormData({ ...formData, hanBaoCaoXuLy: v })}
                 className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               />
             </Field>
 
-            {/* 🎯 ĐƠN VỊ BAN HÀNH — bắt buộc, đặt cạnh Số công việc */}
             <Field label="ĐƠN VỊ BAN HÀNH" required>
               <input
                 type="text"
@@ -728,7 +562,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           {/* ===== 3 CỘT ĐỘNG ===== */}
           <div className="pt-2">
             <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">
-              Thời hạn & Cảnh báo 
+              Thời hạn & Cảnh báo
             </div>
             <div className="grid grid-cols-3 border border-slate-300 rounded-xl overflow-hidden">
               <div className="bg-slate-100 px-3 py-2 border-b border-r border-slate-300">
@@ -777,14 +611,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
             />
           </Field>
-          {/* ===== PHÂN CÔNG ===== */}
+
           {/* ===== PHÂN CÔNG XỬ LÝ ===== */}
           <div className="pt-3 border-t border-slate-200">
             <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">
               Phân công xử lý
             </div>
 
-            {/* ── Hàng 1: PVT (chỉ chiếm 1/2 chiều ngang) ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="PHÓ VIỆN TRƯỞNG PHỤ TRÁCH">
                 <select
@@ -801,13 +634,11 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   ))}
                 </select>
               </Field>
-              {/* Cột phải để trống — giúp PVT chỉ chiếm 1/2 form */}
               <div />
             </div>
 
-            {/* ── Hàng 2: Đơn vị + Người thực hiện ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-              <Field label="ĐƠN VỊ THỰC HIỆN ">
+              <Field label="ĐƠN VỊ THỰC HIỆN">
                 <select
                   value={selectedDeptCode}
                   onChange={e => {
@@ -845,17 +676,150 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             </div>
           </div>
 
+          {/* ═══════════════════════════════════════════════
+              ĐÍNH KÈM — thu gọn
+              ═══════════════════════════════════════════════ */}
           <div className="pt-3 border-t border-slate-200">
-            <AttachmentUploader
-              dispatchId={dispatchToEdit?.id}
-              attachments={attachments}
-              onChange={setAttachments}
-              category="ORIGINAL"
-              showCategorySelect
-              label="File đính kèm"
-              // hint="Hỗ trợ PDF, Word, Excel, ảnh. Tối đa 20MB/file"
-              required={false}
-            />
+            <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">
+              📎 Đính kèm & Nhập liệu
+            </div>
+
+            {/* Hàng nút */}
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              {!dispatchToEdit && (
+                <>
+                  <input
+                    ref={excelInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) handleExcelFile(f);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => excelInputRef.current?.click()}
+                    disabled={isImporting}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition cursor-pointer disabled:opacity-50 active:scale-95"
+                  >
+                    <FileSpreadsheet className="w-3 h-3" />
+                    {isImporting ? 'Đang đọc...' : 'Nhập từ Excel'}
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const inp = document.querySelector<HTMLInputElement>(
+                    'input[type="file"][data-attachment-input="true"]'
+                  );
+                  inp?.click();
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition cursor-pointer active:scale-95"
+              >
+                <Upload className="w-3 h-3" />
+                Tải file lên
+              </button>
+
+              {importedFileName && importedItems.length > 0 && (
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <FileSpreadsheet className="w-3 h-3 text-emerald-700 shrink-0" />
+                  <span className="text-[10px] font-bold text-emerald-900 truncate max-w-[120px]">
+                    {importedFileName}
+                  </span>
+                  <span className="px-1 py-0.5 bg-emerald-200 text-emerald-900 rounded text-[9px] font-bold">
+                    {importedItems.length}
+                  </span>
+                  {importedItems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setImportPreviewOpen(!importPreviewOpen)}
+                      className="p-0.5 rounded hover:bg-emerald-100 cursor-pointer"
+                    >
+                      {importPreviewOpen ? (
+                        <ChevronUp className="w-3 h-3 text-emerald-700" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3 text-emerald-700" />
+                      )}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportedItems([]);
+                      setImportedFileName('');
+                      setImportPreviewOpen(false);
+                      setImportError(null);
+                    }}
+                    className="p-0.5 rounded hover:bg-rose-100 cursor-pointer"
+                    title="Xoá file Excel đã import"
+                  >
+                    <X className="w-3 h-3 text-rose-600" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Preview Excel */}
+            {importPreviewOpen && importedItems.length > 1 && (
+              <div className="mb-2 max-h-32 overflow-y-auto rounded-md border border-emerald-200 bg-white">
+                <table className="w-full text-left text-[10px]">
+                  <thead className="bg-emerald-100 sticky top-0">
+                    <tr>
+                      <th className="px-2 py-1 font-bold text-emerald-900 w-6">#</th>
+                      <th className="px-2 py-1 font-bold text-emerald-900">Số CV</th>
+                      <th className="px-2 py-1 font-bold text-emerald-900">Trích yếu</th>
+                      <th className="px-2 py-1 w-12"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-100">
+                    {importedItems.map((it, idx) => (
+                      <tr key={idx} className="hover:bg-emerald-50">
+                        <td className="px-2 py-1 text-slate-500">{idx + 1}</td>
+                        <td className="px-2 py-1 font-bold text-slate-900">
+                          {it.soCongVan || '—'}
+                        </td>
+                        <td className="px-2 py-1 text-slate-700 truncate max-w-xs">
+                          {it.tenCongVan || '—'}
+                        </td>
+                        <td className="px-2 py-1 text-right">
+                          <button
+                            type="button"
+                            onClick={() => applyImportedItem(idx)}
+                            className="px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 hover:bg-emerald-100 rounded"
+                          >
+                            Điền
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {importError && (
+              <div className="mb-2 p-2 bg-rose-50 border border-rose-200 rounded-lg text-[10px] text-rose-700 font-medium">
+                {importError}
+              </div>
+            )}
+
+            {/* Attachment — cuộn, cao tối đa 160px */}
+            <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg bg-slate-50/40 p-2">
+              <AttachmentUploader
+                dispatchId={dispatchToEdit?.id}
+                attachments={attachments}
+                onChange={setAttachments}
+                category="ORIGINAL"
+                showCategorySelect={false}
+                label=""
+                required={false}
+              />
+            </div>
           </div>
 
           {customColumns.length > 0 && (
@@ -878,8 +842,8 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             </div>
           )}
 
-          {/* FOOTER */}
-          <div className="pt-4 -mx-6 -mb-6 px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 sticky bottom-0">
+          {/* FOOTER — KHÔNG sticky */}
+          <div className="pt-4 -mx-6 -mb-6 px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
@@ -909,6 +873,94 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         </form>
       </div>
     </div>
+  );
+};
+
+// ============================================
+// DATE INPUT — DD/MM/YYYY hiển thị, value YYYY-MM-DD
+// ============================================
+interface DateInputProps {
+  value?: string;
+  onChange: (v: string) => void;
+  className?: string;
+  disabled?: boolean;
+}
+
+const DateInput: React.FC<DateInputProps> = ({
+  value,
+  onChange,
+  className,
+  disabled,
+}) => {
+  const displayValue = React.useMemo(() => {
+    if (!value) return '';
+    const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return value;
+    return `${m[3]}/${m[2]}/${m[1]}`;
+  }, [value]);
+
+  const [text, setText] = React.useState(displayValue);
+  const [focused, setFocused] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!focused) setText(displayValue);
+  }, [displayValue, focused]);
+
+  const handleChange = (raw: string) => {
+    // Chỉ cho số và dấu /
+    let cleaned = raw.replace(/[^\d/]/g, '');
+
+    // Auto-insert '/' khi gõ
+    // Xoá hết '/' cũ để re-format
+    const digits = cleaned.replace(/\//g, '');
+    if (digits.length <= 2) {
+      cleaned = digits;
+    } else if (digits.length <= 4) {
+      cleaned = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    } else {
+      cleaned = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+    }
+
+    setText(cleaned);
+
+    // Parse khi đủ DD/MM/YYYY
+    const m = cleaned.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) {
+      const [, dd, mm, yyyy] = m;
+      const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+      if (
+        d.getFullYear() === Number(yyyy) &&
+        d.getMonth() === Number(mm) - 1 &&
+        d.getDate() === Number(dd)
+      ) {
+        onChange(`${yyyy}-${mm}-${dd}`);
+      }
+    } else if (cleaned === '') {
+      onChange('');
+    }
+  };
+
+  const handleBlur = () => {
+    setFocused(false);
+    if (text !== displayValue) {
+      const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!m) setText(displayValue);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      placeholder="DD/MM/YYYY"
+      value={text}
+      onChange={e => handleChange(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={handleBlur}
+      disabled={disabled}
+      maxLength={10}
+      className={className}
+    />
   );
 };
 

@@ -228,10 +228,21 @@ router.delete(
 
 // ============================================
 // 7. PATCH /api/dispatches/:id/complete
-// PVT/TP tự đánh dấu hoàn thành
+// PVT/TP/VT tự đánh dấu hoàn thành — CẦN LOGIN
 // ============================================
 router.patch(
   '/:id/complete',
-  dispatchesController.markComplete      // ← KHÔNG có authenticate!
+  authenticate,                       // ⭐ THÊM DÒNG NÀY
+  dispatchesController.markComplete
+);
+
+// ============================================
+// 8. PATCH /api/dispatches/:id/reopen
+// Mở lại công văn đã hoàn thành (undo)
+// ============================================
+router.patch(
+  '/:id/reopen',
+  authenticate,
+  dispatchesController.reopenDispatch
 );
 export default router;

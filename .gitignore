@@ -7,3 +7,8 @@ uploads/
 *.log
 .env*
 !.env.example
+
+# Project exports
+exports/
+project_full_*.md
+project_full_*.txt

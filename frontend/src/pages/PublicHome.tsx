@@ -456,7 +456,7 @@ export const PublicHome: React.FC = () => {
                   title="Dành cho Quản trị viên & cán bộ nhập liệu"
                 >
                   <KeyRound className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span className="hidden xs:inline">Đăng nhập</span>
+                  <span className="hidden xs:inline"></span>
                 </Link>
               )}
 
@@ -751,7 +751,7 @@ export const PublicHome: React.FC = () => {
         dispatch={detailDispatch}
         onClose={() => setDetailDispatch(null)}
         columns={DEFAULT_COLUMNS}
-        canEdit={true}   // ⭐ Cho phép sửa
+        readOnly={true}       // ⭐ Cho phép sửa
         onUpdate={async (id, updates) => {
           await apiClient.updateDispatch(id, updates);
           reload();

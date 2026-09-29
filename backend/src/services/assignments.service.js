@@ -81,8 +81,8 @@ export const assignmentsService = {
         data: {
           trangThai: 'CHO_PVT_XU_LY',
           vtChiDao: vtChiDao || dispatch.vtChiDao,
-          hanBaoCaoXuLy: hanBaoCaoXuLy 
-            ? new Date(hanBaoCaoXuLy) 
+          hanBaoCaoXuLy: hanBaoCaoXuLy
+            ? new Date(hanBaoCaoXuLy)
             : dispatch.hanBaoCaoXuLy,
           mucDoKhan: mucDoKhan || dispatch.mucDoKhan,
           // ✅ Legacy fields
@@ -180,11 +180,32 @@ export const assignmentsService = {
     }
 
     // 2.4. Check trạng thái
-    const validStatuses = ['CHO_PVT_XU_LY', 'PVT_TRA_LAI'];
-    if (!validStatuses.includes(dispatch.trangThai)) {
-      throw { status: 400, message: 'Công văn không ở trạng thái có thể giao' };
+    // 2.4. Check trạng thái — ⭐ Nới rộng để cho phép VT sửa từ bất kỳ trạng thái nào
+    // (trừ HOAN_THANH và đã hủy)
+    const validStatuses = [
+      'MOI_TAO',
+      'CHO_PVT_XU_LY',
+      'CHO_TP_XU_LY',
+      'DANG_XU_LY',
+      'CHO_PVT_DUYET',
+      'CHO_VT_DUYET',
+      'PVT_TRA_LAI',
+      'VT_TRA_LAI',
+    ];
+
+    if (dispatch.trangThai === 'HOAN_THANH') {
+      throw {
+        status: 400,
+        message: 'Công văn đã hoàn thành, không thể giao Trưởng phòng',
+      };
     }
 
+    if (!validStatuses.includes(dispatch.trangThai)) {
+      throw {
+        status: 400,
+        message: `Công văn đang ở trạng thái "${dispatch.trangThai}", không thể giao`,
+      };
+    }
     // 2.5. Check TP tồn tại + có role TRUONG_PHONG
     for (const tp of tps) {
       const user = await prisma.user.findUnique({
@@ -220,12 +241,13 @@ export const assignmentsService = {
           assignedByPvtName: currentUser.fullName,
           tpId: tp.tpId,
           tpName: tp.tpName,
-          roomCode: tp.roomCode || '',
+          roomCode: tp.roomCode || '',           // ← fallback đã có
           isPrimary: tp.isPrimary || tps.length === 1,
           role: tp.isPrimary ? 'CHINH' : 'PHOI_HOP',
           status: 'PENDING',
         })),
       });
+
 
       // Cập nhật dispatch
       await tx.dispatch.update({

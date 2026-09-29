@@ -760,11 +760,18 @@ export const VienTruongDashboard: React.FC = () => {
           await apiClient.updateDispatch(id, updates);
           reload();
         }}
+
         onMarkComplete={async (d) => {
           const res = await apiClient.markComplete(d.id);
           if (!res?.success) throw new Error(res?.message || 'Lỗi');
           // Update detailDispatch để refresh drawer
           setDetailDispatch(prev => prev ? { ...prev, trangThai: 'HOAN_THANH', tienDo: 100 } : prev);
+          reload();
+        }}
+        onDelete={async (d) => {                              // ⭐ THÊM
+          const ok = await apiClient.deleteDispatch(d.id);
+          if (!ok) throw new Error('Không thể xoá công văn');
+          setDetailDispatch(null);
           reload();
         }}
       />
