@@ -85,8 +85,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/sse', sseRoutes);
 app.use('/api/push', pushRoutes);
-app.use('/api', assignmentsRoutes);
 app.use('/api', attachmentsRoutes);
+app.use('/api', assignmentsRoutes);
 app.use('/api', reportsRoutes);
 
 // Error handlers

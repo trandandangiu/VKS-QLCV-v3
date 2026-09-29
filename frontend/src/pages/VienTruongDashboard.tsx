@@ -11,6 +11,7 @@ import { Dispatch } from '../types/dispatch';
 import { DEFAULT_COLUMNS } from '../constants/columns';
 import { exportDispatchesToExcel } from '../services/excelService';
 import { useVtDashboard } from '../hooks/vt/useVtDashboard';
+import { PublicDesktopTable } from '../components/public/PublicDesktopTable';
 import { VtFilters, DEFAULT_VT_FILTERS } from '../types/vt';
 import { formatDate } from '../utils/format';
 
@@ -27,6 +28,7 @@ import {
 import { VtFilterBar } from '../components/vt/VtFilterBar';
 import { VtPvtDetailDrawer } from '../components/vt/VtPvtDetailDrawer';
 import { VtSidebar, VtSidebarTab } from '../components/vt/VtSidebar';
+
 
 import {
   CheckCircle2,
@@ -535,11 +537,10 @@ export const VienTruongDashboard: React.FC = () => {
                           <button
                             onClick={handleBulkComplete}
                             disabled={!canBulkComplete}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg shadow-xs transition ${
-                              canBulkComplete
-                                ? 'text-white bg-emerald-600 hover:bg-emerald-700 cursor-pointer active:scale-95'
-                                : 'text-slate-400 bg-slate-200 cursor-not-allowed'
-                            }`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg shadow-xs transition ${canBulkComplete
+                              ? 'text-white bg-emerald-600 hover:bg-emerald-700 cursor-pointer active:scale-95'
+                              : 'text-slate-400 bg-slate-200 cursor-not-allowed'
+                              }`}
                             title={
                               canBulkComplete
                                 ? `Hoàn thành ${completableSelected.length} công văn`
@@ -562,11 +563,10 @@ export const VienTruongDashboard: React.FC = () => {
                           <button
                             onClick={handleEditSingle}
                             disabled={selectedIds.length !== 1}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg shadow-xs transition ${
-                              selectedIds.length === 1
-                                ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer active:scale-95'
-                                : 'text-slate-400 bg-slate-200 cursor-not-allowed'
-                            }`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg shadow-xs transition ${selectedIds.length === 1
+                              ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer active:scale-95'
+                              : 'text-slate-400 bg-slate-200 cursor-not-allowed'
+                              }`}
                             title={
                               selectedIds.length === 1
                                 ? 'Chỉnh sửa công văn đã chọn'
@@ -580,213 +580,32 @@ export const VienTruongDashboard: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse min-w-[1350px]">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 uppercase text-[10px] tracking-wider">
-                            <th className="py-3 px-3 w-12 text-center">
-                              <input
-                                type="checkbox"
-                                checked={
-                                  filteredDispatches.length > 0 &&
-                                  selectedIds.length === filteredDispatches.length
-                                }
-                                ref={el => {
-                                  if (el) {
-                                    el.indeterminate =
-                                      selectedIds.length > 0 &&
-                                      selectedIds.length < filteredDispatches.length;
-                                  }
-                                }}
-                                onChange={toggleSelectAll}
-                                className="w-4 h-4 rounded border-slate-300 text-red-700 focus:ring-red-500 cursor-pointer accent-red-700"
-                              />
-                            </th>
-                            <th className="py-3 px-3 w-10 text-center">STT</th>
-                            <th className="py-3 px-3 w-32">Số văn bản</th>
-                            <th className="py-3 px-3 w-28">Ngày phát hành</th>
-                            <th className="py-3 px-3 min-w-[280px]">Trích yếu</th>
-                            <th className="py-3 px-3 w-36">Đơn vị ban hành</th>
-                            <th className="py-3 px-3 w-44">Lãnh đạo viện xử lý</th>
-                            <th className="py-3 px-3 w-40">Đơn vị xử lý</th>
-                            <th className="py-3 px-3 w-28">Thời hạn xử lý</th>
-                            <th className="py-3 px-3 w-32 text-center">Cảnh báo</th>
-                            <th className="py-3 px-3 w-32">File đính kèm</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {filteredDispatches.length === 0 ? (
-                            <tr>
-                              <td colSpan={11} className="py-16 text-center text-slate-400 italic">
-                                Không có công văn nào
-                              </td>
-                            </tr>
-                          ) : (
-                            filteredDispatches.map((d, idx) => {
-                              const isSelected = selectedIds.includes(d.id);
-
-                              const daysFromToday = daysUntil(d.hanBaoCaoXuLy);
-
-                              const warnMeta = (() => {
-                                if (d.trangThai === 'HOAN_THANH') {
-                                  return { warning: 'HOÀN THÀNH', daysLeft: '—', cls: 'bg-emerald-50 text-emerald-800 border-emerald-300' };
-                                }
-                                if (daysFromToday === null) {
-                                  return { warning: 'CHƯA CÓ HẠN', daysLeft: '—', cls: 'bg-white text-slate-500 border-slate-200' };
-                                }
-                                if (daysFromToday < 0) {
-                                  return { warning: 'QUÁ HẠN', daysLeft: `${Math.abs(daysFromToday)} NGÀY`, cls: 'bg-rose-50 text-rose-800 border-rose-300' };
-                                }
-                                if (daysFromToday === 0) {
-                                  return { warning: 'QUÁ HẠN', daysLeft: '0 NGÀY', cls: 'bg-rose-50 text-rose-800 border-rose-300' };
-                                }
-                                if (daysFromToday === 1) {
-                                  return { warning: 'ĐẾN HẠN', daysLeft: '1 NGÀY', cls: 'bg-orange-50 text-orange-800 border-orange-300' };
-                                }
-                                if (daysFromToday <= 10) {
-                                  return { warning: 'SẮP HẾT HẠN', daysLeft: `${daysFromToday} NGÀY`, cls: 'bg-yellow-50 text-yellow-800 border-yellow-300' };
-                                }
-                                return { warning: 'CÒN NHIỀU', daysLeft: `${daysFromToday} NGÀY`, cls: 'bg-white text-slate-800 border-slate-200' };
-                              })();
-
-                              // Lãnh đạo viện xử lý — BẮT BUỘC
-                              const leaderName = d.assignedPvtName
-                                ? d.assignedPvtName.replace('Đ/c ', '').replace('Đồng chí ', '')
-                                : '—';
-
-                              // Đơn vị xử lý — không bắt buộc
-                              const deptLabel = d.assignedTpName || '';
-                              const deptCode =
-                                (d as any).assignedTpRoomCode ||
-                                (d.assignedTpName && d.assignedTpName.match(/TP\d+/)?.[0]) ||
-                                '';
-
-                              // Thời hạn xử lý = Hạn báo cáo − Ngày phát hành
-                              const processingDays = diffDaysBetween(d.ngayPhatHanh, d.hanBaoCaoXuLy);
-
-                              const fileCount = (d as any)._count?.attachments || 0;
-
-                              return (
-                                <tr
-                                  key={d.id}
-                                  className={`transition ${
-                                    isSelected
-                                      ? 'bg-red-50/60 hover:bg-red-50'
-                                      : 'hover:bg-slate-50/70'
-                                  }`}
-                                >
-                                  <td className="py-2.5 px-3 text-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={() => toggleSelectRow(d.id)}
-                                      className="w-4 h-4 rounded border-slate-300 text-red-700 focus:ring-red-500 cursor-pointer accent-red-700"
-                                    />
-                                  </td>
-
-                                  <td className="py-2.5 px-3 text-center text-slate-400 font-mono">
-                                    {idx + 1}
-                                  </td>
-
-                                  <td className="py-2.5 px-3">
-                                    <span className="font-mono font-bold text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 whitespace-nowrap">
-                                      {d.soCongVan || '—'}
-                                    </span>
-                                  </td>
-
-                                  {/* Ngày phát hành — dùng formatDate */}
-                                  <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px] whitespace-nowrap">
-                                    {formatDate(d.ngayPhatHanh) || '—'}
-                                  </td>
-
-                                  <td className="py-2.5 px-3">
-                                    <div
-                                      onClick={() => setDetailDispatch(d)}
-                                      className="font-semibold text-slate-900 hover:text-red-700 cursor-pointer line-clamp-2"
-                                      title={d.tenCongVan}
-                                    >
-                                      {d.tenCongVan || '—'}
-                                    </div>
-                                  </td>
-
-                                  <td className="py-2.5 px-3 text-slate-700 text-[11px]">
-                                    {d.donViBanHanh || <span className="text-slate-400 italic">—</span>}
-                                  </td>
-
-                                  <td className="py-2.5 px-3">
-                                    <span className="inline-block px-2 py-0.5 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold whitespace-nowrap">
-                                      {leaderName}
-                                    </span>
-                                  </td>
-
-                                  <td className="py-2.5 px-3 text-[11px]">
-                                    {deptLabel ? (
-                                      <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                                        {deptCode && (
-                                          <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[10px]">
-                                            {deptCode}
-                                          </span>
-                                        )}
-                                        <span className="text-slate-700 font-medium">
-                                          {deptLabel.replace('Đ/c ', '')}
-                                        </span>
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-300">—</span>
-                                    )}
-                                  </td>
-
-                                  {/* Thời hạn xử lý */}
-                                  <td className="py-2.5 px-3 text-center">
-                                    {processingDays === null ? (
-                                      <span className="text-slate-300">—</span>
-                                    ) : processingDays >= 0 ? (
-                                      <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold whitespace-nowrap">
-                                        {processingDays} ngày
-                                      </span>
-                                    ) : (
-                                      <span className="inline-block px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold whitespace-nowrap">
-                                        {processingDays} ngày
-                                      </span>
-                                    )}
-                                  </td>
-
-                                  {/* Cảnh báo */}
-                                  <td className="py-2.5 px-3 text-center">
-                                    <div className="inline-flex flex-col items-center gap-0.5">
-                                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black border whitespace-nowrap ${warnMeta.cls}`}>
-                                        {warnMeta.warning}
-                                      </span>
-                                      {warnMeta.daysLeft !== '—' && (
-                                        <span className="text-[9px] text-slate-500 font-mono">
-                                          {warnMeta.daysLeft}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  {/* File đính kèm */}
-                                  <td className="py-2.5 px-3">
-                                    {fileCount === 0 ? (
-                                      <span className="text-slate-300 text-[10px]">—</span>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleViewFiles(d)}
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-100 transition cursor-pointer whitespace-nowrap"
-                                        title="Bấm để mở file trực tiếp"
-                                      >
-                                        <Paperclip className="w-3 h-3" />
-                                        {fileCount} file
-                                      </button>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                    <PublicDesktopTable
+                      dispatches={filteredDispatches}
+                      currentPage={1}
+                      pageSize={filteredDispatches.length || 20}
+                      selectedPvtId={null}
+                      onSelectDispatch={d => setDetailDispatch(d)}
+                      showCheckbox={true}
+                      selectedIds={selectedIds}
+                      onToggleSelectRow={toggleSelectRow}
+                      onToggleSelectAll={toggleSelectAll}
+                      onEdit={d => {
+                        setDispatchToEdit(d);
+                        setIsAddEditModalOpen(true);
+                      }}
+                      onDelete={async id => {
+                        if (!window.confirm('Xác nhận xóa công văn này?')) return;
+                        const success = await apiClient.deleteDispatch(id);
+                        if (success) {
+                          showToast('Đã xóa công văn');
+                          reload();
+                        } else {
+                          showToast('Lỗi khi xóa', 'error');
+                        }
+                      }}
+                      onViewFiles={handleViewFiles}
+                    />
                   </div>
                 </>
               )}
@@ -987,13 +806,12 @@ export const VienTruongDashboard: React.FC = () => {
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 animate-fadeIn">
           <div
-            className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border ${
-              toast.type === 'success'
-                ? 'bg-slate-900 text-white border-slate-700'
-                : toast.type === 'error'
+            className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
+              ? 'bg-slate-900 text-white border-slate-700'
+              : toast.type === 'error'
                 ? 'bg-rose-900 text-white border-rose-700'
                 : 'bg-amber-900 text-white border-amber-700'
-            }`}
+              }`}
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span>{toast.message}</span>

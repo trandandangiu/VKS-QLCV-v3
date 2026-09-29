@@ -1,100 +1,57 @@
 // backend/src/routes/departments.routes.js
 import express from 'express';
 import { departmentsController } from '../controllers/departments.controller.js';
-import { authenticate } from '../middlewares/auth.js';
+import { authenticate, optionalAuth } from '../middlewares/auth.js';
 import { requirePermission } from '../middlewares/permission.js';
 
 const router = express.Router();
 
-router.use(authenticate);
+// ⚠️ KHÔNG dùng router.use(authenticate) — vì GET cần public
 
-/**
- * @swagger
- * /api/departments:
- *   get:
- *     tags: [Departments]
- *     summary: Danh sách phòng ban
- *     responses:
- *       200:
- *         description: OK
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               example:
- *                 success: true
- *                 departments:
- *                   - id: uuid
- *                     code: TP1
- *                     name: Phòng 1 (Án an ninh)
- *                     manager:
- *                       fullName: Trưởng phòng 1
- *                     pvtManager:
- *                       fullName: Phó Viện trưởng 1
- */
-router.get('/', departmentsController.getDepartments);
+// ============================================
+// GET /api/departments — CHO PHÉP KHÁCH
+// ============================================
+router.get(
+  '/',
+  optionalAuth,
+  departmentsController.getDepartments
+);
 
-/**
- * @swagger
- * /api/departments/{id}:
- *   get:
- *     tags: [Departments]
- *     summary: Chi tiết phòng ban
- */
-router.get('/:id', departmentsController.getDepartmentById);
+// ============================================
+// GET /api/departments/:id — CHO PHÉP KHÁCH
+// ============================================
+router.get(
+  '/:id',
+  optionalAuth,
+  departmentsController.getDepartmentById
+);
 
-/**
- * @swagger
- * /api/departments:
- *   post:
- *     tags: [Departments]
- *     summary: Tạo phòng ban
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               code:
- *                 type: string
- *               name:
- *                 type: string
- *               managerId:
- *                 type: string
- *               pvtManagerId:
- *                 type: string
- *     responses:
- *       201:
- *         description: OK
- */
+// ============================================
+// POST — CẦN LOGIN
+// ============================================
 router.post(
   '/',
+  authenticate,
   requirePermission('user:create'),
   departmentsController.createDepartment
 );
 
-/**
- * @swagger
- * /api/departments/{id}:
- *   put:
- *     summary: Cập nhật phòng ban
- *     tags: [Departments]
- */
+// ============================================
+// PUT — CẦN LOGIN
+// ============================================
 router.put(
   '/:id',
+  authenticate,
   requirePermission('user:update:all'),
   departmentsController.updateDepartment
 );
 
-/**
- * @swagger
- * /api/departments/{id}: 
- * tags: [Departments]
- *   delete:
- *     summary: Xóa phòng ban
- */
+// ============================================
+// DELETE — CẦN LOGIN
+// ============================================
 router.delete(
   '/:id',
+  authenticate,
   requirePermission('user:delete'),
   departmentsController.deleteDepartment
 );

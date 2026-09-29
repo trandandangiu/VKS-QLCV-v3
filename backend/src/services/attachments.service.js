@@ -6,6 +6,7 @@ import path from 'path';
 export const attachmentsService = {
   // ============================================
   // 1. UPLOAD FILE
+  // ⚠️ CẦN LOGIN
   // ============================================
   async uploadAttachment(dispatchId, file, data, currentUser) {
     const { fileCategory = 'OTHER', description } = data;
@@ -14,7 +15,6 @@ export const attachmentsService = {
       throw { status: 400, message: 'Chưa chọn file' };
     }
 
-    // Check dispatch tồn tại
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
     });
@@ -23,7 +23,6 @@ export const attachmentsService = {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    // Tạo record trong DB
     const attachment = await prisma.attachment.create({
       data: {
         dispatchId,
@@ -39,7 +38,6 @@ export const attachmentsService = {
       },
     });
 
-    // Audit
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
@@ -50,7 +48,6 @@ export const attachmentsService = {
       },
     });
 
-    // Return attachment info (không lộ filePath)
     return {
       id: attachment.id,
       fileName: attachment.fileName,
@@ -64,10 +61,12 @@ export const attachmentsService = {
   },
 
   // ============================================
-  // 2. LẤY DANH SÁCH FILE CỦA CÔNG VĂN
+  // 2. LẤY DANH SÁCH FILE
+  // ⭐ CHO PHÉP KHÁCH
   // ============================================
   async getAttachments(dispatchId, currentUser) {
-    // Check dispatch tồn tại
+    // ⭐ Không cần check quyền — khách cũng xem được
+
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
     });
@@ -101,6 +100,7 @@ export const attachmentsService = {
 
   // ============================================
   // 3. DOWNLOAD FILE
+  // ⭐ CHO PHÉP KHÁCH
   // ============================================
   async getAttachmentForDownload(attachmentId, currentUser) {
     const attachment = await prisma.attachment.findUnique({
@@ -114,16 +114,17 @@ export const attachmentsService = {
       throw { status: 404, message: 'Không tìm thấy file' };
     }
 
-    // Check file tồn tại trên disk
     if (!fs.existsSync(attachment.filePath)) {
       throw { status: 404, message: 'File không tồn tại trên server' };
     }
 
+    // ⭐ Không cần check quyền — khách cũng tải được
     return attachment;
   },
 
   // ============================================
   // 4. XÓA FILE (SOFT DELETE)
+  // ⚠️ CẦN LOGIN + quyền
   // ============================================
   async deleteAttachment(attachmentId, currentUser) {
     const attachment = await prisma.attachment.findUnique({
@@ -134,17 +135,15 @@ export const attachmentsService = {
       throw { status: 404, message: 'Không tìm thấy file' };
     }
 
-    // Check quyền xóa
     const perms = currentUser.permissions || [];
     const isOwner = attachment.uploaderId === currentUser.id;
-    const canDeleteAll = perms.includes('attachment:delete:all') 
-                      || perms.includes('user:delete');
+    const canDeleteAll = perms.includes('attachment:delete:all')
+      || perms.includes('user:delete');
 
     if (!isOwner && !canDeleteAll) {
       throw { status: 403, message: 'Không có quyền xóa file này' };
     }
 
-    // Soft delete
     await prisma.attachment.update({
       where: { id: attachmentId },
       data: {
@@ -153,7 +152,6 @@ export const attachmentsService = {
       },
     });
 
-    // Audit
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,

@@ -12,15 +12,24 @@ export const usersService = {
   // ============================================
   // 1. LẤY DANH SÁCH USERS
   // ============================================
-  async getUsers(currentUser, filters = {}) {
-    const page = parseInt(filters.page) || 1;
-    const limit = parseInt(filters.limit) || 20;
-    const skip = (page - 1) * limit;
+async getUsers(currentUser, filters = {}) {
+  const page = parseInt(filters.page) || 1;
+  const limit = parseInt(filters.limit) || 20;
+  const skip = (page - 1) * limit;
 
-    const where = {
-      deletedAt: null,  // ← ĐÃ BỊ XÓA
-    };
-    // 1.1. Filter theo permission
+  // ⭐ Phát hiện khách
+  const isGuest = !currentUser || !currentUser.id;
+
+  const where = {
+    deletedAt: null,
+  };
+
+  // ⭐ PHÂN QUYỀN
+  if (isGuest) {
+    // 🌐 KHÁCH: xem TẤT CẢ user, không filter gì
+    // (chỉ cần deletedAt = null như trên)
+  } else {
+    // User login → phân quyền như cũ
     const perms = currentUser.permissions || [];
 
     if (perms.includes('user:view:all')) {
@@ -36,7 +45,7 @@ export const usersService = {
       if (deptIds.length > 0) {
         where.OR = [
           { departmentId: { in: deptIds } },
-          { id: currentUser.id },  // Chính mình
+          { id: currentUser.id },
         ];
       } else {
         where.id = currentUser.id;
@@ -45,6 +54,7 @@ export const usersService = {
       // TP: chỉ xem chính mình
       where.id = currentUser.id;
     }
+  }
 
     // 1.2. Filter theo query
     if (filters.search) {
@@ -117,17 +127,19 @@ export const usersService = {
 
 
     // 1.4. Format — thêm `role` string từ roles[0]
-    const formatted = users.map(u => {
-      const roles = u.userRoles.map(ur => ur.role);
-      const primaryRole = roles[0]?.code || 'TRUONG_PHONG';
+  const formatted = users.map(u => {
+    const roles = u.userRoles.map(ur => ur.role);
+    const primaryRole = roles[0]?.code || 'TRUONG_PHONG';
 
-      return {
-        ...u,
-        roles,
-        role: primaryRole,              // ← THÊM: string cho FE dùng
-        userRoles: undefined,
-      };
-    });
+    return {
+      ...u,
+      roles,
+      role: primaryRole,
+      userRoles: undefined,
+      // ⭐ Khách không thấy email/phone (tùy chọn)
+      ...(isGuest ? { email: undefined, phone: undefined } : {}),
+    };
+  });
 
     return {
       users: formatted,
@@ -144,6 +156,8 @@ export const usersService = {
   // 2. LẤY CHI TIẾT USER
   // ============================================
   async getUserById(userId, currentUser) {
+    const isGuest = !currentUser || !currentUser.id;
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -169,12 +183,22 @@ export const usersService = {
       throw { status: 404, message: 'Không tìm thấy user' };
     }
 
-    // 2.1. Check quyền xem
+    // ⭐ KHÁCH → trả user, không cần check quyền
+    if (isGuest) {
+      const roles = user.userRoles.map(ur => ur.role.code);
+      const { passwordHash, totpSecret, userRoles, ...userSafe } = user;
+      return {
+        ...userSafe,
+        roles,
+        permissions: [],
+      };
+    }
+
+    // User login → check quyền như cũ
     const perms = currentUser.permissions || [];
 
     if (!perms.includes('user:view:all')) {
       if (perms.includes('user:view:department')) {
-        // PVT: chỉ xem user trong phòng phụ trách
         const managedDepts = await prisma.department.findMany({
           where: { pvtManagerId: currentUser.id },
           select: { id: true },
@@ -189,7 +213,6 @@ export const usersService = {
           throw { status: 403, message: 'Không có quyền xem user này' };
         }
       } else {
-        // TP: chỉ xem chính mình
         if (user.id !== currentUser.id) {
           throw { status: 403, message: 'Không có quyền xem user này' };
         }

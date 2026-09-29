@@ -676,7 +676,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           {/* ===== HÀNG 1 ===== */}
           {/* ===== HÀNG ĐẦU: NGÀY GỬI + SỐ CV + NGÀY PHÁT HÀNH + HẠN BÁO CÁO + ĐƠN VỊ BAN HÀNH ===== */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="NGÀY GỬI" required>
+            <Field label="NGÀY TIẾP NHẬN" required>
               <input
                 type="date"
                 value={formData.ngayGui || ''}
@@ -685,7 +685,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               />
             </Field>
 
-            <Field label="SỐ CÔNG VIỆC" required>
+            <Field label="SỐ / KÝ HIỆU VĂN BẢN" required>
               <input
                 type="text"
                 value={formData.soCongVan || ''}
@@ -695,14 +695,14 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               />
             </Field>
 
-            <Field label="NGÀY PHÁT HÀNH">
+            {/* <Field label="NGÀY PHÁT HÀNH">
               <input
                 type="date"
                 value={formData.ngayPhatHanh || ''}
                 onChange={e => setFormData({ ...formData, ngayPhatHanh: e.target.value })}
                 className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               />
-            </Field>
+            </Field> */}
 
             <Field label="HẠN BÁO CÁO, XỬ LÝ" required>
               <input
@@ -768,7 +768,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             </div>
           </div>
 
-          <Field label="TÊN CÔNG VIỆC" required>
+          <Field label="NỘI DUNG CÔNG VIỆC" required>
             <textarea
               rows={2}
               value={formData.tenCongVan || ''}

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ColumnDefinition, Dispatch } from '../types/dispatch';
 import { apiClient } from '../services/apiClient';
+import { calculateTimeRemaining } from '../services/excelService';
 
 interface DispatchDetailDrawerProps {
   dispatch: Dispatch | null;
@@ -164,14 +165,14 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
 
           {/* Ngày tháng */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-            <div>
+            {/* <div>
               <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mb-1">
                 <Calendar className="w-3.5 h-3.5" /> Ngày gửi
               </span>
               <p className="text-xs font-semibold text-slate-800">
                 {formatDate(dispatch.ngayGui) || '—'}
               </p>
-            </div>
+            </div> */}
 
             <div>
               <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mb-1">
@@ -190,14 +191,31 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 {formatDate(dispatch.hanBaoCaoXuLy) || '—'}
               </p>
             </div>
-
             <div>
               <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mb-1">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-500" /> Tình trạng thời hạn
               </span>
-              <p className="text-xs font-bold text-slate-900">
-                {dispatch.thoiHanXuLy || '—'}
-              </p>
+              {(() => {
+                // ⭐ Tính số ngày còn lại động
+                const { text, status } = calculateTimeRemaining(
+                  dispatch.hanBaoCaoXuLy || '',
+                  dispatch.trangThai,
+                  dispatch.thoiHanXuLy
+                );
+
+                // Màu theo trạng thái
+                const colorClass =
+                  status === 'QUA_HAN' ? 'text-rose-700'
+                    : status === 'SAP_DEN_HAN' ? 'text-amber-700'
+                      : status === 'HOAN_THANH' ? 'text-emerald-700'
+                        : 'text-slate-900';
+
+                return (
+                  <p className={`text-xs font-bold ${colorClass}`}>
+                    {text}
+                  </p>
+                );
+              })()}
             </div>
           </div>
 
@@ -205,7 +223,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3 rounded-xl border border-slate-200 bg-white">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                <Building2 className="w-3.5 h-3.5" /> Đơn vị thực hiện
+                <Building2 className="w-3.5 h-3.5" /> Đơn vị ban hành
               </span>
               <p className="font-semibold text-xs text-slate-800">
                 {dispatch.donViBanHanh || '—'}
@@ -226,7 +244,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
           {dispatch.assignedPvtName && (
             <div className="p-3 rounded-xl border border-blue-200 bg-blue-50">
               <span className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider block mb-1">
-                Lãnh đạo viện xử lý (PVT)
+                Lãnh đạo viện xử lý
               </span>
               <p className="font-bold text-xs text-blue-900">
                 {dispatch.assignedPvtName}
@@ -367,7 +385,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                       <div className="mt-1">
                         {dispatch.customFields?.[c.id] ? (
                           typeof dispatch.customFields[c.id] === 'object' &&
-                          dispatch.customFields[c.id].dataUrl ? (
+                            dispatch.customFields[c.id].dataUrl ? (
                             <a
                               href={dispatch.customFields[c.id].dataUrl}
                               download={dispatch.customFields[c.id].name}

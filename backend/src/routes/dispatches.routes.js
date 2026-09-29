@@ -1,8 +1,10 @@
 // backend/src/routes/dispatches.routes.js
 import express from 'express';
 import { dispatchesController } from '../controllers/dispatches.controller.js';
+import { attachmentsController } from '../controllers/attachments.controller.js';
 import { authenticate, optionalAuth } from '../middlewares/auth.js';
 import { requirePermission } from '../middlewares/permission.js';
+import { upload } from '../config/multer.js'; 
 
 const router = express.Router();
 

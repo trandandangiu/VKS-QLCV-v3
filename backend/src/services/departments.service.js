@@ -5,64 +5,64 @@ export const departmentsService = {
   // ============================================
   // 1. LẤY DANH SÁCH
   // ============================================
-  async getDepartments(filters = {}) {
-    // Mặc định chỉ lấy phòng active = true
-    const where = {
-      active: filters.active !== undefined ? filters.active === 'true' : true,
-    };
+async getDepartments(filters = {}) {
+  // ⭐ Không cần check quyền — khách cũng xem được
 
-    if (filters.search) {
-      where.OR = [
-        { code: { contains: filters.search, mode: 'insensitive' } },
-        { name: { contains: filters.search, mode: 'insensitive' } },
-      ];
-    }
+  const where = {
+    active: filters.active !== undefined ? filters.active === 'true' : true,
+  };
 
-    const departments = await prisma.department.findMany({
-      where,
-      orderBy: { code: 'asc' },
-      include: {
-        users: {
-          select: {
-            id: true,
-            username: true,
-            fullName: true,
-            position: true,
-          },
+  if (filters.search) {
+    where.OR = [
+      { code: { contains: filters.search, mode: 'insensitive' } },
+      { name: { contains: filters.search, mode: 'insensitive' } },
+    ];
+  }
+
+  const departments = await prisma.department.findMany({
+    where,
+    orderBy: { code: 'asc' },
+    include: {
+      users: {
+        select: {
+          id: true,
+          username: true,
+          fullName: true,
+          position: true,
         },
       },
-    });
+    },
+  });
 
-    // Enrich với manager + pvtManager
-    const enriched = await Promise.all(
-      departments.map(async (dept) => {
-        let manager = null;
-        let pvtManager = null;
+  const enriched = await Promise.all(
+    departments.map(async (dept) => {
+      let manager = null;
+      let pvtManager = null;
 
-        if (dept.managerId) {
-          manager = await prisma.user.findUnique({
-            where: { id: dept.managerId },
-            select: { id: true, username: true, fullName: true },
-          });
-        }
+      if (dept.managerId) {
+        manager = await prisma.user.findUnique({
+          where: { id: dept.managerId },
+          select: { id: true, username: true, fullName: true },
+        });
+      }
 
-        if (dept.pvtManagerId) {
-          pvtManager = await prisma.user.findUnique({
-            where: { id: dept.pvtManagerId },
-            select: { id: true, username: true, fullName: true },
-          });
-        }
+      if (dept.pvtManagerId) {
+        pvtManager = await prisma.user.findUnique({
+          where: { id: dept.pvtManagerId },
+          select: { id: true, username: true, fullName: true },
+        });
+      }
 
-        return {
-          ...dept,
-          manager,
-          pvtManager,
-        };
-      })
-    );
+      return {
+        ...dept,
+        manager,
+        pvtManager,
+      };
+    })
+  );
 
-    return { departments: enriched };
-  },
+  return { departments: enriched };
+},
 
   // ============================================
   // 2. LẤY CHI TIẾT

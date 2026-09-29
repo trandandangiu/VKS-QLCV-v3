@@ -394,6 +394,43 @@ export const apiClient = {
     a.click();
     URL.revokeObjectURL(url);
   },
+  // ⭐ Đọc nội dung file text (không dùng blob URL)
+  async getAttachmentTextContent(attachmentId: string): Promise<string> {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(
+      `${API_BASE}/attachments/${attachmentId}/download`,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(`Không thể đọc file (${res.status})`);
+    }
+
+    return await res.text();
+  },
+  // ⭐ Tải file thành Blob URL để xem trực tiếp (không lưu về máy)
+  async getAttachmentBlobUrl(attachmentId: string): Promise<string> {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(
+      `${API_BASE}/attachments/${attachmentId}/download`,
+      {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(`Không thể tải file (${res.status})`);
+    }
+
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
 
   async deleteAttachment(attachmentId: string): Promise<boolean> {
     const data = await request<{ success: boolean }>(

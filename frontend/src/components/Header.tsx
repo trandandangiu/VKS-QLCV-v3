@@ -40,10 +40,10 @@ export const Header: React.FC = () => {
                 className="text-[11px] sm:text-xs font-bold tracking-wider uppercase"
                 style={{ color: '#FFD700' }}
               >
-                VIỆN KIỂM SÁT NHÂN DÂN TP. HỒ CHÍ MINH
+                VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
               </div>
               <h1 className="text-base sm:text-xl font-black tracking-wide uppercase text-white">
-                Hệ thống báo cáo công việc
+                Theo dõi tiến độ xử lý công văn
               </h1>
             </div>
           </Link>

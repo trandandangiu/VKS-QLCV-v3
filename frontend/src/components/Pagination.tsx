@@ -37,7 +37,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   if (totalItems === 0) {
     return (
       <div className={`flex items-center justify-center text-xs text-slate-500 px-4 py-3 ${className}`}>
-        <span>Không có {itemLabel} nào</span>
+        {/* <span>Không có {itemLabel} nào</span> */}
       </div>
     );
   }

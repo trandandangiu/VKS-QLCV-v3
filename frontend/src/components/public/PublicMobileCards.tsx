@@ -135,7 +135,7 @@ export const PublicMobileCards: React.FC<Props> = ({
 
               <div>
                 <div className="text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-0.5">
-                  Đơn vị thực hiện
+                  Đơn vị ban hành
                 </div>
                 <div className="text-[11px] text-slate-700 font-medium">
                   {disp.donViBanHanh || '—'}

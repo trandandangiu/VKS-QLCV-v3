@@ -12,6 +12,7 @@ import {
   X, Search, Filter,
 } from 'lucide-react';
 import { Dispatch } from '../types/dispatch';
+import { User } from '../types/auth';
 import { resolveDispatchStatus } from '../services/excelService';
 import { Pagination } from '../components/Pagination';
 import { sortDispatchesNewestFirst } from '../services/dateSort';
@@ -27,6 +28,7 @@ export const PublicHome: React.FC = () => {
   const navigate = useNavigate();
 
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
+  const [allPvts, setAllPvts] = useState<User[]>([]);        // ⭐ Lấy TẤT CẢ PVT
   const [currentTime, setCurrentTime] = useState<string>('');
   const [selectedPvtId, setSelectedPvtId] = useState<string | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -40,12 +42,14 @@ export const PublicHome: React.FC = () => {
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
   const [mobileStatusFilter, setMobileStatusFilter] = useState('ALL');
   const [showMobileFilter, setShowMobileFilter] = useState(false);
+  const [isOverdueFilterActive, setIsOverdueFilterActive] = useState(false);
 
   // 🎯 Xác định role
   const isPvt = currentUser?.role === 'PHO_VIEN_TRUONG';
   const isVt = currentUser?.role === 'VIEN_TRUONG';
   const isAdmin = currentUser?.role === 'ADMIN';
   const isTp = currentUser?.role === 'TRUONG_PHONG';
+
 
   // 🎯 Chỉ PVT mới được bấm card của chính mình
   const canClickPvtCard = (pvtCard: { id: string; name: string }) => {
@@ -65,9 +69,19 @@ export const PublicHome: React.FC = () => {
     return true;
   };
 
-  // Load data
+  // ⭐ Load TẤT CẢ PVT + dispatches
   useEffect(() => {
-    const loadData = async () => {
+    const loadAllPvts = async () => {
+      try {
+        // Gọi API lấy TẤT CẢ user có role PHO_VIEN_TRUONG
+        const users = await apiClient.getAllUsers({ role: 'PHO_VIEN_TRUONG', limit: 100 });
+        setAllPvts(users);
+      } catch (err) {
+        console.error('Lỗi load danh sách PVT:', err);
+      }
+    };
+
+    const loadDispatches = async () => {
       try {
         const data = await apiClient.getDispatches({ limit: 500 });
         setDispatches(data);
@@ -75,8 +89,11 @@ export const PublicHome: React.FC = () => {
         console.error('Lỗi load dispatches:', err);
       }
     };
-    loadData();
-    const interval = setInterval(loadData, 60000);
+
+    loadAllPvts();
+    loadDispatches();
+
+    const interval = setInterval(loadDispatches, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -94,49 +111,109 @@ export const PublicHome: React.FC = () => {
     return () => clearInterval(t);
   }, []);
 
-  // 🎯 Tính PVT cards
+  // ⭐ Tính PVT cards — dùng danh sách allPvts (tất cả PVT)
   const pvtCards = useMemo(() => {
-    const pvtMap = new Map<string, {
-      id: string; name: string; roomCode: string;
-      total: number; overdue: number; completed: number;
-    }>();
+    // Nếu chưa load được allPvts → fallback về logic cũ (từ dispatches)
+    if (allPvts.length === 0) {
+      const pvtMap = new Map<string, {
+        id: string; name: string; roomCode: string;
+        total: number; overdue: number; completed: number;
+      }>();
 
-    dispatches.forEach(d => {
-      if (!d.assignedPvtId && !d.assignedPvtName) return;
-      const key = d.assignedPvtId || d.assignedPvtName || '';
-      if (!key) return;
+      dispatches.forEach(d => {
+        if (!d.assignedPvtId && !d.assignedPvtName) return;
+        const key = d.assignedPvtId || d.assignedPvtName || '';
+        if (!key) return;
 
-      const cleanName = (d.assignedPvtName || '')
-        .replace(/^Đồng chí\s+/i, '')
-        .replace(/^Đ\/c\s+/i, '')
-        .trim();
+        const cleanName = (d.assignedPvtName || '')
+          .replace(/^Đồng chí\s+/i, '')
+          .replace(/^Đ\/c\s+/i, '')
+          .trim();
 
-      const roomCodeMatch = (d.assignedPvtName || '').match(/PVT\d+/i);
-      const roomCode = roomCodeMatch?.[0]?.toUpperCase() || '';
+        const roomCodeMatch = (d.assignedPvtName || '').match(/PVT\d+/i);
+        const roomCode = roomCodeMatch?.[0]?.toUpperCase() || '';
 
-      if (!pvtMap.has(key)) {
-        pvtMap.set(key, {
-          id: d.assignedPvtId || key,
-          name: cleanName,
-          roomCode,
-          total: 0, overdue: 0, completed: 0,
+        if (!pvtMap.has(key)) {
+          pvtMap.set(key, {
+            id: d.assignedPvtId || key,
+            name: cleanName,
+            roomCode,
+            total: 0, overdue: 0, completed: 0,
+          });
+        }
+
+        const card = pvtMap.get(key)!;
+        card.total += 1;
+        const status = resolveDispatchStatus(d);
+        if (status === 'HOAN_THANH') card.completed += 1;
+        if (status === 'QUA_HAN') card.overdue += 1;
+      });
+
+      return Array.from(pvtMap.values());
+    }
+
+    // ⭐ Có allPvts → dùng danh sách đầy đủ
+    return allPvts
+      .filter(u => u.role === 'PHO_VIEN_TRUONG' && u.active !== false)
+      .map(pvt => {
+        // Đếm công văn của PVT này
+        const pvtDispatches = dispatches.filter(d => {
+          // Match theo ID
+          if (d.assignedPvtId && d.assignedPvtId === pvt.id) return true;
+          // Match theo tên
+          const cleanAssigned = (d.assignedPvtName || '')
+            .replace(/^Đồng chí\s+/i, '')
+            .replace(/^Đ\/c\s+/i, '')
+            .trim();
+          const cleanPvt = (pvt.fullName || '')
+            .replace(/^Đồng chí\s+/i, '')
+            .replace(/^Đ\/c\s+/i, '')
+            .trim();
+          if (cleanAssigned && cleanPvt && cleanAssigned === cleanPvt) return true;
+          // Match theo roomCode
+          if (pvt.roomCode && (d.assignedPvtName || '').includes(pvt.roomCode)) return true;
+          return false;
         });
-      }
 
-      const card = pvtMap.get(key)!;
-      card.total += 1;
-      const status = resolveDispatchStatus(d);
-      if (status === 'HOAN_THANH') card.completed += 1;
-      if (status === 'QUA_HAN') card.overdue += 1;
-    });
+        const total = pvtDispatches.length;
+        const overdue = pvtDispatches.filter(d =>
+          resolveDispatchStatus(d) === 'QUA_HAN'
+        ).length;
+        const completed = pvtDispatches.filter(d =>
+          resolveDispatchStatus(d) === 'HOAN_THANH'
+        ).length;
 
-    return Array.from(pvtMap.values()).sort((a, b) => {
-      if (a.roomCode && b.roomCode) {
+        return {
+          id: pvt.id,
+          name: pvt.fullName,
+          roomCode: pvt.roomCode || '',
+          total,
+          overdue,
+          completed,
+        };
+      })
+      .sort((a, b) => {
+        // ⭐ Sắp xếp thông minh:
+        // 1. PVT có quá hạn lên đầu (ưu tiên cảnh báo)
+        // 2. PVT có nhiều công văn
+        // 3. PVT rảnh (0 CV) xuống dưới
+        // 4. Cùng nhóm → sort theo roomCode
+
+        // Ưu tiên 1: có quá hạn
+        if (a.overdue > 0 && b.overdue === 0) return -1;
+        if (a.overdue === 0 && b.overdue > 0) return 1;
+
+        // Ưu tiên 2: có công văn vs rảnh
+        if (a.total > 0 && b.total === 0) return -1;
+        if (a.total === 0 && b.total > 0) return 1;
+
+        // Ưu tiên 3: nhiều công văn hơn
+        if (a.total !== b.total) return b.total - a.total;
+
+        // Cuối cùng: sort theo roomCode
         return a.roomCode.localeCompare(b.roomCode, 'vi', { numeric: true });
-      }
-      return a.name.localeCompare(b.name, 'vi');
-    });
-  }, [dispatches]);
+      });
+  }, [allPvts, dispatches]);
 
   // 🎯 Auto-select PVT khi login bằng tài khoản PVT
   useEffect(() => {
@@ -157,23 +234,34 @@ export const PublicHome: React.FC = () => {
 
   // 🎯 Filter theo PVT đang chọn
   const filteredByPvt = useMemo(() => {
-    if (!selectedPvtId) return dispatches;
-    const selected = pvtCards.find(p => p.id === selectedPvtId);
-    if (!selected) return dispatches;
+    let result = dispatches;
 
-    return dispatches.filter(d => {
-      if (d.assignedPvtId && d.assignedPvtId === selected.id) return true;
-      const cleanAssigned = (d.assignedPvtName || '')
-        .replace(/^Đồng chí\s+/i, '')
-        .replace(/^Đ\/c\s+/i, '')
-        .trim();
-      if (cleanAssigned === selected.name) return true;
-      if (selected.roomCode && (d.assignedPvtName || '').includes(selected.roomCode)) {
-        return true;
+    // ⭐ BƯỚC 1: Nếu có lọc PVT
+    if (selectedPvtId) {
+      const selected = pvtCards.find(p => p.id === selectedPvtId);
+      if (selected) {
+        result = result.filter(d => {
+          if (d.assignedPvtId && d.assignedPvtId === selected.id) return true;
+          const cleanAssigned = (d.assignedPvtName || '')
+            .replace(/^Đồng chí\s+/i, '')
+            .replace(/^Đ\/c\s+/i, '')
+            .trim();
+          if (cleanAssigned === selected.name) return true;
+          if (selected.roomCode && (d.assignedPvtName || '').includes(selected.roomCode)) {
+            return true;
+          }
+          return false;
+        });
       }
-      return false;
-    });
-  }, [dispatches, selectedPvtId, pvtCards]);
+    }
+
+    // ⭐ BƯỚC 2: Nếu có lọc quá hạn
+    if (isOverdueFilterActive) {
+      result = result.filter(d => resolveDispatchStatus(d) === 'QUA_HAN');
+    }
+
+    return result;
+  }, [dispatches, selectedPvtId, pvtCards, isOverdueFilterActive]);
 
   // 🎯 Filter theo search + status trên mobile
   const filteredDispatches = useMemo(() => {
@@ -200,16 +288,23 @@ export const PublicHome: React.FC = () => {
   }, [filteredByPvt, mobileSearchQuery, mobileStatusFilter]);
 
   const stats = useMemo(() => {
+    // ⭐ Tính stats trên TOÀN BỘ dispatches, không phải filtered
     let dangXuLy = 0, sapDenHan = 0, quaHan = 0, hoanThanh = 0;
-    filteredByPvt.forEach(d => {
+    dispatches.forEach(d => {
       const st = resolveDispatchStatus(d);
       if (st === 'HOAN_THANH') hoanThanh++;
       else if (st === 'QUA_HAN') quaHan++;
       else if (st === 'SAP_DEN_HAN') sapDenHan++;
       else dangXuLy++;
     });
-    return { total: filteredByPvt.length, dangXuLy, sapDenHan, quaHan, hoanThanh };
-  }, [filteredByPvt]);
+    return {
+      total: dispatches.length,
+      dangXuLy,
+      sapDenHan,
+      quaHan,
+      hoanThanh,
+    };
+  }, [dispatches]);
 
   const displayDispatches = useMemo(
     () => sortDispatchesNewestFirst(filteredDispatches),
@@ -251,32 +346,6 @@ export const PublicHome: React.FC = () => {
     window.location.reload();
   };
 
-  // 🎯 Status badge
-  const renderStatusBadge = (disp: Dispatch) => {
-    const status = resolveDispatchStatus(disp);
-    const text = disp.thoiHanXuLy || '';
-    if (status === 'HOAN_THANH') return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-        <CheckCircle2 className="w-3 h-3 text-emerald-600" />{text || 'Hoàn thành'}
-      </span>
-    );
-    if (status === 'QUA_HAN') return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shadow-xs">
-        <AlertTriangle className="w-3 h-3 text-rose-600" />{text || 'Quá hạn'}
-      </span>
-    );
-    if (status === 'SAP_DEN_HAN') return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
-        <Clock className="w-3 h-3 text-amber-600" />{text || 'Sắp đến hạn'}
-      </span>
-    );
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
-        <Clock className="w-3 h-3 text-blue-500" />{text || 'Đang xử lý'}
-      </span>
-    );
-  };
-
   return (
     <div className="min-h-screen flex flex-col text-slate-900" style={{ backgroundColor: '#F5F5F0' }}>
 
@@ -287,8 +356,6 @@ export const PublicHome: React.FC = () => {
       >
         <div className="w-full px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3.5">
           <div className="flex items-center justify-between gap-2">
-
-            {/* LEFT: Logo + Title */}
             <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
               <img
                 src="/logo.svg"
@@ -301,14 +368,11 @@ export const PublicHome: React.FC = () => {
                   className="text-[9px] sm:text-xs lg:text-sm font-bold tracking-wider uppercase truncate"
                   style={{ color: '#FFD700' }}
                 >
-                  <span className="hidden sm:inline">VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH</span>
-                  <span className="sm:hidden">VKSND TP.HCM</span>
+                  VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
                 </div>
-
                 <h1 className="text-sm sm:text-lg lg:text-2xl font-black tracking-wide uppercase text-white leading-tight truncate">
-                  Công văn gửi lãnh đạo
+                  THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN
                 </h1>
-
                 {currentTime && (
                   <p className="hidden sm:block text-[10px] sm:text-[11px] lg:text-xs text-white/80 capitalize font-medium truncate">
                     {currentTime}
@@ -317,9 +381,7 @@ export const PublicHome: React.FC = () => {
               </div>
             </div>
 
-            {/* RIGHT: Actions */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 relative">
-
               {!currentUser && (
                 <Link
                   to="/login"
@@ -375,10 +437,7 @@ export const PublicHome: React.FC = () => {
 
                     {isUserMenuOpen && (
                       <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setIsUserMenuOpen(false)}
-                        />
+                        <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)} />
                         <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50">
                           <div className="px-4 py-3 bg-gradient-to-br from-red-900 to-amber-900 text-white">
                             <div className="text-xs font-bold text-amber-200 uppercase">
@@ -389,7 +448,6 @@ export const PublicHome: React.FC = () => {
                             </div>
                             <div className="text-sm font-black truncate">{currentUser.fullName}</div>
                           </div>
-
                           <div className="py-1">
                             <button
                               onClick={() => { setIsUserMenuOpen(false); setIsProfileOpen(true); }}
@@ -406,7 +464,6 @@ export const PublicHome: React.FC = () => {
                               Đổi mật khẩu
                             </button>
                           </div>
-
                           <div className="border-t border-slate-100">
                             <button
                               onClick={handleLogout}
@@ -430,8 +487,8 @@ export const PublicHome: React.FC = () => {
       <PushPermissionBanner />
 
       {/* Main */}
-      <main className="flex-1 w-full py-3 sm:py-5">
-        <div className="max-w-[1200px] mx-auto w-full px-2 sm:px-4 lg:px-6 space-y-3 sm:space-y-4">
+      <main className="flex-1 w-full py-2 sm:py-3">
+        <div className="max-w-[1600px] mx-auto w-full px-2 sm:px-3 lg:px-4 space-y-2 sm:space-y-3">
 
           <PublicHeroSection
             totalDispatches={stats.total}
@@ -447,6 +504,18 @@ export const PublicHome: React.FC = () => {
               if (canClickPvtCard(card)) setSelectedPvtId(pvtId);
             }}
             canClickPvtCard={canClickPvtCard}
+            // ⭐ Props mới cho filter quá hạn
+            onFilterOverdue={() => {
+              setIsOverdueFilterActive(prev => !prev);
+              // Cuộn xuống bảng để user thấy kết quả
+              setTimeout(() => {
+                document.getElementById('public-table-section')?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                });
+              }, 100);
+            }}
+            isOverdueFilterActive={isOverdueFilterActive}
           />
 
           {/* MOBILE FILTER BAR */}
@@ -470,7 +539,6 @@ export const PublicHome: React.FC = () => {
                   </button>
                 )}
               </div>
-
               <button
                 onClick={() => setShowMobileFilter(!showMobileFilter)}
                 className={`p-2 rounded-lg border transition ${showMobileFilter || mobileStatusFilter !== 'ALL'
@@ -514,30 +582,36 @@ export const PublicHome: React.FC = () => {
             id="public-table-section"
             className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden w-full"
           >
-            {/* Title */}
             <div
               className="text-white text-center py-2 sm:py-2.5 px-3 sm:px-4 border-b shadow-xs flex items-center justify-between gap-2"
               style={{ backgroundColor: '#B71C1C', borderColor: '#7F0E0E' }}
             >
               <h2 className="text-xs sm:text-sm md:text-base font-bold tracking-wider uppercase text-white flex-1 text-center truncate">
-                CÔNG VĂN GỬI LÃNH ĐẠO
+                THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN
                 {selectedPvtId && (
                   <span className="ml-2 text-amber-300 font-black">
                     — {pvtCards.find(p => p.id === selectedPvtId)?.name}
                   </span>
                 )}
+                {isOverdueFilterActive && (
+                  <span className="ml-2 text-rose-200 font-black flex-inline items-center gap-1">
+                    🚨 QUÁ HẠN
+                  </span>
+                )}
               </h2>
-              {selectedPvtId && (
+              {(selectedPvtId || isOverdueFilterActive) && (
                 <button
-                  onClick={() => setSelectedPvtId(null)}
+                  onClick={() => {
+                    setSelectedPvtId(null);
+                    setIsOverdueFilterActive(false);
+                  }}
                   className="px-2 py-0.5 text-[10px] font-bold bg-white/20 hover:bg-white/30 rounded-lg border border-white/30 transition cursor-pointer whitespace-nowrap"
                 >
-                  ✕ Bỏ lọc
+                  ✕ 
                 </button>
               )}
             </div>
 
-            {/* MOBILE VIEW */}
             <div className="sm:hidden">
               <PublicMobileCards
                 dispatches={paginatedDispatches}
@@ -548,7 +622,6 @@ export const PublicHome: React.FC = () => {
               />
             </div>
 
-            {/* DESKTOP VIEW */}
             <div className="hidden sm:block">
               <PublicDesktopTable
                 dispatches={paginatedDispatches}
@@ -559,7 +632,6 @@ export const PublicHome: React.FC = () => {
               />
             </div>
 
-            {/* Pagination */}
             <div className="border-t border-slate-200">
               <Pagination
                 currentPage={currentPage}
@@ -591,7 +663,6 @@ export const PublicHome: React.FC = () => {
         </button>
       )}
 
-      {/* Modals */}
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
@@ -608,7 +679,6 @@ export const PublicHome: React.FC = () => {
         />
       )}
 
-      {/* ⭐ DRAWER CHI TIẾT CÔNG VĂN — hiện file đính kèm */}
       <DispatchDetailDrawer
         dispatch={detailDispatch}
         onClose={() => setDetailDispatch(null)}
