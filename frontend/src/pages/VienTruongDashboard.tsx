@@ -217,15 +217,62 @@ export const VienTruongDashboard: React.FC = () => {
     });
 
     // Sort: quá hạn > đến hạn > sắp hết hạn > còn nhiều > hoàn thành
-    return list.sort((a, b) => {
-      const pa = getStatusPriority(a);
-      const pb = getStatusPriority(b);
-      if (pa !== pb) return pa - pb;
+    // ⭐ SORT theo sortMode
+    const sortMode = filters.sortMode || 'deadline_asc';
+    const daysToDeadline = (d: Dispatch): number => {
+      if (!d.hanBaoCaoXuLy) return 9999;
+      const dl = new Date(d.hanBaoCaoXuLy);
+      dl.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return Math.round((dl.getTime() - today.getTime()) / 86400000);
+    };
 
-      const da = a.hanBaoCaoXuLy || '9999-12-31';
-      const db = b.hanBaoCaoXuLy || '9999-12-31';
-      return da.localeCompare(db);
-    });
+    switch (sortMode) {
+      case 'priority':
+        return list.sort((a, b) => {
+          const pa = getStatusPriority(a);
+          const pb = getStatusPriority(b);
+          if (pa !== pb) return pa - pb;
+          return daysToDeadline(a) - daysToDeadline(b);
+        });
+
+      case 'deadline_asc':
+        return list.sort((a, b) => {
+          const aDone = a.trangThai === 'HOAN_THANH' ? 1 : 0;
+          const bDone = b.trangThai === 'HOAN_THANH' ? 1 : 0;
+          if (aDone !== bDone) return aDone - bDone;
+          return daysToDeadline(a) - daysToDeadline(b);
+        });
+
+      case 'deadline_desc':
+        return list.sort((a, b) => daysToDeadline(b) - daysToDeadline(a));
+
+      case 'overdue_desc':
+        return list.sort((a, b) => {
+          const aD = daysToDeadline(a);
+          const bD = daysToDeadline(b);
+          if (aD >= 0 && bD >= 0) return aD - bD;
+          if (aD >= 0) return 1;
+          if (bD >= 0) return -1;
+          return aD - bD;
+        });
+
+      case 'oldest':
+        return list.sort((a, b) => {
+          const da = new Date(a.ngayGui || a.ngayPhatHanh || 0).getTime();
+          const db = new Date(b.ngayGui || b.ngayPhatHanh || 0).getTime();
+          return da - db;
+        });
+
+      case 'newest':
+      default:
+        return list.sort((a, b) => {
+          const da = new Date(a.ngayGui || a.ngayPhatHanh || 0).getTime();
+          const db = new Date(b.ngayGui || b.ngayPhatHanh || 0).getTime();
+          return db - da;
+        });
+    }
   }, [dispatches, filters, pvtList]);
 
   // Clear selection khi filter đổi
@@ -517,68 +564,7 @@ export const VienTruongDashboard: React.FC = () => {
                   {/* BẢNG */}
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
 
-                    {/* Thanh bulk actions */}
-                    {selectedIds.length > 0 && (
-                      <div className="px-4 py-3 bg-red-50 border-b border-red-200 flex items-center justify-between gap-3 animate-fadeIn">
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-700 text-white rounded-lg font-bold">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Đã chọn {selectedIds.length}
-                          </span>
-                          <button
-                            onClick={() => setSelectedIds([])}
-                            className="text-[11px] text-slate-600 hover:text-red-700 underline font-medium cursor-pointer"
-                          >
-                            Bỏ chọn
-                          </button>
-                        </div>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={handleBulkComplete}
-                            disabled={!canBulkComplete}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg shadow-xs transition ${canBulkComplete
-                              ? 'text-white bg-emerald-600 hover:bg-emerald-700 cursor-pointer active:scale-95'
-                              : 'text-slate-400 bg-slate-200 cursor-not-allowed'
-                              }`}
-                            title={
-                              canBulkComplete
-                                ? `Hoàn thành ${completableSelected.length} công văn`
-                                : 'Tất cả công văn đã chọn đều đã hoàn thành'
-                            }
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Hoàn thành
-                            {canBulkComplete && ` (${completableSelected.length})`}
-                          </button>
-
-                          <button
-                            onClick={handleBulkDelete}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition cursor-pointer active:scale-95"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Xóa ({selectedIds.length})
-                          </button>
-
-                          <button
-                            onClick={handleEditSingle}
-                            disabled={selectedIds.length !== 1}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg shadow-xs transition ${selectedIds.length === 1
-                              ? 'text-white bg-blue-600 hover:bg-blue-700 cursor-pointer active:scale-95'
-                              : 'text-slate-400 bg-slate-200 cursor-not-allowed'
-                              }`}
-                            title={
-                              selectedIds.length === 1
-                                ? 'Chỉnh sửa công văn đã chọn'
-                                : 'Chỉ có thể chỉnh sửa khi chọn đúng 1 công văn'
-                            }
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                            Chỉnh sửa
-                          </button>
-                        </div>
-                      </div>
-                    )}
 
                     <PublicDesktopTable
                       dispatches={filteredDispatches}
@@ -586,24 +572,6 @@ export const VienTruongDashboard: React.FC = () => {
                       pageSize={filteredDispatches.length || 20}
                       selectedPvtId={null}
                       onSelectDispatch={d => setDetailDispatch(d)}
-                      showCheckbox={true}
-                      selectedIds={selectedIds}
-                      onToggleSelectRow={toggleSelectRow}
-                      onToggleSelectAll={toggleSelectAll}
-                      onEdit={d => {
-                        setDispatchToEdit(d);
-                        setIsAddEditModalOpen(true);
-                      }}
-                      onDelete={async id => {
-                        if (!window.confirm('Xác nhận xóa công văn này?')) return;
-                        const success = await apiClient.deleteDispatch(id);
-                        if (success) {
-                          showToast('Đã xóa công văn');
-                          reload();
-                        } else {
-                          showToast('Lỗi khi xóa', 'error');
-                        }
-                      }}
                       onViewFiles={handleViewFiles}
                     />
                   </div>
@@ -787,8 +755,16 @@ export const VienTruongDashboard: React.FC = () => {
         dispatch={detailDispatch}
         onClose={() => setDetailDispatch(null)}
         columns={DEFAULT_COLUMNS}
-        onUpdate={(id, updates) => {
-          apiClient.updateDispatch(id, updates);
+        canEdit={true}
+        onUpdate={async (id, updates) => {
+          await apiClient.updateDispatch(id, updates);
+          reload();
+        }}
+        onMarkComplete={async (d) => {
+          const res = await apiClient.markComplete(d.id);
+          if (!res?.success) throw new Error(res?.message || 'Lỗi');
+          // Update detailDispatch để refresh drawer
+          setDetailDispatch(prev => prev ? { ...prev, trangThai: 'HOAN_THANH', tienDo: 100 } : prev);
           reload();
         }}
       />

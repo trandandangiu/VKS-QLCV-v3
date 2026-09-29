@@ -1,12 +1,12 @@
-// src/types/vt/filters.ts
 export interface VtFilters {
   searchQuery: string;
-  pvtIds: string[];         // multi-select
-  deptCodes: string[];      // multi-select
-  status: string;           // 'ALL' | 'DANG_XU_LY' | ...
-  urgency: string;          // 'ALL' | 'KHAN' | ...
+  pvtIds: string[];
+  deptCodes: string[];
+  status: string;
+  urgency: string;
   dateFrom: string;
   dateTo: string;
+  sortMode?: 'priority' | 'deadline_asc' | 'deadline_desc' | 'overdue_desc' | 'newest' | 'oldest';   // ⭐ THÊM
 }
 
 export const DEFAULT_VT_FILTERS: VtFilters = {
@@ -17,4 +17,5 @@ export const DEFAULT_VT_FILTERS: VtFilters = {
   urgency: 'ALL',
   dateFrom: '',
   dateTo: '',
+  sortMode: 'priority',   // ⭐ THÊM
 };
