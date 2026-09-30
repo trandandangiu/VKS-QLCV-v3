@@ -1,5 +1,5 @@
-// frontend/src/pages/Login.tsx
-import React, { useState } from 'react';
+// src/pages/Login.tsx
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -12,15 +12,26 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 
+
 export const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('vks@2026');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+
+  // // ⭐ Chống autofill — đợi 1 nhịp để browser fill xong rồi clear
+  // useEffect(() => {
+  //   const timer = setTimeout(() => {
+  //     setUsername('');
+  //     setPassword('');
+  //   }, 150);
+  //   return () => clearTimeout(timer);
+  // }, []);
 
   const handleFormLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,9 +52,6 @@ export const Login: React.FC = () => {
     }
   };
 
-  // 🎯 PVT + TP → public home (/)
-  //    ADMIN → /admin
-  //    VT → /vt
   const redirectByRole = (role?: string, fallbackUsername?: string) => {
     switch (role) {
       case 'ADMIN':
@@ -53,13 +61,13 @@ export const Login: React.FC = () => {
         navigate('/vt');
         break;
       case 'PHO_VIEN_TRUONG':
-        navigate('/');          // ← PVT → public home
+        navigate('/home');
         break;
       case 'TRUONG_PHONG':
-        navigate('/');          // ← TP → public home
+        navigate('/home');
         break;
       default:
-        navigate('/');
+        navigate('/home');
     }
   };
 
@@ -127,7 +135,27 @@ export const Login: React.FC = () => {
                 </div>
               )}
 
-              <form onSubmit={handleFormLogin} className="space-y-4">
+              <form
+                onSubmit={handleFormLogin}
+                className="space-y-4"
+                autoComplete="off"
+              >
+                {/* ⭐ 2 field ẩn để chống autofill */}
+                <input
+                  type="text"
+                  name="fakeusernameremembered"
+                  autoComplete="off"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                />
+                <input
+                  type="password"
+                  name="fakepasswordremembered"
+                  autoComplete="off"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                />
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                     Tên truy cập
@@ -139,9 +167,11 @@ export const Login: React.FC = () => {
                     <input
                       type="text"
                       required
+                      autoComplete="off"
+                      name="vks_username_noautofill"
                       value={username}
                       onChange={e => setUsername(e.target.value)}
-                      placeholder="Tên tài khoản"
+                      placeholder="Nhập tên đăng nhập"
                       className="w-full pl-9 pr-3 py-2.5 text-sm rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-red-600 focus:ring-2 focus:ring-red-100 focus:outline-none transition"
                     />
                   </div>
@@ -158,9 +188,11 @@ export const Login: React.FC = () => {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
+                      autoComplete="new-password"
+                      name="vks_password_noautofill"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="Mật khẩu (mặc định: vks@2026)"  // ⭐ Gợi ý cho user
                       className="w-full pl-9 pr-10 py-2.5 text-sm rounded-lg border border-slate-300 bg-white text-slate-900 focus:border-red-600 focus:ring-2 focus:ring-red-100 focus:outline-none transition"
                     />
                     <button

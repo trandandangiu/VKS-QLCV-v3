@@ -13,6 +13,7 @@ import { AttachmentUploader, AttachmentItem } from './attachments/AttachmentUplo
 import { apiClient } from '../services/apiClient';
 import { useAuth } from '../context/AuthContext';
 import { AgencyCombobox } from './ui/AgencyCombobox';
+import { DocumentTypeCombobox } from './ui/DocumentTypeCombobox';   // ⭐ THÊM
 
 interface DispatchModalProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ const DEFAULT_FORM: Partial<Dispatch> = {
   hanBaoCaoXuLy: '',
   thoiHanXuLy: '',
   donViBanHanh: '',
+  loaiCongVan: '',           // ⭐ THÊM
   nguoiThucHien: '',
   ghiChu: '',
   trangThai: 'DANG_XU_LY',
@@ -80,7 +82,6 @@ function getWarningMeta(
   isCompleted: boolean,
   hasDeadline: boolean
 ): WarningMeta {
-  // ⭐ Nếu không có hạn → tự động coi như HOÀN THÀNH
   if (!hasDeadline) {
     return {
       key: 'HOAN_THANH',
@@ -246,6 +247,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     if (dispatchToEdit) {
       setFormData({
         ...dispatchToEdit,
+        loaiCongVan: dispatchToEdit.loaiCongVan || '',   // ⭐ load loaiCongVan
         customFields: dispatchToEdit.customFields ? { ...dispatchToEdit.customFields } : {},
       });
       setSelectedPvtId(dispatchToEdit.assignedPvtId || '');
@@ -278,10 +280,8 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
   // ============================================
   // AUTO-CALC: THỜI HẠN XỬ LÝ
-  // ⭐ Chỉ tính khi có hạn báo cáo
   // ============================================
   useEffect(() => {
-    // ⭐ Nếu không có hạn → clear thoiHanXuLy
     if (!formData.hanBaoCaoXuLy) {
       if (formData.thoiHanXuLy !== '') {
         setFormData(prev => ({ ...prev, thoiHanXuLy: '' }));
@@ -323,7 +323,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     return Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   })();
 
-  // ⭐ Truyền hasDeadline vào getWarningMeta
   const warnMeta = getWarningMeta(daysFromToday, isCompleted, hasDeadline);
 
   // ============================================
@@ -367,6 +366,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
           ...(first.tenCongVan ? { tenCongVan: first.tenCongVan } : {}),
           ...(first.hanBaoCaoXuLy ? { hanBaoCaoXuLy: first.hanBaoCaoXuLy } : {}),
           ...(first.donViBanHanh ? { donViBanHanh: first.donViBanHanh } : {}),
+          ...(first.loaiCongVan ? { loaiCongVan: first.loaiCongVan } : {}),   // ⭐
           ...(first.nguoiThucHien ? { nguoiThucHien: first.nguoiThucHien } : {}),
           ...(first.ghiChu ? { ghiChu: first.ghiChu } : {}),
           ...(first.thoiHanXuLy ? { thoiHanXuLy: first.thoiHanXuLy } : {}),
@@ -398,6 +398,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       ...(item.tenCongVan ? { tenCongVan: item.tenCongVan } : {}),
       ...(item.hanBaoCaoXuLy ? { hanBaoCaoXuLy: item.hanBaoCaoXuLy } : {}),
       ...(item.donViBanHanh ? { donViBanHanh: item.donViBanHanh } : {}),
+      ...(item.loaiCongVan ? { loaiCongVan: item.loaiCongVan } : {}),   // ⭐
       ...(item.nguoiThucHien ? { nguoiThucHien: item.nguoiThucHien } : {}),
       ...(item.ghiChu ? { ghiChu: item.ghiChu } : {}),
       ...(item.thoiHanXuLy ? { thoiHanXuLy: item.thoiHanXuLy } : {}),
@@ -435,13 +436,17 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       return;
     }
 
-    // Validate
+    // ⭐ Validate
+    if (!formData.loaiCongVan?.trim()) {
+      setErrorMsg('Vui lòng chọn hoặc nhập Loại văn bản');
+      return;
+    }
     if (!formData.soCongVan?.trim()) {
-      setErrorMsg('Vui lòng nhập Số công việc');
+      setErrorMsg('Vui lòng nhập Số / Ký hiệu văn bản');
       return;
     }
     if (!formData.tenCongVan?.trim()) {
-      setErrorMsg('Vui lòng nhập Tên công việc');
+      setErrorMsg('Vui lòng nhập Nội dung trích yếu');
       return;
     }
     if (!formData.donViBanHanh?.trim()) {
@@ -449,12 +454,10 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       return;
     }
 
-    // Validate ngày (nếu có nhập tay sai)
     if (formData.ngayGui && !/^\d{4}-\d{2}-\d{2}$/.test(formData.ngayGui)) {
       setErrorMsg('Ngày tiếp nhận không hợp lệ (cần định dạng DD/MM/YYYY)');
       return;
     }
-    // ⭐ Chỉ validate hạn nếu có nhập
     if (
       formData.hanBaoCaoXuLy &&
       !/^\d{4}-\d{2}-\d{2}$/.test(formData.hanBaoCaoXuLy)
@@ -467,8 +470,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      // ⭐ Nếu không có hạn → tự động HOÀN THÀNH
-      //    Nếu có hạn → dùng resolveDispatchStatus như cũ
       let resolvedStatus: Dispatch['trangThai'];
 
       if (!formData.hanBaoCaoXuLy) {
@@ -483,7 +484,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
       const pvtUser = pvtUsers.find(u => u.id === selectedPvtId);
       const tpUser = filteredTpUsers.find(u => u.id === selectedTpId);
 
-      // ⭐ Nếu tự động hoàn thành → set tienDo = 100
       const finalTienDo = !formData.hanBaoCaoXuLy
         ? 100
         : (formData.tienDo ?? 0);
@@ -583,35 +583,36 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                 type="text"
                 value={formData.soCongVan || ''}
                 onChange={e => setFormData({ ...formData, soCongVan: e.target.value })}
-                placeholder="142/BC-UBND"
+                placeholder=""
                 className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               />
             </Field>
 
-            {/* ⭐ BỎ required — cho phép để trống */}
             <Field label="HẠN BÁO CÁO, XỬ LÝ">
               <DateInput
                 value={formData.hanBaoCaoXuLy}
                 onChange={v => setFormData({ ...formData, hanBaoCaoXuLy: v })}
                 className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               />
-              {/* ⭐ Ghi chú nhỏ cho user hiểu */}
               <p className="mt-1 text-[10px] text-slate-500 italic">
                 <span className="font-bold text-emerald-700"></span>.
               </p>
             </Field>
 
+            {/* ⭐ ĐƠN VỊ BAN HÀNH */}
             <Field label="ĐƠN VỊ BAN HÀNH" required>
               <AgencyCombobox
                 value={formData.donViBanHanh || ''}
                 onChange={val => setFormData({ ...formData, donViBanHanh: val })}
-                placeholder="Chọn hoặc nhập đơn vị ban hành..."
+                placeholder=""
                 required
               />
             </Field>
+
+
           </div>
 
-          {/* ===== 3 CỘT ĐỘNG ===== */}
+          {/* ===== 3 CỘT ĐỘNG: THỜI HẠN & CẢNH BÁO ===== */}
           <div className="pt-2">
             <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">
               Thời hạn & Cảnh báo
@@ -638,7 +639,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
               <div className="bg-white px-3 py-2.5 border-r border-slate-200 flex items-center">
                 <span className="text-sm font-bold text-slate-900">
-                  {/* ⭐ Chỉ hiện hạn nếu có, nếu không hiện "Không có" */}
                   {formData.hanBaoCaoXuLy
                     ? formatDMY(formData.hanBaoCaoXuLy)
                     : <span className="text-slate-400 italic text-xs">Không có hạn</span>}
@@ -656,27 +656,31 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               </div>
             </div>
 
-            {/* ⭐ Notice khi auto HOÀN THÀNH */}
-            {!hasDeadline && (
-              <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-2">
-                <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-emerald-800">
-                  <strong>Không có hạn xử lý:</strong> Công văn này sẽ được tự động
-                  đánh dấu <strong>HOÀN THÀNH</strong>
-                </p>
-              </div>
-            )}
+
           </div>
 
-          <Field label="NỘI DUNG CÔNG VIỆC" required>
+          {/* ⭐ ĐỔI LABEL: NỘI DUNG CÔNG VIỆC → NỘI DUNG TRÍCH YẾU */}
+          <Field label="NỘI DUNG TRÍCH YẾU" required>
             <textarea
               rows={2}
               value={formData.tenCongVan || ''}
               onChange={e => setFormData({ ...formData, tenCongVan: e.target.value })}
-              placeholder="Nhập trích yếu công việc..."
+              placeholder=""
               className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
             />
           </Field>
+          {/* ⭐ LOẠI VĂN BẢN — TRƯỜNG MỚI */}
+          <Field label="LOẠI VĂN BẢN" required>
+            <DocumentTypeCombobox
+              value={formData.loaiCongVan || ''}
+              onChange={val => setFormData({ ...formData, loaiCongVan: val })}
+              placeholder=""
+              required
+            />
+          </Field>
+
+          {/* Empty cell để giữ layout 2 cột */}
+          <div />
 
           {/* ===== PHÂN CÔNG XỬ LÝ ===== */}
           <div className="pt-3 border-t border-slate-200">
@@ -710,10 +714,13 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   onChange={e => {
                     const code = e.target.value;
                     setSelectedDeptCode(code);
-                    // ✅ Không ghi đè donViBanHanh — đúng
-                    if (code) {
-                      const tps = allTpUsers.filter(u => u.roomCode === code);
-                      if (!tps.find(t => t.id === selectedTpId)) setSelectedTpId('');
+
+                    // ⭐ Auto chọn Trưởng phòng khi chọn phòng (vẫn cần cho logic lưu)
+                    const matchedTp = allTpUsers.find(u => u.roomCode === code);
+                    if (matchedTp) {
+                      setSelectedTpId(matchedTp.id);
+                    } else {
+                      setSelectedTpId('');
                     }
                   }}
                   className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white cursor-pointer"
@@ -721,7 +728,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   <option value="">-- Chọn phòng --</option>
                   {departments.map(d => (
                     <option key={d.id} value={d.code}>
-                      {d.name} ({d.code})
+                      {d.name}
                     </option>
                   ))}
                 </select>
@@ -732,22 +739,19 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   type="text"
                   value={formData.nguoiThucHien || ''}
                   onChange={e => setFormData({ ...formData, nguoiThucHien: e.target.value })}
-                  placeholder="Chưa giao"
+                  placeholder=""
                   className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                 />
               </Field>
             </div>
           </div>
 
-          {/* ═══════════════════════════════════════════════
-              ĐÍNH KÈM — thu gọn
-              ═══════════════════════════════════════════════ */}
+          {/* ===== ĐÍNH KÈM ===== */}
           <div className="pt-3 border-t border-slate-200">
             <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">
               📎 Đính kèm & Nhập liệu
             </div>
 
-            {/* Hàng nút */}
             <div className="flex flex-wrap items-center gap-2 mb-2">
               {!dispatchToEdit && (
                 <>
@@ -762,15 +766,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                       e.target.value = '';
                     }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => excelInputRef.current?.click()}
-                    disabled={isImporting}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition cursor-pointer disabled:opacity-50 active:scale-95"
-                  >
-                    <FileSpreadsheet className="w-3 h-3" />
-                    {isImporting ? 'Đang đọc...' : 'Nhập từ Excel'}
-                  </button>
+
                 </>
               )}
 
@@ -827,7 +823,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               )}
             </div>
 
-            {/* Preview Excel */}
             {importPreviewOpen && importedItems.length > 1 && (
               <div className="mb-2 max-h-32 overflow-y-auto rounded-md border border-emerald-200 bg-white">
                 <table className="w-full text-left text-[10px]">
@@ -871,7 +866,6 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               </div>
             )}
 
-            {/* Attachment */}
             <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg bg-slate-50/40 p-2">
               <AttachmentUploader
                 dispatchId={dispatchToEdit?.id}
@@ -940,7 +934,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 };
 
 // ============================================
-// DATE INPUT — DD/MM/YYYY hiển thị, value YYYY-MM-DD
+// DATE INPUT
 // ============================================
 interface DateInputProps {
   value?: string;

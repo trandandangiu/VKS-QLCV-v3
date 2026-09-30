@@ -585,12 +585,44 @@ export const apiClient = {
     return data.success ? data.unreadCount : 0;
   },
 
-  async markNotificationRead(id: string): Promise<boolean> {
-    const data = await request<{ success: boolean }>(
+  // ⭐ Trả về unreadCount
+  async markNotificationRead(id: string): Promise<{ success: boolean; unreadCount?: number }> {
+    const data = await request<{ success: boolean; unreadCount?: number }>(
       `/notifications/${id}/read`,
       { method: 'PATCH' }
     );
-    return !!data.success;
+    return data;
+  },
+
+  async markAllNotificationsRead(): Promise<{ success: boolean; unreadCount?: number }> {
+    const data = await request<{ success: boolean; unreadCount?: number }>(
+      '/notifications/read-all',
+      { method: 'PATCH' }
+    );
+    return data;
+  },
+
+  async deleteNotification(id: string): Promise<{ success: boolean; unreadCount?: number }> {
+    const data = await request<{ success: boolean; unreadCount?: number }>(
+      `/notifications/${id}`,
+      { method: 'DELETE' }
+    );
+    return data;
+  },
+
+  async getUnreadCount(): Promise<number> {
+    const data = await request<{ success: boolean; unreadCount: number }>(
+      '/notifications/unread-count'
+    );
+    return data.success ? data.unreadCount : 0;
+  },
+
+  async markNotificationRead(id: string): Promise<{ success: boolean; unreadCount?: number }> {
+    const data = await request<{ success: boolean; unreadCount?: number }>(
+      `/notifications/${id}/read`,
+      { method: 'PATCH' }
+    );
+    return data;
   },
 
   async markAllNotificationsRead(): Promise<boolean> {

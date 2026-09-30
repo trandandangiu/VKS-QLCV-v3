@@ -2,61 +2,49 @@
 import bcrypt from 'bcrypt';
 import prisma from '../config/prisma.js';
 
-// Mật khẩu mặc định
 const DEFAULT_PASSWORD = 'vks@2026';
-
-// Role cần department
 const ROLES_REQUIRE_DEPARTMENT = ['TRUONG_PHONG'];
 
 export const usersService = {
   // ============================================
   // 1. LẤY DANH SÁCH USERS
   // ============================================
-async getUsers(currentUser, filters = {}) {
-  const page = parseInt(filters.page) || 1;
-  const limit = parseInt(filters.limit) || 20;
-  const skip = (page - 1) * limit;
+  async getUsers(currentUser, filters = {}) {
+    const page = parseInt(filters.page) || 1;
+    const limit = parseInt(filters.limit) || 20;
+    const skip = (page - 1) * limit;
 
-  // ⭐ Phát hiện khách
-  const isGuest = !currentUser || !currentUser.id;
+    const isGuest = !currentUser || !currentUser.id;
 
-  const where = {
-    deletedAt: null,
-  };
+    const where = { deletedAt: null };
 
-  // ⭐ PHÂN QUYỀN
-  if (isGuest) {
-    // 🌐 KHÁCH: xem TẤT CẢ user, không filter gì
-    // (chỉ cần deletedAt = null như trên)
-  } else {
-    // User login → phân quyền như cũ
-    const perms = currentUser.permissions || [];
+    if (isGuest) {
+      // Khách xem tất cả
+    } else {
+      const perms = currentUser.permissions || [];
 
-    if (perms.includes('user:view:all')) {
-      // Admin, VT: xem tất cả
-    } else if (perms.includes('user:view:department')) {
-      // PVT: xem user trong phòng phụ trách
-      const managedDepts = await prisma.department.findMany({
-        where: { pvtManagerId: currentUser.id },
-        select: { id: true },
-      });
-      const deptIds = managedDepts.map(d => d.id);
+      if (perms.includes('user:view:all')) {
+        // All
+      } else if (perms.includes('user:view:department')) {
+        const managedDepts = await prisma.department.findMany({
+          where: { pvtManagerId: currentUser.id },
+          select: { id: true },
+        });
+        const deptIds = managedDepts.map(d => d.id);
 
-      if (deptIds.length > 0) {
-        where.OR = [
-          { departmentId: { in: deptIds } },
-          { id: currentUser.id },
-        ];
+        if (deptIds.length > 0) {
+          where.OR = [
+            { departmentId: { in: deptIds } },
+            { id: currentUser.id },
+          ];
+        } else {
+          where.id = currentUser.id;
+        }
       } else {
         where.id = currentUser.id;
       }
-    } else {
-      // TP: chỉ xem chính mình
-      where.id = currentUser.id;
     }
-  }
 
-    // 1.2. Filter theo query
     if (filters.search) {
       const search = filters.search;
       const searchOR = [
@@ -66,7 +54,6 @@ async getUsers(currentUser, filters = {}) {
         { phone: { contains: search } },
       ];
 
-      // Gộp với filter permission
       if (where.OR) {
         where.AND = [{ OR: where.OR }, { OR: searchOR }];
         delete where.OR;
@@ -89,7 +76,6 @@ async getUsers(currentUser, filters = {}) {
       where.active = filters.active === 'true';
     }
 
-    // 1.3. Query
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
@@ -107,6 +93,8 @@ async getUsers(currentUser, filters = {}) {
           active: true,
           lastLoginAt: true,
           createdAt: true,
+          roomCode: true,
+          departmentId: true,
           department: {
             select: { id: true, code: true, name: true },
           },
@@ -125,21 +113,18 @@ async getUsers(currentUser, filters = {}) {
       prisma.user.count({ where }),
     ]);
 
+    const formatted = users.map(u => {
+      const roles = u.userRoles.map(ur => ur.role);
+      const primaryRole = roles[0]?.code || 'TRUONG_PHONG';
 
-    // 1.4. Format — thêm `role` string từ roles[0]
-  const formatted = users.map(u => {
-    const roles = u.userRoles.map(ur => ur.role);
-    const primaryRole = roles[0]?.code || 'TRUONG_PHONG';
-
-    return {
-      ...u,
-      roles,
-      role: primaryRole,
-      userRoles: undefined,
-      // ⭐ Khách không thấy email/phone (tùy chọn)
-      ...(isGuest ? { email: undefined, phone: undefined } : {}),
-    };
-  });
+      return {
+        ...u,
+        roles,
+        role: primaryRole,
+        userRoles: undefined,
+        ...(isGuest ? { email: undefined, phone: undefined } : {}),
+      };
+    });
 
     return {
       users: formatted,
@@ -183,7 +168,6 @@ async getUsers(currentUser, filters = {}) {
       throw { status: 404, message: 'Không tìm thấy user' };
     }
 
-    // ⭐ KHÁCH → trả user, không cần check quyền
     if (isGuest) {
       const roles = user.userRoles.map(ur => ur.role.code);
       const { passwordHash, totpSecret, userRoles, ...userSafe } = user;
@@ -194,7 +178,6 @@ async getUsers(currentUser, filters = {}) {
       };
     }
 
-    // User login → check quyền như cũ
     const perms = currentUser.permissions || [];
 
     if (!perms.includes('user:view:all')) {
@@ -237,7 +220,7 @@ async getUsers(currentUser, filters = {}) {
   },
 
   // ============================================
-  // 3. TẠO USER
+  // 3. TẠO USER (⭐ ĐÃ FIX SYNC roomCode)
   // ============================================
   async createUser(data, currentUser) {
     const {
@@ -266,7 +249,7 @@ async getUsers(currentUser, filters = {}) {
       }
     }
 
-    // 3.3. Xác định roleIds — từ roleIds array HOẶC role code
+    // 3.3. Xác định roleIds
     let finalRoleIds = roleIds;
 
     if ((!finalRoleIds || finalRoleIds.length === 0) && roleCode) {
@@ -283,7 +266,6 @@ async getUsers(currentUser, filters = {}) {
       throw { status: 400, message: 'Phải chọn ít nhất 1 vai trò' };
     }
 
-    // 3.3b. Check roles tồn tại
     const roles = await prisma.role.findMany({
       where: { id: { in: finalRoleIds }, active: true },
     });
@@ -292,17 +274,27 @@ async getUsers(currentUser, filters = {}) {
       throw { status: 400, message: 'Một số role không tồn tại' };
     }
 
-    // 3.3c. Xác định departmentId — từ departmentId HOẶC roomCode
+    // ⭐ 3.3c. FIX: Sync roomCode ↔ departmentId
     let finalDeptId = departmentId;
+    let finalRoomCode = roomCode && roomCode !== 'null' ? roomCode : null;
 
-    if (!finalDeptId && roomCode) {
+    // Nếu có departmentId → tự lấy code
+    if (finalDeptId && !finalRoomCode) {
       const dept = await prisma.department.findUnique({
-        where: { code: roomCode },
+        where: { id: finalDeptId },
+      });
+      if (dept) finalRoomCode = dept.code;
+    }
+
+    // Nếu có roomCode → tự lấy id
+    if (!finalDeptId && finalRoomCode) {
+      const dept = await prisma.department.findUnique({
+        where: { code: finalRoomCode },
       });
       if (dept) finalDeptId = dept.id;
     }
 
-    // 3.4. Validate: role TRUONG_PHONG cần departmentId
+    // 3.4. Validate role TRUONG_PHONG cần departmentId
     const hasTpRole = roles.some(r => r.code === 'TRUONG_PHONG');
     if (hasTpRole && !finalDeptId) {
       throw {
@@ -336,12 +328,12 @@ async getUsers(currentUser, filters = {}) {
           phone: phone || null,
           position: position || null,
           departmentId: finalDeptId || null,
+          roomCode: finalRoomCode,        // ⭐ FIX: Lưu roomCode sync với department
           managerId: managerId || null,
           active: true,
         },
       });
 
-      // Gán roles
       await tx.userRole.createMany({
         data: finalRoleIds.map(roleId => ({
           userId: user.id,
@@ -350,7 +342,6 @@ async getUsers(currentUser, filters = {}) {
         })),
       });
 
-      // Ghi audit log
       await tx.auditLog.create({
         data: {
           userId: currentUser.id,
@@ -370,10 +361,9 @@ async getUsers(currentUser, filters = {}) {
   },
 
   // ============================================
-  // 4. CẬP NHẬT USER
+  // 4. CẬP NHẬT USER (⭐ ĐÃ FIX SYNC roomCode)
   // ============================================
   async updateUser(userId, data, currentUser) {
-    // 4.1. Check user tồn tại
     const existing = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -382,7 +372,6 @@ async getUsers(currentUser, filters = {}) {
       throw { status: 404, message: 'Không tìm thấy user' };
     }
 
-    // 4.2. Check quyền sửa
     const perms = currentUser.permissions || [];
 
     if (!perms.includes('user:update:all')) {
@@ -407,6 +396,24 @@ async getUsers(currentUser, filters = {}) {
         updateData[field] = data[field];
       }
     });
+
+    // ⭐ FIX: Sync roomCode khi đổi departmentId
+    if (data.departmentId !== undefined) {
+      if (data.departmentId === null) {
+        updateData.roomCode = null;
+      } else {
+        const dept = await prisma.department.findUnique({
+          where: { id: data.departmentId },
+        });
+        if (dept) {
+          updateData.roomCode = dept.code;
+        }
+      }
+    } else if (data.roomCode !== undefined) {
+      // Cho phép set roomCode trực tiếp (nếu cần)
+      updateData.roomCode =
+        data.roomCode && data.roomCode !== 'null' ? data.roomCode : null;
+    }
 
     // 4.4. Update
     const updated = await prisma.$transaction(async (tx) => {
@@ -435,7 +442,7 @@ async getUsers(currentUser, filters = {}) {
   },
 
   // ============================================
-  // 5. XÓA USER (SOFT DELETE + GIẢI PHÓNG UNIQUE)
+  // 5. XÓA USER (SOFT DELETE)
   // ============================================
   async deleteUser(userId, currentUser) {
     const user = await prisma.user.findUnique({
@@ -457,7 +464,6 @@ async getUsers(currentUser, filters = {}) {
       throw { status: 400, message: 'Không thể xóa tài khoản Admin' };
     }
 
-    // Không xóa admin cuối cùng
     const isTargetAdmin = user.userRoles.some(ur => ur.role.code === 'ADMIN');
     if (isTargetAdmin) {
       const adminCount = await prisma.user.count({
@@ -474,16 +480,12 @@ async getUsers(currentUser, filters = {}) {
       }
     }
 
-    // 🔑 KEY: Tạo suffix để "nhả" unique constraint
-    //    Dùng timestamp để không bao giờ trùng, kể cả xóa cùng user 2 lần
     const stamp = Date.now();
     const deletedUsername = `${user.username}__deleted_${stamp}`;
     const deletedEmail = user.email
       ? `${user.email}__deleted_${stamp}`
       : null;
 
-    // Cắt bớt nếu vượt quá giới hạn cột (VD username max 50 ký tự)
-    // Nếu schema của bạn không giới hạn → có thể bỏ đoạn này
     const MAX_USERNAME_LEN = 100;
     const MAX_EMAIL_LEN = 200;
     const finalUsername =
@@ -495,20 +497,14 @@ async getUsers(currentUser, filters = {}) {
         ? deletedEmail.slice(0, MAX_EMAIL_LEN - 20) + `__d_${stamp}`
         : deletedEmail;
 
-    // Soft delete + đổi username/email để nhả unique
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
         data: {
           active: false,
           deletedAt: new Date(),
-
-          // ⭐ QUAN TRỌNG: đổi để giải phóng unique
           username: finalUsername,
           email: finalEmail,
-
-          // Bonus: đổi fullName để hiển thị rõ trong log (nếu muốn)
-          // fullName: `${user.fullName} (đã xóa ${new Date().toLocaleDateString('vi-VN')})`,
         },
       });
 
@@ -535,9 +531,7 @@ async getUsers(currentUser, filters = {}) {
 
     return {
       success: true,
-      message: `Đã xóa tài khoản "${user.fullName}". ` +
-        `Username "${user.username}" và email đã được giải phóng, ` +
-        `có thể tạo lại.`,
+      message: `Đã xóa tài khoản "${user.fullName}".`,
     };
   },
 
@@ -557,7 +551,6 @@ async getUsers(currentUser, filters = {}) {
       throw { status: 400, message: 'Phải chọn ít nhất 1 role' };
     }
 
-    // Check roles tồn tại
     const roles = await prisma.role.findMany({
       where: { id: { in: roleIds } },
     });
@@ -566,7 +559,6 @@ async getUsers(currentUser, filters = {}) {
       throw { status: 400, message: 'Một số role không tồn tại' };
     }
 
-    // Validate TP cần department
     const hasTpRole = roles.some(r => r.code === 'TRUONG_PHONG');
     if (hasTpRole && !user.departmentId) {
       throw {
@@ -575,12 +567,9 @@ async getUsers(currentUser, filters = {}) {
       };
     }
 
-    // Transaction
     await prisma.$transaction(async (tx) => {
-      // Xóa roles cũ
       await tx.userRole.deleteMany({ where: { userId } });
 
-      // Gán roles mới
       await tx.userRole.createMany({
         data: roleIds.map(roleId => ({
           userId,
@@ -616,7 +605,6 @@ async getUsers(currentUser, filters = {}) {
       throw { status: 404, message: 'Không tìm thấy user' };
     }
 
-    // Password mới = default hoặc admin nhập
     const finalPassword = newPassword || DEFAULT_PASSWORD;
     const passwordHash = await bcrypt.hash(finalPassword, 10);
 
@@ -625,7 +613,6 @@ async getUsers(currentUser, filters = {}) {
         where: { id: userId },
         data: {
           passwordHash,
-          // Reset TOTP khi đổi password
           totpSecret: null,
           totpEnabled: false,
         },

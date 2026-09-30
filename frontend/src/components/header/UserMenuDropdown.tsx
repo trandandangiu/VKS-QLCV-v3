@@ -15,17 +15,10 @@ interface UserMenuDropdownProps {
   onLogout: () => void;
 }
 
-// ============================================
-// ROLE LABEL
-// ============================================
-const getRoleLabel = (role?: string): string => {
-  switch (role) {
-    case 'ADMIN': return 'Quản trị viên';
-    case 'VIEN_TRUONG': return 'Viện trưởng';
-    case 'PHO_VIEN_TRUONG': return 'Phó Viện trưởng';
-    case 'TRUONG_PHONG': return 'Trưởng phòng';
-    default: return 'Người dùng';
-  }
+// ⭐ Lấy nhãn hiển thị: CHỈ chức vụ — trả rỗng nếu chưa có
+const getDisplayLabel = (user: User | null): string => {
+  if (!user) return '';
+  return (user.position || '').trim();
 };
 
 const getRoleColor = (role?: string): string => {
@@ -95,9 +88,38 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
   const roleColor = getRoleColor(currentUser.role);
   const roleBadge = getRoleBadgeClass(currentUser.role);
 
+  // ⭐ Nhãn hiển thị: CHỈ chức vụ (position)
+  const displayLabel = getDisplayLabel(currentUser);
+
   const handleNavigate = (path: string) => {
     setIsOpen(false);
     navigate(path);
+  };
+
+  // ⭐ Route dashboard riêng của từng role
+  const getDashboardPath = (): string | null => {
+    switch (currentUser.role) {
+      case 'ADMIN': return '/admin';
+      case 'VIEN_TRUONG': return '/vt';
+      case 'PHO_VIEN_TRUONG': return '/pvt';
+      case 'TRUONG_PHONG': return '/tp';
+      default: return null;
+    }
+  };
+
+  const dashboardPath = getDashboardPath();
+
+  // ⭐ Label nút "Bàn làm việc"
+  const getDashboardButtonLabel = (): string => {
+    const pos = (currentUser.position || '').trim();
+    if (currentUser.role === 'ADMIN') return 'Bảng quản trị';
+    if (pos) return `Bàn làm việc`;
+    switch (currentUser.role) {
+      case 'VIEN_TRUONG': return 'Bàn làm việc Viện trưởng';
+      case 'PHO_VIEN_TRUONG': return 'Bàn làm việc Phó Viện trưởng';
+      case 'TRUONG_PHONG': return 'Bàn làm việc Trưởng phòng';
+      default: return 'Bàn làm việc';
+    }
   };
 
   return (
@@ -115,15 +137,19 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
           </span>
         </div>
 
+        {/* ⭐ Chỉ hiện badge chức vụ nếu có */}
         <div className="text-left hidden sm:block min-w-0">
-          <div className="flex items-center gap-1 mt-0.5">
-            <span
-              className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${roleBadge}`}
-            >
-              <Shield className="w-2.5 h-2.5" />
-              {getRoleLabel(currentUser.role)}
-            </span>
-          </div>
+          {displayLabel && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <span
+                className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${roleBadge} max-w-[140px] truncate`}
+                title={displayLabel}
+              >
+                <Shield className="w-2.5 h-2.5 shrink-0" />
+                <span className="truncate">{displayLabel}</span>
+              </span>
+            </div>
+          )}
         </div>
 
         <ChevronDown
@@ -149,28 +175,40 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
             </div>
 
             <div className="relative flex items-center gap-3">
+              {/* ⭐ Avatar — FIX: bỏ "..." */}
               <div
-                className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${roleColor} flex items-center justify-center border-2 border-white/30 shadow-lg`}
+                className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${roleColor} flex items-center justify-center border-2 border-white/30 shadow-lg shrink-0`}
               >
                 <span className="text-base font-black text-white tracking-wider">
                   {initials}
                 </span>
               </div>
+
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold text-amber-200 uppercase tracking-wider">
-                  {getRoleLabel(currentUser.role)}
+                {/* ⭐ Chỉ hiện chức vụ nếu có */}
+                {displayLabel && (
+                  <div
+                    className="text-[10px] font-bold text-amber-200 uppercase tracking-wider truncate"
+                    title={displayLabel}
+                  >
+                    {displayLabel}
+                  </div>
+                )}
+                <div className={`text-sm font-black text-white truncate ${displayLabel ? 'mt-0.5' : ''}`}>
+                  {currentUser.fullName}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Điều hướng nhanh */}
+          {/* Điều hướng */}
           <div className="py-1.5">
             <div className="px-4 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Điều hướng
             </div>
 
             <button
-              onClick={() => handleNavigate('/')}
+              onClick={() => handleNavigate('/home')}
               className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-red-700 transition font-medium group cursor-pointer"
             >
               <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0">
@@ -178,17 +216,36 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
               </div>
               <div className="flex-1 text-left min-w-0">
                 <div className="text-xs font-bold text-slate-800 group-hover:text-red-700 transition">
-                  Trang tiến độ
+                  Trang tiến độ công khai
                 </div>
                 <div className="text-[10px] text-slate-500 truncate">
-                  Xem danh sách công văn công khai
+
                 </div>
               </div>
               <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-red-500 group-hover:translate-x-0.5 transition shrink-0" />
             </button>
+
+            {dashboardPath && (
+              <button
+                onClick={() => handleNavigate(dashboardPath)}
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-red-700 transition font-medium group cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
+                  <Shield className="w-3.5 h-3.5 text-amber-600" />
+                </div>
+                <div className="flex-1 text-left min-w-0">
+                  <div className="text-xs font-bold text-slate-800 group-hover:text-red-700 transition truncate">
+                    {getDashboardButtonLabel()}
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate">
+
+                  </div>
+                </div>
+                <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-red-500 group-hover:translate-x-0.5 transition shrink-0" />
+              </button>
+            )}
           </div>
 
-          {/* Divider */}
           <div className="border-t border-slate-100" />
 
           {/* Logout */}

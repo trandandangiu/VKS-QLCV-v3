@@ -1,16 +1,10 @@
 // src/components/vt/VtFilterBar.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  Filter,
-  Calendar,
   ChevronDown,
   Check,
-  RotateCcw,
   Search,
   X,
-  FileText,
-  Target,
-  Layers,
 } from 'lucide-react';
 import { User } from '../../types/auth';
 import { VtFilters, DEFAULT_VT_FILTERS } from '../../types/vt';
@@ -20,9 +14,15 @@ interface VtFilterBarProps {
   onChange: (filters: VtFilters) => void;
   pvtList: User[];
   totalResults: number;
-  /** ⭐ Số lượng chuyên đề trong kết quả (để hiển thị chữ "Kết quả" chính xác) */
   chuyenDeCount?: number;
 }
+
+// ⭐ Config cho từng loại văn bản (bỏ icon)
+const LOAI_VAN_BAN_OPTIONS = [
+  { value: 'ALL', label: 'Tất cả' },
+  { value: 'CONG_VAN', label: 'Công văn' },
+  { value: 'CHUYEN_DE', label: 'Chuyên đề' },
+];
 
 export const VtFilterBar: React.FC<VtFilterBarProps> = ({
   filters,
@@ -33,6 +33,34 @@ export const VtFilterBar: React.FC<VtFilterBarProps> = ({
 }) => {
   const [showPvtDropdown, setShowPvtDropdown] = useState(false);
   const [showDatePanel, setShowDatePanel] = useState(false);
+  const [showLoaiDropdown, setShowLoaiDropdown] = useState(false);
+
+  // ⭐ Refs để click-outside
+  const loaiDropdownRef = useRef<HTMLDivElement>(null);
+  const pvtDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside → đóng cả 2 dropdown
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        loaiDropdownRef.current &&
+        !loaiDropdownRef.current.contains(target)
+      ) {
+        setShowLoaiDropdown(false);
+      }
+      if (
+        pvtDropdownRef.current &&
+        !pvtDropdownRef.current.contains(target)
+      ) {
+        setShowPvtDropdown(false);
+      }
+    };
+    if (showLoaiDropdown || showPvtDropdown) {
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }
+  }, [showLoaiDropdown, showPvtDropdown]);
 
   const update = (patch: Partial<VtFilters>) => {
     onChange({ ...filters, ...patch });
@@ -49,7 +77,11 @@ export const VtFilterBar: React.FC<VtFilterBarProps> = ({
     onChange(DEFAULT_VT_FILTERS);
   };
 
-  // ⭐ Thêm loaiVanBan vào điều kiện active
+  // Loại VB đang chọn
+  const currentLoaiOption =
+    LOAI_VAN_BAN_OPTIONS.find(o => o.value === filters.loaiVanBan) ||
+    LOAI_VAN_BAN_OPTIONS[0];
+
   const hasActiveFilter =
     filters.searchQuery !== '' ||
     filters.pvtIds.length > 0 ||
@@ -58,27 +90,33 @@ export const VtFilterBar: React.FC<VtFilterBarProps> = ({
     filters.dateTo ||
     filters.loaiVanBan !== 'ALL';
 
-  // ⭐ Tính số công văn (tổng - chuyên đề)
   const congVanCount = Math.max(0, totalResults - chuyenDeCount);
 
+  // ⭐ Class chung cho tất cả nút filter — ĐỒNG ĐỀU
+  const btnBase =
+    'inline-flex items-center gap-1.5 h-9 px-3.5 text-xs font-semibold rounded-lg border transition cursor-pointer whitespace-nowrap';
+
   return (
-    <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-4 space-y-3">
-      {/* ═══ Row 1: Search + LOẠI VĂN BẢN + Khoảng ngày + PVT ═══ */}
-      <div className="flex flex-wrap items-center gap-2.5">
-        {/* ── 0. Ô TÌM KIẾM ── */}
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+    <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-3">
+
+      {/* ═══ Row 1: Search + 4 nút filter ═══ */}
+      <div className="flex flex-wrap items-center gap-2">
+
+        {/* ── Ô TÌM KIẾM ── */}
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Tìm số CV, trích yếu, đơn vị, PVT, phòng ban..."
+            placeholder="Tìm số CV, trích yếu, đơn vị..."
             value={filters.searchQuery}
             onChange={e => update({ searchQuery: e.target.value })}
-            className="w-full pl-10 pr-9 py-2.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:bg-white transition"
+            className="w-full h-9 pl-9 pr-9 text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:bg-white transition"
           />
           {filters.searchQuery && (
             <button
+              type="button"
               onClick={() => update({ searchQuery: '' })}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition cursor-pointer"
               title="Xóa tìm kiếm"
             >
               <X className="w-3.5 h-3.5" />
@@ -86,48 +124,63 @@ export const VtFilterBar: React.FC<VtFilterBarProps> = ({
           )}
         </div>
 
-        {/* ═══════════════════════════════════════════════
-            ⭐ 1. LOẠI VĂN BẢN — MỚI
-            ═══════════════════════════════════════════════ */}
-        <div className="flex items-center gap-1 p-1 bg-slate-50 border border-slate-200 rounded-xl">
-          <LoaiVanBanButton
-            icon={Layers}
-            label="Tất cả"
-            value="ALL"
-            current={filters.loaiVanBan}
-            onClick={v => update({ loaiVanBan: v as any })}
-            color="slate"
-          />
-          <LoaiVanBanButton
-            icon={FileText}
-            label="Công văn"
-            value="CONG_VAN"
-            current={filters.loaiVanBan}
-            onClick={v => update({ loaiVanBan: v as any })}
-            color="red"
-          />
-          <LoaiVanBanButton
-            icon={Target}
-            label="Chuyên đề"
-            value="CHUYEN_DE"
-            current={filters.loaiVanBan}
-            onClick={v => update({ loaiVanBan: v as any })}
-            color="teal"
-          />
+        {/* ── DROPDOWN LOẠI VĂN BẢN ── */}
+        <div className="relative" ref={loaiDropdownRef}>
+          <button
+            type="button"
+            onClick={() => setShowLoaiDropdown(prev => !prev)}
+            className={`${btnBase} ${filters.loaiVanBan !== 'ALL'
+                ? 'bg-red-50 text-red-800 border-red-300'
+                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-white'
+              }`}
+          >
+            <span>{currentLoaiOption.label}</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition ${showLoaiDropdown ? 'rotate-180' : ''
+                }`}
+            />
+          </button>
+
+          {showLoaiDropdown && (
+            <div className="absolute top-full left-0 mt-1 w-44 bg-white rounded-lg shadow-xl border border-slate-200 z-50 overflow-hidden py-1">
+              {LOAI_VAN_BAN_OPTIONS.map(opt => {
+                const isActive = filters.loaiVanBan === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      update({ loaiVanBan: opt.value as any });
+                      setShowLoaiDropdown(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition cursor-pointer ${isActive
+                        ? 'bg-red-50 text-red-900 font-bold'
+                        : 'hover:bg-slate-50 text-slate-700 font-medium'
+                      }`}
+                  >
+                    <span className="flex-1">{opt.label}</span>
+                    {isActive && (
+                      <Check className="w-3.5 h-3.5 text-red-600" strokeWidth={3} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* ── 2. KHOẢNG NGÀY ── */}
+        {/* ── KHOẢNG NGÀY ── */}
         <button
+          type="button"
           onClick={() => setShowDatePanel(!showDatePanel)}
-          className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition cursor-pointer ${filters.dateFrom || filters.dateTo
-            ? 'bg-red-50 text-red-700 border-red-300'
-            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-white'
+          className={`${btnBase} ${filters.dateFrom || filters.dateTo
+              ? 'bg-red-50 text-red-700 border-red-300'
+              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-white'
             }`}
         >
-          <Calendar className="w-3.5 h-3.5" />
           <span>
             {filters.dateFrom || filters.dateTo
-              ? `${filters.dateFrom || '…'} → ${filters.dateTo || '…'}`
+              ? 'Đã chọn khoảng ngày'
               : 'Khoảng ngày'}
           </span>
           {(filters.dateFrom || filters.dateTo) && (
@@ -135,129 +188,33 @@ export const VtFilterBar: React.FC<VtFilterBarProps> = ({
           )}
         </button>
 
-        {/* ── 3. PHÓ VIỆN TRƯỞNG ── */}
-        <div className="relative">
-          <button
-            onClick={() => setShowPvtDropdown(!showPvtDropdown)}
-            className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition cursor-pointer ${filters.pvtIds.length > 0
-              ? 'bg-blue-50 text-blue-800 border-blue-300'
-              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-white'
-              }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span>
-              {filters.pvtIds.length === 0
-                ? 'Phó Viện Trưởng'
-                : `Đã chọn ${filters.pvtIds.length} PVT`}
-            </span>
-            <ChevronDown
-              className={`w-3.5 h-3.5 transition ${showPvtDropdown ? 'rotate-180' : ''
-                }`}
-            />
-          </button>
 
-          {showPvtDropdown && (
-            <>
-              <div
-                className="fixed inset-0 z-20"
-                onClick={() => setShowPvtDropdown(false)}
-              />
-              <div className="absolute top-full right-0 mt-1.5 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 z-30 max-h-80 overflow-y-auto">
-                <div className="p-2 space-y-0.5">
-                  {pvtList.map(pvt => {
-                    const checked = filters.pvtIds.includes(pvt.id);
-                    return (
-                      <button
-                        key={pvt.id}
-                        onClick={() => togglePvt(pvt.id)}
-                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left transition cursor-pointer ${checked
-                          ? 'bg-blue-50 text-blue-900'
-                          : 'hover:bg-slate-50 text-slate-700'
-                          }`}
-                      >
-                        <div
-                          className={`w-4 h-4 rounded flex items-center justify-center border-2 shrink-0 ${checked
-                            ? 'bg-blue-600 border-blue-600'
-                            : 'border-slate-300'
-                            }`}
-                        >
-                          {checked && (
-                            <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-bold truncate">
-                            {pvt.fullName}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            {pvt.roomCode}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {pvtList.length === 0 && (
-                    <div className="p-3 text-center text-xs text-slate-400">
-                      Không có PVT nào
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
 
-        {/* Reset */}
+        {/* ── NÚT XÓA LỌC ── */}
         {hasActiveFilter && (
           <button
+            type="button"
             onClick={resetAll}
-            className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold rounded-xl bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition cursor-pointer"
+            className={`${btnBase} bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100`}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
             <span>Xóa lọc</span>
           </button>
         )}
 
-        {/* ═══════════════════════════════════════════════
-            ⭐ FIX: Số kết quả — hiển thị cả công văn + chuyên đề
-            ═══════════════════════════════════════════════ */}
-        <div className="ml-auto flex items-center gap-1.5 text-xs font-bold text-slate-600 flex-wrap">
-          <span className="text-slate-400">Kết quả:</span>
+        {/* ── KẾT QUẢ (bên phải) ── */}
+        <div className="ml-auto flex items-center gap-2 text-xs font-bold text-slate-600">
+          <span className="text-slate-400 font-medium">Kết quả:</span>
 
           {filters.loaiVanBan === 'ALL' ? (
-            /* ⭐ Khi xem TẤT CẢ → LUÔN hiện cả 2 badge (kể cả 0) */
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border ${congVanCount > 0
-                    ? 'text-red-700 bg-red-50 border-red-200'
-                    : 'text-slate-400 bg-slate-50 border-slate-200'
-                  }`}
-              >
-                <FileText className="w-3 h-3" />
-                {congVanCount} công văn
-              </span>
-              <span
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border ${chuyenDeCount > 0
-                    ? 'text-teal-700 bg-teal-50 border-teal-200'
-                    : 'text-slate-400 bg-slate-50 border-slate-200'
-                  }`}
-              >
-                <Target className="w-3 h-3" />
-                {chuyenDeCount} chuyên đề
-              </span>
-            </div>
+            <>
+              <span className="text-red-700">{congVanCount} công văn</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-teal-700">{chuyenDeCount} chuyên đề</span>
+            </>
           ) : filters.loaiVanBan === 'CONG_VAN' ? (
-            /* Chỉ công văn */
-            <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200">
-              <FileText className="w-3 h-3" />
-              {totalResults} công văn
-            </span>
+            <span className="text-red-700">{totalResults} công văn</span>
           ) : (
-            /* Chỉ chuyên đề */
-            <span className="inline-flex items-center gap-1 text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">
-              <Target className="w-3 h-3" />
-              {totalResults} chuyên đề
-            </span>
+            <span className="text-teal-700">{totalResults} chuyên đề</span>
           )}
         </div>
       </div>
@@ -266,116 +223,46 @@ export const VtFilterBar: React.FC<VtFilterBarProps> = ({
       {showDatePanel && (
         <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100">
           <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-600">Từ ngày:</label>
+            <label className="text-xs font-semibold text-slate-600">
+              Từ ngày:
+            </label>
             <input
               type="date"
               value={filters.dateFrom}
               onChange={e => update({ dateFrom: e.target.value })}
-              className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+              className="h-8 px-2.5 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-xs font-bold text-slate-600">Đến ngày:</label>
+            <label className="text-xs font-semibold text-slate-600">
+              Đến ngày:
+            </label>
             <input
               type="date"
               value={filters.dateTo}
               onChange={e => update({ dateTo: e.target.value })}
-              className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+              className="h-8 px-2.5 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
             />
           </div>
           {(filters.dateFrom || filters.dateTo) && (
             <button
+              type="button"
               onClick={() => update({ dateFrom: '', dateTo: '' })}
-              className="text-xs font-bold text-red-600 hover:text-red-800 underline cursor-pointer"
+              className="text-xs font-semibold text-red-600 hover:text-red-800 underline cursor-pointer"
             >
               Xóa khoảng ngày
             </button>
           )}
           <button
+            type="button"
             onClick={() => setShowDatePanel(false)}
-            className="ml-auto text-xs font-bold text-slate-600 hover:text-slate-800 underline cursor-pointer"
+            className="ml-auto text-xs font-semibold text-slate-600 hover:text-slate-800 underline cursor-pointer"
           >
             Đóng
           </button>
         </div>
       )}
-
-      {/* ═══ Row 3: Chip PVT đã chọn ═══ */}
-      {filters.pvtIds.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-100">
-          {filters.pvtIds.map(id => {
-            const pvt = pvtList.find(p => p.id === id);
-            if (!pvt) return null;
-            return (
-              <span
-                key={id}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg text-[11px] font-bold"
-              >
-                {pvt.fullName}
-                <button
-                  onClick={() => togglePvt(id)}
-                  className="hover:bg-blue-100 rounded p-0.5 transition cursor-pointer"
-                  title="Bỏ chọn"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
     </div>
-  );
-};
-
-// ============================================
-// ⭐ SUB-COMPONENT: NÚT LOẠI VĂN BẢN
-// ============================================
-interface LoaiVanBanButtonProps {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  current: string;
-  onClick: (value: string) => void;
-  color: 'slate' | 'red' | 'teal';
-}
-
-const LoaiVanBanButton: React.FC<LoaiVanBanButtonProps> = ({
-  icon: Icon,
-  label,
-  value,
-  current,
-  onClick,
-  color,
-}) => {
-  const isActive = current === value;
-
-  const colorClasses = {
-    slate: {
-      active: 'bg-slate-800 text-white shadow-sm',
-      inactive: 'text-slate-600 hover:bg-white',
-    },
-    red: {
-      active: 'bg-red-700 text-white shadow-sm',
-      inactive: 'text-slate-600 hover:bg-white',
-    },
-    teal: {
-      active: 'bg-teal-700 text-white shadow-sm',
-      inactive: 'text-slate-600 hover:bg-white',
-    },
-  }[color];
-
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(value)}
-      className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold rounded-lg transition cursor-pointer whitespace-nowrap ${isActive ? colorClasses.active : colorClasses.inactive
-        }`}
-      title={`Lọc theo: ${label}`}
-    >
-      <Icon className="w-3.5 h-3.5" />
-      <span>{label}</span>
-    </button>
   );
 };
 

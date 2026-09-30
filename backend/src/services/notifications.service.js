@@ -42,7 +42,7 @@ export const notificationsService = {
   },
 
   // ============================================
-  // 2. ĐÁNH DẤU ĐÃ ĐỌC
+  // 2. ĐÁNH DẤU ĐÃ ĐỌC — TRẢ VỀ unreadCount MỚI
   // ============================================
   async markAsRead(notificationId, currentUser) {
     const notif = await prisma.notification.findUnique({
@@ -57,15 +57,27 @@ export const notificationsService = {
       throw { status: 403, message: 'Không có quyền' };
     }
 
-    await prisma.notification.update({
-      where: { id: notificationId },
-      data: {
-        isRead: true,
-        readAt: new Date(),
-      },
+    // ⭐ Chỉ update nếu chưa đọc
+    if (!notif.isRead) {
+      await prisma.notification.update({
+        where: { id: notificationId },
+        data: {
+          isRead: true,
+          readAt: new Date(),
+        },
+      });
+    }
+
+    // ⭐ Đếm lại số chưa đọc — CHÍNH XÁC
+    const unreadCount = await prisma.notification.count({
+      where: { userId: currentUser.id, isRead: false },
     });
 
-    return { success: true, message: 'Đã đánh dấu đã đọc' };
+    return {
+      success: true,
+      message: 'Đã đánh dấu đã đọc',
+      unreadCount,
+    };
   },
 
   // ============================================
@@ -84,6 +96,7 @@ export const notificationsService = {
       success: true,
       message: `Đã đánh dấu ${result.count} thông báo`,
       count: result.count,
+      unreadCount: 0,
     };
   },
 
@@ -107,7 +120,16 @@ export const notificationsService = {
       where: { id: notificationId },
     });
 
-    return { success: true, message: 'Đã xóa thông báo' };
+    // ⭐ Đếm lại unreadCount sau khi xóa
+    const unreadCount = await prisma.notification.count({
+      where: { userId: currentUser.id, isRead: false },
+    });
+
+    return {
+      success: true,
+      message: 'Đã xóa thông báo',
+      unreadCount,
+    };
   },
 
   // ============================================

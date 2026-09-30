@@ -1,9 +1,9 @@
 // src/components/public/PublicDesktopTable.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatDate } from '../../utils/format';
 import {
   Clock, AlertTriangle, CheckCircle2, Building2,
-  Paperclip, Target, UserCheck,
+  Paperclip, Target, UserCheck, CornerDownRight, FileText,
 } from 'lucide-react';
 import { Dispatch } from '../../types/dispatch';
 import { resolveDispatchStatus } from '../../services/excelService';
@@ -19,6 +19,51 @@ interface Props {
   onViewFiles?: (d: Dispatch) => void;
 }
 
+interface DepartmentOption {
+  id: string;
+  code: string;
+  name: string;
+}
+// ⭐ Helper: map loại văn bản từ DB → tên hiển thị đẹp
+const getLoaiVanBanLabel = (loai?: string): string => {
+  if (!loai) return '';
+  const map: Record<string, string> = {
+    CHUYEN_DE: 'Chuyên đề',
+    CONG_VAN: 'Công văn',
+    BAO_CAO: 'Báo cáo',
+    KE_HOACH: 'Kế hoạch',
+    THONG_BAO: 'Thông báo',
+    QUYET_DINH: 'Quyết định',
+    CHI_THI: 'Chỉ thị',
+    HUONG_DAN: 'Hướng dẫn',
+    TO_TRINH: 'Tờ trình',
+    DE_NGHI: 'Đề nghị',
+    KIEN_NGHI: 'Kiến nghị',
+    KHANG_NGHI: 'Kháng nghị',
+    YEU_CAU: 'Yêu cầu',
+    CONG_DIEN: 'Công điện',
+    GIAY_MOI: 'Giấy mời',
+    BIEN_BAN: 'Biên bản',
+    TAI_LIEU: 'Tài liệu',
+  };
+  return map[loai] || loai;
+};
+// ⭐ Helper: clean tên (bỏ "Đ/c", "Đồng chí")
+const cleanName = (name?: string): string => {
+  if (!name) return '';
+  return name
+    .replace(/^Đ\/c\s+/, '')
+    .replace(/^Đồng chí\s+/i, '')
+    .trim();
+};
+
+// ⭐ Helper: rút ngắn tên phòng: "Phòng 1 (Án an ninh)" → "Phòng 1"
+const shortenDeptName = (fullName?: string): string => {
+  if (!fullName) return '';
+  // Cắt phần trong ngoặc đơn
+  return fullName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+};
+
 export const PublicDesktopTable: React.FC<Props> = ({
   dispatches,
   currentPage,
@@ -28,6 +73,34 @@ export const PublicDesktopTable: React.FC<Props> = ({
   showFileColumn = true,
   onViewFiles,
 }) => {
+  // ⭐ Load departments để map roomCode → tên phòng
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const res = await fetch('/api/departments', {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.departments)) {
+          setDepartments(
+            data.departments
+              .filter((d: any) => d.active !== false)
+              .map((d: any) => ({ id: d.id, code: d.code, name: d.name }))
+          );
+        }
+      } catch (e) {
+        console.error('Lỗi load departments:', e);
+      }
+    };
+    load();
+  }, []);
+
   // ============================================
   // STATUS BADGE
   // ============================================
@@ -68,7 +141,24 @@ export const PublicDesktopTable: React.FC<Props> = ({
   };
 
   // ============================================
-  // CỘT 1: ĐƠN VỊ BAN HÀNH
+  // CỘT: LOẠI VĂN BẢN
+  // ============================================
+  const renderLoaiVanBan = (disp: Dispatch) => {
+    const label = getLoaiVanBanLabel(disp.loaiCongVan);
+    if (!label) {
+      return <span className="text-slate-300 italic text-xs">—</span>;
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-700">
+        <FileText className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+        {label}
+      </span>
+    );
+  };
+
+
+  // ============================================
+  // CỘT: ĐƠN VỊ BAN HÀNH
   // ============================================
   const renderDonViBanHanh = (disp: Dispatch) => {
     if (!disp.donViBanHanh) {
@@ -85,7 +175,7 @@ export const PublicDesktopTable: React.FC<Props> = ({
   };
 
   // ============================================
-  // CỘT 2: PHÓ VIỆN TRƯỞNG PHỤ TRÁCH
+  // CỘT: PHÓ VIỆN TRƯỞNG PHỤ TRÁCH
   // ============================================
   const renderPvt = (disp: Dispatch) => {
     if (!disp.assignedPvtName) {
@@ -93,83 +183,121 @@ export const PublicDesktopTable: React.FC<Props> = ({
         <span className="text-slate-300 italic text-[11px]">Chưa phân công</span>
       );
     }
-    const cleanName = disp.assignedPvtName
-      .replace(/^Đ\/c\s+/, '')
-      .replace(/^Đồng chí\s+/i, '')
-      .trim();
-
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-800 bg-purple-50 px-2 py-1 rounded-lg border border-purple-200 leading-tight max-w-full">
-        <UserCheck className="w-3 h-3 shrink-0" />
-        <span className="truncate">{cleanName}</span>
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-700">
+        <UserCheck className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+        <span className="truncate">{cleanName(disp.assignedPvtName)}</span>
       </span>
     );
   };
 
-  // ⭐ Số cột: 8 cột cơ bản (không tính File)
-  // STT + Số VB + Ngày + Trích yếu + ĐV ban hành + PVT + Hạn + Trạng thái
-  const totalCols = 8 + (showFileColumn ? 1 : 0);
+  // ============================================
+  // ⭐ CỘT: ĐƠN VỊ THỰC HIỆN — "Phòng 1" + Tên TP
+  // ============================================
+  // ============================================
+  // CỘT: ĐƠN VỊ THỰC HIỆN — Chỉ hiện tên phòng
+  // ============================================
+  // ============================================
+  // CỘT: ĐƠN VỊ THỰC HIỆN — Chỉ hiện tên phòng
+  // ============================================
+  const renderDonViThucHien = (disp: Dispatch) => {
+    const tpRelation = (disp as any).dispatchTps?.[0];
+    const roomCode = tpRelation?.roomCode || '';
+
+    const matchedDept = departments.find(d => d.code === roomCode);
+    const deptName = matchedDept
+      ? shortenDeptName(matchedDept.name)
+      : (roomCode || '');
+
+    if (!deptName) {
+      return (
+        <span className="text-slate-300 italic text-[11px]">Chưa phân công</span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
+        <CornerDownRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+        {deptName}
+      </span>
+    );
+  };
+
+  // ⭐ Số cột: 10 cột cơ bản + 1 cột File = 11
+  const totalCols = 10 + (showFileColumn ? 1 : 0);
 
   return (
     <div
       id="public-table-scroll-container"
       className="overflow-y-auto max-h-[calc(100vh-320px)] border-t border-slate-200"
     >
-      <table className="w-full text-left border-collapse table-fixed">
+      <table className="w-full text-left border-collapse table-fixed min-w-[1500px]">
         <thead className="sticky top-0 z-10 shadow-2xs">
           <tr className="border-b-2 border-red-900 text-white">
             <th
               rowSpan={2}
-              className="w-[4%] px-2 py-3 text-xs font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+              className="w-[3%] px-1.5 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               STT
             </th>
             <th
               rowSpan={2}
-              className="w-[10%] px-2 py-3 text-xs font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+              className="w-[9%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               Số / Ký hiệu VB
             </th>
             <th
               rowSpan={2}
-              className="w-[10%] px-2 py-3 text-xs font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+              className="w-[7%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               Ngày tiếp nhận
             </th>
             <th
               rowSpan={2}
-              className="w-[30%] px-2 py-3 text-xs font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+              className="w-[22%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               Trích yếu nội dung
             </th>
             <th
               rowSpan={2}
-              className="w-[13%] px-2 py-3 text-xs font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+              className="w-[8%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+            >
+              Loại văn bản
+            </th>
+            <th
+              rowSpan={2}
+              className="w-[10%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               Đơn vị ban hành
             </th>
             <th
               rowSpan={2}
-              className="w-[13%] px-2 py-3 text-xs font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+              className="w-[10%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               Phó Viện trưởng phụ trách
             </th>
             <th
               rowSpan={2}
-              className="w-[10%] px-2 py-3 text-xs font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+              className="w-[11%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+            >
+              Đơn vị thực hiện
+            </th>
+            <th
+              rowSpan={2}
+              className="w-[8%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               Thời hạn hoàn thành
             </th>
             <th
               rowSpan={2}
-              className="w-[11%] px-2 py-3 text-xs font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+              className="w-[9%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               Trạng thái tiến độ
             </th>
             {showFileColumn && (
               <th
                 rowSpan={2}
-                className="w-[8%] px-2 py-3 text-xs font-bold uppercase tracking-wide select-none text-center align-middle bg-[#B71C1C]"
+                className="w-[3%] px-1.5 py-3 text-[10px] font-bold uppercase tracking-wide select-none text-center align-middle bg-[#B71C1C]"
               >
                 File
               </th>
@@ -209,26 +337,26 @@ export const PublicDesktopTable: React.FC<Props> = ({
                   key={disp.id || idx}
                   onClick={() => onSelectDispatch?.(disp)}
                   className={`transition-colors cursor-pointer ${isOverdue
-                      ? 'bg-rose-50/30 hover:bg-rose-50/60'
-                      : isCompleted
-                        ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
-                        : isCD
-                          ? 'bg-teal-50/20 hover:bg-teal-50/40'
-                          : idx % 2 === 0
-                            ? 'bg-white hover:bg-slate-50'
-                            : 'bg-slate-50/40 hover:bg-slate-100/60'
+                    ? 'bg-rose-50/30 hover:bg-rose-50/60'
+                    : isCompleted
+                      ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
+                      : isCD
+                        ? 'bg-teal-50/20 hover:bg-teal-50/40'
+                        : idx % 2 === 0
+                          ? 'bg-white hover:bg-slate-50'
+                          : 'bg-slate-50/40 hover:bg-slate-100/60'
                     }`}
                   title="Bấm để xem chi tiết"
                 >
-                  {/* STT */}
-                  <td className="px-2 py-4 text-center border-r border-slate-100 text-slate-600 font-bold text-sm align-middle">
+                  {/* 1. STT */}
+                  <td className="px-1.5 py-4 text-center border-r border-slate-100 text-slate-600 font-bold text-sm align-middle">
                     {(currentPage - 1) * pageSize + idx + 1}
                   </td>
 
-                  {/* Số / Ký hiệu VB */}
+                  {/* 2. Số / Ký hiệu VB */}
                   <td className="px-2 py-4 border-r border-slate-100 align-middle">
                     <div className="flex flex-col gap-1 items-start">
-                      <span className="font-mono font-bold text-[13px] text-slate-900 bg-slate-100 px-2 py-1 rounded border border-slate-200 inline-block break-all">
+                      <span className="font-mono font-bold text-[12px] text-slate-900 bg-slate-100 px-2 py-1 rounded border border-slate-200 inline-block break-all">
                         {disp.soCongVan || '—'}
                       </span>
                       {isCD && (
@@ -240,64 +368,75 @@ export const PublicDesktopTable: React.FC<Props> = ({
                     </div>
                   </td>
 
-                  {/* Ngày tiếp nhận */}
+                  {/* 3. Ngày tiếp nhận */}
                   <td className="px-2 py-4 border-r border-slate-100 align-middle">
-                    <span className="text-[13px] text-slate-800 font-medium">
+                    <span className="text-[12px] text-slate-800 font-medium">
                       {formatDate(disp.ngayGui) || '—'}
                     </span>
                   </td>
 
-                  {/* Trích yếu */}
+                  {/* 4. Trích yếu nội dung */}
                   <td className="px-3 py-4 border-r border-slate-100 align-middle">
                     <p
-                      className="font-semibold text-slate-900 text-sm leading-snug break-words"
+                      className="font-semibold text-slate-900 text-[13px] leading-snug break-words line-clamp-3"
                       title={disp.tenCongVan}
                     >
                       {disp.tenCongVan || '—'}
                     </p>
                   </td>
 
-                  {/* ĐƠN VỊ BAN HÀNH */}
-                  <td className="px-2 py-4 border-r border-slate-200 align-top">
+                  {/* 5. LOẠI VĂN BẢN */}
+                  <td className="px-2 py-4 border-r border-slate-100 align-middle text-center">
+                    {renderLoaiVanBan(disp)}
+                  </td>
+
+                  {/* 6. ĐƠN VỊ BAN HÀNH */}
+                  <td className="px-2 py-4 border-r border-slate-100 align-top">
                     {renderDonViBanHanh(disp)}
                   </td>
 
-                  {/* PHÓ VIỆN TRƯỞNG PHỤ TRÁCH */}
-                  <td className="px-2 py-4 border-r-2 border-slate-300 align-top">
+                  {/* 7. PHÓ VIỆN TRƯỞNG PHỤ TRÁCH */}
+                  <td className="px-2 py-4 border-r border-slate-200 align-top">
                     {renderPvt(disp)}
                   </td>
 
-                  {/* Thời hạn hoàn thành */}
+                  {/* 8. ĐƠN VỊ THỰC HIỆN — Phòng + Tên TP */}
+                  <td className="px-2 py-4 border-r-2 border-slate-300 align-top">
+                    {renderDonViThucHien(disp)}
+                  </td>
+
+                  {/* 9. Thời hạn hoàn thành */}
                   <td className="px-2 py-4 border-r border-slate-100 align-middle text-center">
                     <span
-                      className={`text-[13px] font-bold ${isOverdue
-                          ? 'text-rose-700'
-                          : isCompleted
-                            ? 'text-emerald-700'
-                            : 'text-slate-800'
+                      className={`text-[12px] font-bold ${isOverdue
+                        ? 'text-rose-700'
+                        : isCompleted
+                          ? 'text-emerald-700'
+                          : 'text-slate-800'
                         }`}
                     >
                       {formatDate(disp.hanBaoCaoXuLy) || '—'}
                     </span>
                   </td>
 
-                  {/* Trạng thái */}
+                  {/* 10. Trạng thái */}
                   <td className="px-2 py-4 border-r border-slate-100 align-middle text-center">
                     <div className="flex justify-center">{renderStatusBadge(disp)}</div>
                   </td>
 
-                  {/* File */}
+                  {/* 11. File */}
                   {showFileColumn && (
-                    <td className="px-2 py-4 align-middle text-center">
+                    <td className="px-1.5 py-4 align-middle text-center">
                       {fileCount === 0 ? (
                         <span className="text-slate-300 text-[10px]">—</span>
                       ) : (
                         <button
+                          type="button"
                           onClick={e => {
                             e.stopPropagation();
                             onViewFiles?.(disp);
                           }}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-100 transition cursor-pointer whitespace-nowrap"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-bold hover:bg-indigo-100 transition cursor-pointer whitespace-nowrap"
                           title="Bấm để xem file"
                         >
                           <Paperclip className="w-3 h-3" />

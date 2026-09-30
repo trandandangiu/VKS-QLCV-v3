@@ -27,11 +27,18 @@ interface PvtUser {
   fullName: string;
   roomCode?: string;
 }
+
 interface TpUser {
   id: string;
   fullName: string;
   roomCode?: string;
-  department?: { name: string };
+  department?: { name: string; code?: string };
+}
+
+interface Department {
+  id: string;
+  code: string;
+  name: string;
 }
 
 interface DispatchDetailDrawerProps {
@@ -108,6 +115,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
   // Users để chọn PVT / TP
   const [pvtUsers, setPvtUsers] = useState<PvtUser[]>([]);
   const [tpUsers, setTpUsers] = useState<TpUser[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   // Actions
   const [isCompleting, setIsCompleting] = useState(false);
@@ -129,6 +137,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     ghiChu: '',
     assignedPvtId: '',
     assignedTpId: '',
+    assignedDeptCode: '',    // ⭐ THÊM
     nguoiThucHien: '',
   });
 
@@ -153,19 +162,29 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
         ghiChu: dispatch.ghiChu || '',
         assignedPvtId: dispatch.assignedPvtId || '',
         assignedTpId: dispatch.assignedTpId || '',
+        assignedDeptCode: (dispatch as any).dispatchTps?.[0]?.roomCode || '',
         nguoiThucHien: dispatch.nguoiThucHien || '',
       });
     }
   }, [dispatch?.id]);
 
-  // ===== LOAD PVT + TP USERS =====
+  // ===== LOAD PVT + TP + DEPARTMENTS =====
   useEffect(() => {
     (async () => {
       try {
-        const [pvts, tps] = await Promise.all([
+        const [pvts, tps, deptsRes] = await Promise.all([
           apiClient.getAllUsers({ role: 'PHO_VIEN_TRUONG', limit: 100 }),
           apiClient.getAllUsers({ role: 'TRUONG_PHONG', limit: 100 }),
+          fetch('/api/departments', {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(localStorage.getItem('access_token')
+                ? { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+                : {}),
+            },
+          }).then(r => r.json()),
         ]);
+
         setPvtUsers(
           (pvts || []).map(u => ({
             id: u.id,
@@ -178,11 +197,19 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
             id: u.id,
             fullName: u.fullName,
             roomCode: u.roomCode,
-            department: u.department ? { name: u.department.name } : undefined,
+            department: u.department ? { name: u.department.name, code: u.department.code } : undefined,
           }))
         );
+
+        if (deptsRes?.success && Array.isArray(deptsRes.departments)) {
+          setDepartments(
+            deptsRes.departments
+              .filter((dd: any) => dd.active !== false)
+              .map((dd: any) => ({ id: dd.id, code: dd.code, name: dd.name }))
+          );
+        }
       } catch (err) {
-        console.error('Lỗi load PVT/TP:', err);
+        console.error('Lỗi load PVT/TP/departments:', err);
       }
     })();
   }, []);
@@ -236,6 +263,11 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
           ? 'text-emerald-700'
           : 'text-slate-700';
 
+  // ⭐ Tính tên phòng hiển thị (KHÔNG dùng IIFE)
+  const roomCodeFromRelation = (d as any).dispatchTps?.[0]?.roomCode || '';
+  const matchedDept = departments.find(dept => dept.code === roomCodeFromRelation);
+  const displayDeptName = matchedDept ? matchedDept.name : roomCodeFromRelation;
+
   // ===== EDIT HANDLERS =====
   const updateField = (key: keyof typeof form, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -252,6 +284,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
       ghiChu: d.ghiChu || '',
       assignedPvtId: d.assignedPvtId || '',
       assignedTpId: d.assignedTpId || '',
+      assignedDeptCode: (d as any).dispatchTps?.[0]?.roomCode || '',
       nguoiThucHien: d.nguoiThucHien || '',
     });
   };
@@ -265,9 +298,9 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     setIsSaving(true);
     try {
       const originalPvtId = d.assignedPvtId || '';
-      const originalTpId = d.assignedTpId || '';
+      const originalDeptCode = (d as any).dispatchTps?.[0]?.roomCode || '';
 
-      // ⭐ Local dispatch mới để update state liên tục
+      // ⭐ Local dispatch mới
       const updated: Partial<Dispatch> = {};
 
       // 1. Update các field cơ bản
@@ -288,7 +321,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
           throw new Error('Không tìm thấy Phó Viện trưởng đã chọn');
         }
 
-        // ⭐ KHÔNG nuốt lỗi — throw ra để user biết
         const res = await apiClient.assignToPvts(d.id, {
           pvts: [
             {
@@ -307,40 +339,32 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
         updated.trangThai = res.trangThai || 'CHO_PVT_XU_LY';
       }
 
-      // 3. Đổi TP → gọi assignToTps
-      if (form.assignedTpId && form.assignedTpId !== originalTpId) {
-        const tp = tpUsers.find(u => u.id === form.assignedTpId);
+      // 3. ⭐ Đổi ĐƠN VỊ THỰC HIỆN → gọi assignToTps
+      if (form.assignedDeptCode && form.assignedDeptCode !== originalDeptCode) {
+        const tp = tpUsers.find(u => u.roomCode === form.assignedDeptCode);
         if (!tp) {
-          throw new Error('Không tìm thấy Trưởng phòng đã chọn');
+          throw new Error('Không tìm thấy Trưởng phòng của phòng đã chọn');
         }
 
-        // ⭐ Lấy roomCode: ưu tiên tp.roomCode, fallback department.name match
-        const tpRoomCode =
-          tp.roomCode ||
-          (tp.department as any)?.code ||
-          (tp.department?.name || '').match(/TP\d+/i)?.[0]?.toUpperCase() ||
-          '';
-
-        // ⭐ KHÔNG nuốt lỗi
         const res = await apiClient.assignToTps(d.id, {
           tps: [
             {
               tpId: tp.id,
               tpName: tp.fullName,
-              roomCode: tpRoomCode,
+              roomCode: tp.roomCode || form.assignedDeptCode,
               isPrimary: true,
             },
           ],
         });
 
-        if (!res) throw new Error('Giao Trưởng phòng thất bại');
+        if (!res) throw new Error('Giao Đơn vị thực hiện thất bại');
 
         updated.assignedTpId = res.assignedTpId || tp.id;
         updated.assignedTpName = res.assignedTpName || tp.fullName;
         updated.trangThai = res.trangThai || 'CHO_TP_XU_LY';
       }
 
-      // 4. Update local state với TẤT CẢ thay đổi
+      // 4. Update local state
       setLocalDispatch(prev => (prev ? { ...prev, ...updated } : prev));
       setIsEditing(false);
       setIsDirty(false);
@@ -371,7 +395,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     }
   };
 
-  // ===== REOPEN (bỏ hoàn thành) =====
+  // ===== REOPEN =====
   const handleReopen = async () => {
     if (!onReopen) return;
     if (
@@ -384,7 +408,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     setIsReopening(true);
     try {
       await onReopen(d);
-      // Local fallback — parent có thể ghi đè bằng dispatch thật
       setLocalDispatch(prev =>
         prev
           ? {
@@ -403,10 +426,9 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     }
   };
 
-  // ===== DELETE DISPATCH =====
+  // ===== DELETE =====
   const handleDelete = async () => {
     if (!onDelete) return;
-
     if (
       !window.confirm(
         `Xoá công văn "${d.soCongVan}"?\n\nCông văn sẽ bị ẩn khỏi danh sách.`
@@ -454,7 +476,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     }
     setUploadingCount(0);
 
-    // ⭐ Reload list NGAY, đợi xong mới show toast
     await loadAttachments(d.id);
 
     if (ok > 0 && fail === 0) showToast(`Đã tải lên ${ok} file`, 'success');
@@ -485,7 +506,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     try {
       const ok = await apiClient.deleteAttachment(att.id);
       if (ok) {
-        // ⭐ Reload list trước, show toast sau
         await loadAttachments(d.id);
         showToast('Đã xóa file', 'success');
       } else {
@@ -496,11 +516,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     }
   };
 
-  /**
-   * Mở file trong tab mới.
-   * Backend nhận `?token=` để auth (không cần header) và `?inline=1` để xem trực tiếp.
-   * Chrome sẽ tự render PDF/ảnh inline, file Office sẽ tải về.
-   */
   const handleOpenFile = (att: Attachment) => {
     const token = apiClient.getToken();
     const params = new URLSearchParams();
@@ -682,25 +697,36 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 )}
               </Field>
 
-              <Field label="Trưởng phòng thực hiện">
+              {/* ⭐ ĐỔI: "Trưởng phòng thực hiện" → "Đơn vị thực hiện" */}
+              <Field label="Đơn vị thực hiện">
                 {isEditing ? (
                   <select
-                    value={form.assignedTpId}
-                    onChange={e => updateField('assignedTpId', e.target.value)}
+                    value={form.assignedDeptCode}
+                    onChange={e => {
+                      const code = e.target.value;
+                      updateField('assignedDeptCode', code);
+
+                      // Tự động tìm Trưởng phòng của phòng đó
+                      const matchedTp = tpUsers.find(t => t.roomCode === code);
+                      if (matchedTp) {
+                        updateField('assignedTpId', matchedTp.id);
+                      } else {
+                        updateField('assignedTpId', '');
+                      }
+                    }}
                     className={inputCls}
                   >
                     <option value="">— Chưa phân công —</option>
-                    {tpUsers.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.department?.name || t.roomCode || '—'} — {t.fullName}
+                    {departments.map(dept => (
+                      <option key={dept.id} value={dept.code}>
+                        {dept.name}
                       </option>
                     ))}
                   </select>
-                ) : d.assignedTpName ? (
+                ) : displayDeptName ? (
                   <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md font-semibold">
-                    {/* ⭐ Đổi icon + màu cho khớp bảng */}
                     <CornerDownRight className="w-3.5 h-3.5" />
-                    {d.assignedTpName}
+                    {displayDeptName}
                   </span>
                 ) : (
                   <span className="italic text-slate-400">Chưa phân công</span>
@@ -741,8 +767,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
             {/* ───── SECTION 3: FILE ĐÍNH KÈM ───── */}
             <Section
               icon={Paperclip}
-              title={`File đính kèm${attachments.length ? ` (${attachments.length})` : ''
-                }`}
+              title={`File đính kèm${attachments.length ? ` (${attachments.length})` : ''}`}
               action={
                 canEdit ? (
                   <button
@@ -807,8 +832,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                     }`}
                 >
                   <Upload
-                    className={`w-5 h-5 mx-auto mb-1 ${isDragging ? 'text-indigo-600' : 'text-slate-400'
-                      }`}
+                    className={`w-5 h-5 mx-auto mb-1 ${isDragging ? 'text-indigo-600' : 'text-slate-400'}`}
                   />
                   <p className="text-[11px] font-semibold text-slate-600">
                     {!canEdit
@@ -817,11 +841,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                         ? 'Thả file vào đây'
                         : 'Kéo thả hoặc bấm để chọn file'}
                   </p>
-                  {canEdit && (
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -891,7 +910,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
           {/* ════════ FOOTER ════════ */}
           <div className="px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2">
-              {/* ⭐ Chưa hoàn thành → nút "Đánh dấu hoàn thành" */}
               {!isCompleted && canEdit && onMarkComplete && (
                 <button
                   onClick={handleMarkComplete}
@@ -907,7 +925,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 </button>
               )}
 
-              {/* ⭐ Đã hoàn thành + có quyền mở lại → nút "Bỏ hoàn thành" */}
               {isCompleted && canEdit && onReopen && (
                 <button
                   onClick={handleReopen}
@@ -924,7 +941,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 </button>
               )}
 
-              {/* ⭐ Đã hoàn thành + không có quyền mở lại → badge tĩnh */}
               {isCompleted && (!canEdit || !onReopen) && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
                   <CheckCircle2 className="w-4 h-4" />
@@ -932,7 +948,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 </span>
               )}
 
-              {/* Nút Xoá */}
               {canEdit && onDelete && (
                 <button
                   onClick={handleDelete}

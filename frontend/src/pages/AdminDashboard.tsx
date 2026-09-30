@@ -2100,7 +2100,7 @@ export const AdminDashboard: React.FC = () => {
                       {/* Chức vụ */}
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
                         <label className="w-28 text-slate-700 font-medium shrink-0">
-                          Chức danh:
+                          Chức vụ:
                         </label>
                         <div className="flex items-center gap-2 flex-1 max-w-sm">
                           <input

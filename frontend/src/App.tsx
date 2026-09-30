@@ -16,17 +16,35 @@ import { useAutoPush } from './hooks/useAutoPush';
 import { ChuyenDeDetailPage } from './pages/ChuyenDeDetailPage';
 
 const AppContent: React.FC = () => {
-  // ⭐ Tự động đăng ký Web Push khi login
   useAutoPush();
 
   return (
     <Routes>
-      {/* ── CÔNG KHAI ── */}
-      <Route path="/" element={<PublicHome />} />
+      {/* ── CHUYỂN HƯỚNG MẶC ĐỊNH ── */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
+
+      {/* ── TRANG ĐĂNG NHẬP ── */}
       <Route path="/login" element={<Login />} />
 
-      {/* ⭐ DEEP LINK từ thông báo */}
-      <Route path="/dispatches/:id" element={<DispatchDeepLink />} />
+      {/* ── PUBLIC HOME (YÊU CẦU ĐĂNG NHẬP - MỌI ROLE ĐỀU VÀO ĐƯỢC) ── */}
+      <Route
+        path="/home"
+        element={
+          <ProtectedRoute>
+            <PublicHome />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ── DEEP LINK (YÊU CẦU ĐĂNG NHẬP) ── */}
+      <Route
+        path="/dispatches/:id"
+        element={
+          <ProtectedRoute>
+            <DispatchDeepLink />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ── ADMIN ── */}
       <Route
@@ -57,14 +75,6 @@ const AppContent: React.FC = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/pvt/:id"
-        element={
-          <ProtectedRoute allowedRoles={['PHO_VIEN_TRUONG', 'ADMIN']}>
-            <PhoVienTruongDashboard />
-          </ProtectedRoute>
-        }
-      />
 
       {/* ── TRƯỞNG PHÒNG ── */}
       <Route
@@ -75,18 +85,19 @@ const AppContent: React.FC = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* ── CHUYÊN ĐỀ CHI TIẾT ── */}
       <Route
-        path="/tp/:id"
+        path="/chuyende/:id"
         element={
-          <ProtectedRoute allowedRoles={['TRUONG_PHONG', 'ADMIN']}>
-            <TruongPhongDashboard />
+          <ProtectedRoute>
+            <ChuyenDeDetailPage />
           </ProtectedRoute>
         }
       />
-      {/* ⭐ Trang chi tiết chuyên đề */}
-      <Route path="/chuyende/:id" element={<ChuyenDeDetailPage />} />
+
       {/* ── FALLBACK ── */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 };

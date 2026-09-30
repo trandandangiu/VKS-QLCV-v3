@@ -1,5 +1,5 @@
 // src/components/public/PublicHeroSection.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
   Clock,
@@ -8,11 +8,22 @@ import {
   Users,
   X,
   ChevronDown,
-  ChevronUp,
   AlertTriangle,
+  Building2,
+  UserCheck,
+  Check,
 } from 'lucide-react';
 
 interface PvtCard {
+  id: string;
+  name: string;
+  roomCode?: string;
+  total: number;
+  overdue: number;
+  completed: number;
+}
+
+interface TpCard {
   id: string;
   name: string;
   roomCode?: string;
@@ -27,11 +38,17 @@ interface PublicHeroSectionProps {
   totalOverdue: number;
   onScrollToTable: () => void;
   pvtCards?: PvtCard[];
+  tpCards?: TpCard[];
   selectedPvtId?: string | null;
+  selectedTpId?: string | null;
   onSelectPvt?: (pvtId: string | null) => void;
+  onSelectTp?: (tpId: string | null) => void;
   canClickPvtCard?: (card: PvtCard) => boolean;
+  canClickTpCard?: (card: TpCard) => boolean;
   onFilterOverdue?: () => void;
   isOverdueFilterActive?: boolean;
+  showPvtCards?: boolean;
+  currentUserName?: string;
 }
 
 const getTodayString = (): string => {
@@ -69,24 +86,47 @@ const cleanName = (name: string): string => {
 export const PublicHeroSection: React.FC<PublicHeroSectionProps> = ({
   onScrollToTable,
   pvtCards = [],
+  tpCards = [],
   selectedPvtId = null,
+  selectedTpId = null,
   onSelectPvt,
+  onSelectTp,
   canClickPvtCard,
+  canClickTpCard,
   onFilterOverdue,
   isOverdueFilterActive = false,
   totalDispatches = 0,
   totalCompleted = 0,
   totalOverdue = 0,
+  showPvtCards = false,
+  currentUserName = '',
 }) => {
   const [timeStr, setTimeStr] = useState(getCurrentTime());
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [openPanel, setOpenPanel] = useState<'PVT' | 'TP' | null>(null);
+
+  const pvtWrapRef = useRef<HTMLDivElement>(null);
+  const tpWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setTimeStr(getCurrentTime()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  const handleCardClick = (pvtId: string) => {
+  useEffect(() => {
+    if (!openPanel) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const inPvt = pvtWrapRef.current?.contains(target);
+      const inTp = tpWrapRef.current?.contains(target);
+      if (!inPvt && !inTp) {
+        setOpenPanel(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openPanel]);
+
+  const handlePvtClick = (pvtId: string) => {
     if (!onSelectPvt) return;
     if (selectedPvtId === pvtId) {
       onSelectPvt(null);
@@ -95,50 +135,66 @@ export const PublicHeroSection: React.FC<PublicHeroSectionProps> = ({
     }
   };
 
-  // ⭐ Mobile chỉ hiện 4, desktop 6
-  const INITIAL_SHOW = 6;
-  const displayPvts = isExpanded ? pvtCards : pvtCards.slice(0, INITIAL_SHOW);
-  const hasMore = pvtCards.length > INITIAL_SHOW;
-  const pvtsWithWork = pvtCards.filter(p => p.total > 0).length;
+  const handleTpClick = (tpId: string) => {
+    if (!onSelectTp) return;
+    if (selectedTpId === tpId) {
+      onSelectTp(null);
+    } else {
+      onSelectTp(tpId);
+    }
+  };
+
+  const togglePvt = () => {
+    setOpenPanel(prev => (prev === 'PVT' ? null : 'PVT'));
+  };
+  const toggleTp = () => {
+    setOpenPanel(prev => (prev === 'TP' ? null : 'TP'));
+  };
+
+  const showUserGreeting = !showPvtCards && !!currentUserName;
 
   return (
+    // ⭐ BỎ overflow-hidden, giữ rounded-2xl
     <div
-      className="relative overflow-hidden rounded-lg sm:rounded-2xl text-white shadow-lg"
+      className="relative rounded-lg sm:rounded-2xl text-white shadow-lg"
       style={{
         backgroundImage: 'linear-gradient(135deg, #B71C1C 0%, #7F0E0E 50%, #4A0808 100%)',
       }}
     >
-      {/* Pattern dots — chỉ desktop */}
-      <div className="hidden sm:block absolute inset-0 opacity-10 pointer-events-none">
-        <svg width="100%" height="100%">
-          <defs>
-            <pattern id="dots-hero" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
-              <circle cx="3" cy="3" r="2" fill="white" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#dots-hero)" />
-        </svg>
+      {/* ⭐ Wrapper bọc pattern dots + blob — CÓ overflow-hidden riêng */}
+      <div className="absolute inset-0 rounded-lg sm:rounded-2xl overflow-hidden pointer-events-none">
+        {/* Pattern dots */}
+        <div className="hidden sm:block absolute inset-0 opacity-10">
+          <svg width="100%" height="100%">
+            <defs>
+              <pattern id="dots-hero" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+                <circle cx="3" cy="3" r="2" fill="white" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#dots-hero)" />
+          </svg>
+        </div>
+
+        {/* Blob decorations */}
+        <div className="hidden sm:block absolute w-72 h-72 rounded-full bg-amber-500/20 blur-3xl -top-20 -right-20" />
+        <div className="hidden sm:block absolute w-64 h-64 rounded-full bg-rose-500/20 blur-3xl -bottom-24 -left-20" />
       </div>
 
-      <div className="hidden sm:block absolute w-72 h-72 rounded-full bg-amber-500/20 blur-3xl pointer-events-none -top-20 -right-20" />
-      <div className="hidden sm:block absolute w-64 h-64 rounded-full bg-rose-500/20 blur-3xl pointer-events-none -bottom-24 -left-20" />
-
+      {/* ⭐ Content — KHÔNG có overflow-hidden, cho phép dropdown xổ ra */}
       <div className="relative p-3 sm:p-4 lg:p-5">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 items-start">
 
-          {/* ═══════ CỘT TRÁI ═══════ */}
-          <div className="lg:col-span-5 space-y-2">
-            {/* Tiêu đề — ẩn trên mobile vì Header đã có */}
-            <div>
-              <h1 className="hidden sm:block text-2xl lg:text-3xl font-black tracking-tight leading-tight">
-                THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN
-              </h1>
-              <h1 className="sm:hidden text-base font-black tracking-tight leading-tight">
-                Tiến độ công văn
-              </h1>
-            </div>
+        {/* ═══════ HÀNG TRÊN ═══════ */}
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
 
-            {/* Ngày + giờ */}
+          {/* Cột trái */}
+          <div className="flex-1 min-w-0 space-y-2">
+            <h1 className="hidden sm:block text-2xl lg:text-3xl font-black tracking-tight leading-tight">
+              THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN
+            </h1>
+            <h1 className="sm:hidden text-base font-black tracking-tight leading-tight">
+              Tiến độ công văn
+            </h1>
+
             <div className="flex items-center gap-3 text-[11px] sm:text-xs text-red-100 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-amber-300" />
@@ -150,9 +206,9 @@ export const PublicHeroSection: React.FC<PublicHeroSectionProps> = ({
               </div>
             </div>
 
-            {/* Badges row — mobile gọn hơn */}
             <div className="flex items-center gap-1.5 pt-1 flex-wrap">
               <button
+                type="button"
                 onClick={onScrollToTable}
                 className="flex items-center gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-white text-red-900 font-black text-[10px] sm:text-xs rounded-lg shadow-md hover:bg-amber-100 transition cursor-pointer active:scale-95"
               >
@@ -162,198 +218,280 @@ export const PublicHeroSection: React.FC<PublicHeroSectionProps> = ({
                 <ArrowDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-bounce" />
               </button>
 
-              {pvtCards.length > 0 && (
-                <>
-                  <span className="px-2 py-1 bg-white/15 border border-white/25 rounded-md text-[10px] sm:text-[11px] font-bold text-white">
-                    {pvtCards.length} Phó viện trưởng
-                  </span>
-
-                  {pvtsWithWork > 0 && (
-                    <span className="hidden sm:inline px-2 py-1 bg-emerald-500/25 border border-emerald-400/40 rounded-md text-[11px] font-bold text-emerald-100">
-                      {pvtsWithWork} có công văn
-                    </span>
-                  )}
-
-                  {totalOverdue > 0 && (
-                    <button
-                      type="button"
-                      onClick={onFilterOverdue}
-                      className={`px-2 py-1 rounded-md text-[10px] sm:text-[11px] font-bold flex items-center gap-1 cursor-pointer transition border ${isOverdueFilterActive
-                        ? 'bg-rose-500 border-rose-300 text-white shadow-md ring-2 ring-rose-300/50'
-                        : 'bg-rose-500/25 hover:bg-rose-500/40 border-rose-400/40 text-rose-100'
-                        }`}
-                    >
-                      <AlertTriangle className="w-3 h-3" />
-                      <span>{totalOverdue} quá hạn</span>
-                      {isOverdueFilterActive && <X className="w-3 h-3 ml-0.5" />}
-                    </button>
-                  )}
-                </>
+              {totalOverdue > 0 && (
+                <button
+                  type="button"
+                  onClick={onFilterOverdue}
+                  className={`px-2 py-1 rounded-md text-[10px] sm:text-[11px] font-bold flex items-center gap-1 cursor-pointer transition border ${isOverdueFilterActive
+                    ? 'bg-rose-500 border-rose-300 text-white shadow-md ring-2 ring-rose-300/50'
+                    : 'bg-rose-500/25 hover:bg-rose-500/40 border-rose-400/40 text-rose-100'
+                    }`}
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>{totalOverdue} quá hạn</span>
+                  {isOverdueFilterActive && <X className="w-3 h-3 ml-0.5" />}
+                </button>
               )}
             </div>
-
           </div>
 
-          {/* ═══════ CỘT PHẢI: Phó viện trưởngGRID ═══════ */}
-          <div className="lg:col-span-7 space-y-2">
-            {pvtCards.length > 0 && (
-              <>
-                {/* Header */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-white/15 border border-white/25 flex items-center justify-center">
-                      <Users className="w-3 h-3 text-amber-300" />
-                    </div>
-                    <div>
-                      <div className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-amber-200">
-                        Lãnh đạo phụ trách
-                      </div>
-                      <div className="text-[10px] sm:text-[11px] font-bold text-white">
-                        {pvtCards.length} Phó viện trưởng· {pvtCards.reduce((s, p) => s + p.total, 0)} công văn
-                      </div>
-                    </div>
-                  </div>
+          {/* Cột phải: 2 nút dropdown */}
+          {showPvtCards && (
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
 
-                  {hasMore && (
-                    <button
-                      onClick={() => setIsExpanded(!isExpanded)}
-                      className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-white bg-white/15 hover:bg-white/25 rounded-md border border-white/25 transition cursor-pointer shrink-0"
-                    >
-                      {isExpanded ? (
-                        <>
-                          <ChevronUp className="w-3 h-3" />
-                          Thu gọn
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="w-3 h-3" />
-                          +{pvtCards.length - INITIAL_SHOW}
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                {/* Grid Phó viện trưởng— 2 cột mobile, scroll */}
-                <div
-                  className={`grid grid-cols-2 gap-1.5 sm:gap-2 ${isExpanded ? 'max-h-[280px]' : 'max-h-[180px] sm:max-h-[140px]'
-                    } overflow-y-auto pr-0.5 transition-all`}
+              {/* ═══ NÚT LÃNH ĐẠO VIỆN PHỤ TRÁCH ═══ */}
+              <div className="relative" ref={pvtWrapRef}>
+                <button
+                  type="button"
+                  onClick={togglePvt}
+                  className={`inline-flex items-center gap-2 h-9 px-3.5 text-xs font-semibold rounded-lg border transition cursor-pointer ${openPanel === 'PVT' || !!selectedPvtId
+                      ? 'bg-amber-400 text-red-950 border-amber-300 shadow-sm'
+                      : 'bg-white/10 hover:bg-white/20 text-white border-white/25'
+                    }`}
+                  title="Xem danh sách Lãnh đạo Viện phụ trách"
                 >
-                  {displayPvts.map(pvt => {
-                    const isSelected = selectedPvtId === pvt.id;
-                    const initials = getInitials(pvt.name);
-                    const displayName = cleanName(pvt.name);
-                    const clickable = canClickPvtCard ? canClickPvtCard(pvt) : true;
+                  <span className="hidden sm:inline">Lãnh đạo Viện phụ trách</span>
+                  <span className="sm:hidden">Lãnh đạo</span>
+                  {pvtCards.length > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${openPanel === 'PVT' || !!selectedPvtId
+                          ? 'bg-red-900 text-amber-100'
+                          : 'bg-white/20 text-white'
+                        }`}
+                    >
+                      {pvtCards.length}
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition ${openPanel === 'PVT' ? 'rotate-180' : ''
+                      }`}
+                  />
+                </button>
 
-                    const hasWork = pvt.total > 0;
-                    const hasOverdue = pvt.overdue > 0;
+                {/* ═══ DROPDOWN PVT ═══ */}
+                {openPanel === 'PVT' && (
+                  <div className="absolute top-full right-0 mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-[100] overflow-hidden">
+                    {/* Header */}
+                    <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-900">
+                          Lãnh đạo Viện phụ trách
+                        </span>
+                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-bold">
+                          {pvtCards.length}
+                        </span>
+                      </div>
+                      {selectedPvtId && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectPvt?.(null)}
+                          className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer"
+                        >
+                          Bỏ chọn
+                        </button>
+                      )}
+                    </div>
 
-                    return (
-                      <button
-                        key={pvt.id}
-                        onClick={() => {
-                          if (!clickable) return;
-                          handleCardClick(pvt.id);
-                        }}
-                        disabled={!clickable}
-                        title={
-                          clickable
-                            ? `${displayName} · ${pvt.total} CV${hasOverdue ? ` · ${pvt.overdue} quá hạn` : ''}`
-                            : 'Không có quyền'
-                        }
-                        className={`
-                          relative w-full text-left p-1.5 sm:p-2 rounded-lg transition border
-                          ${isSelected
-                            ? 'bg-amber-400/30 border-amber-300 shadow-md ring-1 ring-amber-300/50 cursor-pointer'
-                            : !hasWork
-                              ? clickable
-                                ? 'bg-white/5 hover:bg-white/10 border-white/15 opacity-70 cursor-pointer'
-                                : 'bg-white/5 border-white/10 cursor-not-allowed opacity-40'
-                              : hasOverdue
-                                ? clickable
-                                  ? 'bg-rose-500/15 hover:bg-rose-500/25 border-rose-400/50 cursor-pointer'
-                                  : 'bg-white/5 border-white/10 cursor-not-allowed opacity-40'
-                                : clickable
-                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-400/40 cursor-pointer'
-                                  : 'bg-white/5 border-white/10 cursor-not-allowed opacity-40'
-                          }
-                        `}
-                      >
-                        <div className="flex items-start gap-1.5 sm:gap-2">
-                          {/* Avatar */}
-                          <div
-                            className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 border ${isSelected
-                              ? 'bg-amber-400 text-red-950 border-amber-200'
-                              : !hasWork
-                                ? 'bg-white/10 text-white/60 border-white/20'
-                                : hasOverdue
-                                  ? 'bg-rose-500/30 text-white border-rose-400/50'
-                                  : 'bg-emerald-500/25 text-white border-emerald-400/40'
-                              }`}
-                          >
-                            <span className="text-[9px] sm:text-[11px] font-black">
-                              {initials}
-                            </span>
-                          </div>
-
-                          {/* Tên + roomCode */}
-                          <div className="flex-1 min-w-0">
-                            <div
-                              className={`text-[10px] sm:text-[11px] font-black truncate ${!hasWork ? 'text-white/60' : 'text-white'
-                                }`}
-                            >
-                              {displayName}
-                            </div>
-                            {pvt.roomCode && (
-                              <div
-                                className={`text-[8px] sm:text-[9px] font-bold uppercase tracking-wide ${!hasWork ? 'text-white/40' : 'text-amber-200'
-                                  }`}
-                              >
-                                {pvt.roomCode}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Số liệu */}
-                          {hasWork && (
-                            <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              <div className="text-[10px] sm:text-xs font-black text-white leading-none">
-                                {pvt.total}
-                                <span className="hidden sm:inline text-[8px] text-white/70 ml-0.5">
-                                  Công văn
-                                </span>
-                              </div>
-                              {hasOverdue && (
-                                <div className="flex items-center gap-0.5 px-1 py-0.5 bg-rose-500/40 rounded text-[8px] font-black text-white">
-                                  <AlertTriangle className="w-2.5 h-2.5" />
-                                  {pvt.overdue}
-                                </div>
-                              )}
-                            </div>
-                          )}
+                    {/* List */}
+                    <div className="hero-dropdown-scroll max-h-[340px] overflow-y-auto py-1">
+                      {pvtCards.length === 0 ? (
+                        <div className="px-3 py-6 text-center text-xs text-slate-400 italic">
+                          Chưa có Lãnh đạo Viện nào
                         </div>
+                      ) : (
+                        pvtCards.map(pvt => {
+                          const isSelected = selectedPvtId === pvt.id;
+                          const displayName = cleanName(pvt.name);
+                          const clickable = canClickPvtCard ? canClickPvtCard(pvt) : true;
+                          const hasOverdue = pvt.overdue > 0;
 
-                        {/* Dot trạng thái */}
-                        {hasWork && (
-                          <span
-                            className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${hasOverdue ? 'bg-rose-400 animate-pulse' : 'bg-emerald-400'
-                              }`}
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                          return (
+                            <button
+                              key={pvt.id}
+                              type="button"
+                              onClick={() => {
+                                if (!clickable) return;
+                                handlePvtClick(pvt.id);
+                              }}
+                              disabled={!clickable}
+                              className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition cursor-pointer ${isSelected ? 'bg-amber-50' : 'hover:bg-slate-50'
+                                } ${!clickable ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`text-[13px] font-semibold truncate ${isSelected ? 'text-amber-900' : 'text-slate-800'
+                                      }`}
+                                  >
+                                    {displayName}
+                                  </span>
+                                  {pvt.roomCode && (
+                                    <span className="text-[10px] font-mono font-medium text-slate-400 shrink-0">
+                                      {pvt.roomCode}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                  {pvt.total} công văn
+                                  {pvt.completed > 0 && (
+                                    <span className="text-emerald-600">
+                                      {' · '}
+                                      {pvt.completed} hoàn thành
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
 
-                {/* Footer hint */}
-                {hasMore && !isExpanded && (
-                  <div className="text-center text-[10px] text-white/60 italic">
-                    Còn {pvtCards.length - INITIAL_SHOW} Phó viện trưởng
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {hasOverdue && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[10px] font-bold">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {pvt.overdue}
+                                  </span>
+                                )}
+                                {isSelected && (
+                                  <Check
+                                    className="w-4 h-4 text-amber-600"
+                                    strokeWidth={2.5}
+                                  />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+
+              {/* ═══ NÚT TRƯỞNG PHÒNG PHỤ TRÁCH ═══ */}
+              <div className="relative" ref={tpWrapRef}>
+                <button
+                  type="button"
+                  onClick={toggleTp}
+                  className={`inline-flex items-center gap-2 h-9 px-3.5 text-xs font-semibold rounded-lg border transition cursor-pointer ${openPanel === 'TP' || !!selectedTpId
+                      ? 'bg-amber-400 text-red-950 border-amber-300 shadow-sm'
+                      : 'bg-white/10 hover:bg-white/20 text-white border-white/25'
+                    }`}
+                  title="Xem danh sách Trưởng phòng phụ trách"
+                >
+                  <span className="hidden sm:inline">Trưởng phòng </span>
+                  <span className="sm:hidden">Trưởng phòng</span>
+                  {tpCards.length > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${openPanel === 'TP' || !!selectedTpId
+                          ? 'bg-red-900 text-amber-100'
+                          : 'bg-white/20 text-white'
+                        }`}
+                    >
+                      {tpCards.length}
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition ${openPanel === 'TP' ? 'rotate-180' : ''
+                      }`}
+                  />
+                </button>
+
+                {/* ═══ DROPDOWN TP ═══ */}
+                {openPanel === 'TP' && (
+                  <div className="absolute top-full right-0 mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-[100] overflow-hidden">
+                    {/* Header */}
+                    <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-900">
+                          Trưởng phòng phụ trách
+                        </span>
+                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold">
+                          {tpCards.length}
+                        </span>
+                      </div>
+                      {selectedTpId && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectTp?.(null)}
+                          className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer"
+                        >
+                          Bỏ chọn
+                        </button>
+                      )}
+                    </div>
+
+                    {/* List */}
+                    <div className="hero-dropdown-scroll max-h-[340px] overflow-y-auto py-1">
+                      {tpCards.length === 0 ? (
+                        <div className="px-3 py-6 text-center text-xs text-slate-400 italic">
+                          Chưa có Trưởng phòng nào
+                        </div>
+                      ) : (
+                        tpCards.map(tp => {
+                          const isSelected = selectedTpId === tp.id;
+                          const displayName = cleanName(tp.name);
+                          const clickable = canClickTpCard ? canClickTpCard(tp) : true;
+                          const hasOverdue = tp.overdue > 0;
+
+                          return (
+                            <button
+                              key={tp.id}
+                              type="button"
+                              onClick={() => {
+                                if (!clickable) return;
+                                handleTpClick(tp.id);
+                              }}
+                              disabled={!clickable}
+                              className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition cursor-pointer ${isSelected ? 'bg-emerald-50' : 'hover:bg-slate-50'
+                                } ${!clickable ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`text-[13px] font-semibold truncate ${isSelected ? 'text-emerald-900' : 'text-slate-800'
+                                      }`}
+                                  >
+                                    {displayName}
+                                  </span>
+                                  {tp.roomCode && (
+                                    <span className="text-[10px] font-mono font-medium text-slate-400 shrink-0">
+                                      {tp.roomCode}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                  {tp.total} công văn
+                                  {tp.completed > 0 && (
+                                    <span className="text-emerald-600">
+                                      {' · '}
+                                      {tp.completed} hoàn thành
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {hasOverdue && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[10px] font-bold">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {tp.overdue}
+                                  </span>
+                                )}
+                                {isSelected && (
+                                  <Check
+                                    className="w-4 h-4 text-emerald-600"
+                                    strokeWidth={2.5}
+                                  />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

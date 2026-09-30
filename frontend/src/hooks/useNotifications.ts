@@ -19,12 +19,14 @@ export function useNotifications() {
   const [latestNotification, setLatestNotification] = useState<NotificationItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load ban đầu
+  // ⭐ Load ban đầu
   const loadInitial = useCallback(async () => {
     try {
       setIsLoading(true);
       const list = await apiClient.getNotifications({ page: 1 });
       setNotifications(list || []);
+
+      // ⭐ Dùng số đếm từ backend (chính xác)
       const count = await apiClient.getUnreadCount();
       setUnreadCount(count || 0);
     } catch (err) {
@@ -44,10 +46,13 @@ export function useNotifications() {
     onNotification: (notif: NotificationItem) => {
       console.log('🔔 Nhận notification realtime:', notif);
 
-      // 1. Chèn vào đầu list
-      setNotifications(prev => [notif, ...prev]);
+      // 1. Chèn vào đầu list (tránh trùng)
+      setNotifications(prev => {
+        if (prev.some(n => n.id === notif.id)) return prev;
+        return [notif, ...prev];
+      });
 
-      // 2. Tăng badge
+      // 2. Tăng badge +1
       setUnreadCount(prev => prev + 1);
 
       // 3. Báo cho component khác (hiện toast)
@@ -74,18 +79,49 @@ export function useNotifications() {
     },
   });
 
+  // ⭐ markAsRead — DÙNG unreadCount từ BACKEND (chính xác 100%)
   const markAsRead = useCallback(async (id: string) => {
-    await apiClient.markNotificationRead?.(id);
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
-    );
-    setUnreadCount(prev => Math.max(0, prev - 1));
-  }, []);
+    // Tìm trong state
+    const target = notifications.find(n => n.id === id);
 
+    // Nếu đã đọc rồi → không gọi API, không giảm số
+    if (target?.isRead) {
+      return { success: true };
+    }
+
+    try {
+      const res = await apiClient.markNotificationRead(id);
+
+      // Update state
+      setNotifications(prev =>
+        prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
+      );
+
+      // ⭐ Dùng số từ backend — chính xác
+      if (res && typeof res.unreadCount === 'number') {
+        setUnreadCount(res.unreadCount);
+      } else {
+        // Fallback
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+
+      return res;
+    } catch (err) {
+      console.error('Lỗi mark read:', err);
+      return { success: false };
+    }
+  }, [notifications]);
+
+  // ⭐ markAllAsRead
   const markAllAsRead = useCallback(async () => {
-    await apiClient.markAllNotificationsRead?.();
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    setUnreadCount(0);
+    try {
+      await apiClient.markAllNotificationsRead();
+
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('Lỗi mark all read:', err);
+    }
   }, []);
 
   return {

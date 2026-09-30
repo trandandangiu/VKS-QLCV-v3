@@ -119,12 +119,7 @@ export const NotificationBell: React.FC = () => {
             </span>
           )}
 
-          {isConnected && (
-            <span
-              className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-white"
-              title="Đang nhận thông báo realtime"
-            />
-          )}
+
         </button>
 
         {/* Dropdown */}
@@ -171,23 +166,20 @@ export const NotificationBell: React.FC = () => {
                   <button
                     key={n.id}
                     onClick={() => handleClickNotification(n)}
-                    className={`w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-slate-50 active:bg-slate-100 transition cursor-pointer ${
-                      !n.isRead ? 'bg-blue-50/40' : ''
-                    }`}
+                    className={`w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-slate-50 active:bg-slate-100 transition cursor-pointer ${!n.isRead ? 'bg-blue-50/40' : ''
+                      }`}
                   >
                     <div className="flex items-start gap-3">
                       <div
-                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                          !n.isRead ? 'bg-blue-600' : 'bg-slate-300'
-                        }`}
+                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.isRead ? 'bg-blue-600' : 'bg-slate-300'
+                          }`}
                       />
                       <div className="flex-1 min-w-0">
                         <div
-                          className={`text-sm ${
-                            !n.isRead
+                          className={`text-sm ${!n.isRead
                               ? 'font-bold text-slate-900'
                               : 'font-medium text-slate-700'
-                          }`}
+                            }`}
                         >
                           {n.title}
                         </div>

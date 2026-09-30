@@ -1,5 +1,6 @@
 // backend/src/services/assignments.service.js
 import prisma from '../config/prisma.js';
+import { createAndPushNotification } from './notification.helper.js';
 
 export const assignmentsService = {
   // ============================================
@@ -8,12 +9,10 @@ export const assignmentsService = {
   async assignPvts(dispatchId, data, currentUser) {
     const { pvts, vtChiDao, hanBaoCaoXuLy, mucDoKhan } = data;
 
-    // 1.1. Validate
     if (!pvts || !Array.isArray(pvts) || pvts.length === 0) {
       throw { status: 400, message: 'Phải chọn ít nhất 1 PVT' };
     }
 
-    // 1.2. Check dispatch tồn tại
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
     });
@@ -22,20 +21,15 @@ export const assignmentsService = {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    // 1.3. Check trạng thái (chỉ được giao khi MOI_TAO)
     if (dispatch.trangThai !== 'MOI_TAO' && dispatch.trangThai !== 'VT_TRA_LAI') {
       throw { status: 400, message: 'Công văn không ở trạng thái có thể giao' };
     }
 
-    // 1.4. Check PVT tồn tại + có role PHO_VIEN_TRUONG
+    // Validate PVT tồn tại + có role
     for (const pvt of pvts) {
       const user = await prisma.user.findUnique({
         where: { id: pvt.pvtId },
-        include: {
-          userRoles: {
-            include: { role: true },
-          },
-        },
+        include: { userRoles: { include: { role: true } } },
       });
 
       if (!user) {
@@ -47,19 +41,20 @@ export const assignmentsService = {
       );
 
       if (!hasPvtRole) {
-        throw { status: 400, message: `User ${user.fullName} không phải Phó Viện trưởng` };
+        throw {
+          status: 400,
+          message: `User ${user.fullName} không phải Phó Viện trưởng`,
+        };
       }
     }
 
-    // 1.5. Check phải có 1 PVT chính
     const hasPrimary = pvts.some(p => p.isPrimary === true);
     if (!hasPrimary && pvts.length > 1) {
       throw { status: 400, message: 'Phải chọn 1 PVT chính khi giao nhiều người' };
     }
 
-    // 1.6. Transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Xóa PVT cũ (nếu giao lại)
+      // Xóa PVT cũ
       await tx.dispatchPvt.deleteMany({ where: { dispatchId } });
 
       // Tạo PVT mới
@@ -85,14 +80,13 @@ export const assignmentsService = {
             ? new Date(hanBaoCaoXuLy)
             : dispatch.hanBaoCaoXuLy,
           mucDoKhan: mucDoKhan || dispatch.mucDoKhan,
-          // ✅ Legacy fields
           assignedPvtId: pvts[0].pvtId,
           assignedPvtName: pvts[0].pvtName,
           updatedAt: new Date(),
         },
       });
 
-      // Ghi log assignments (1 record cho mỗi PVT)
+      // ⭐ Log + thông báo cho TỪNG PVT
       for (const pvt of pvts) {
         await tx.assignment.create({
           data: {
@@ -110,15 +104,39 @@ export const assignmentsService = {
           },
         });
 
-        // Gửi thông báo
-        await tx.notification.create({
-          data: {
-            userId: pvt.pvtId,
-            dispatchId,
-            type: 'TASK_ASSIGNED',
-            title: 'Công văn mới được giao',
-            content: `Viện trưởng đã giao công văn ${dispatch.soCongVan} cho bạn`,
+        // ⭐ Gửi notification + push realtime cho PVT được giao
+        await createAndPushNotification(tx, {
+          userId: pvt.pvtId,
+          dispatchId,
+          type: 'TASK_ASSIGNED',
+          title: '📋 Công văn mới được giao',
+          content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho bạn${
+            vtChiDao ? `: "${vtChiDao}"` : ''
+          }`,
+        });
+      }
+
+      // ⭐⭐ THÔNG BÁO CHO TẤT CẢ VT KHÁC (trừ người giao)
+      const allVienTruongs = await tx.user.findMany({
+        where: {
+          deletedAt: null,
+          active: true,
+          id: { not: currentUser.id }, // trừ người giao
+          userRoles: {
+            some: { role: { code: 'VIEN_TRUONG' } },
           },
+        },
+        select: { id: true, fullName: true },
+      });
+
+      const pvtNames = pvts.map(p => p.pvtName).join(', ');
+      for (const vt of allVienTruongs) {
+        await createAndPushNotification(tx, {
+          userId: vt.id,
+          dispatchId,
+          type: 'TASK_ASSIGNED',
+          title: '📋 Phân công mới',
+          content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho ${pvtNames}`,
         });
       }
 
@@ -136,9 +154,7 @@ export const assignmentsService = {
 
       return tx.dispatch.findUnique({
         where: { id: dispatchId },
-        include: {
-          dispatchPvts: true,
-        },
+        include: { dispatchPvts: true },
       });
     });
 
@@ -151,24 +167,20 @@ export const assignmentsService = {
   async assignTps(dispatchId, data, currentUser) {
     const { tps, pvtChiDao, hanBaoCaoXuLy } = data;
 
-    // 2.1. Validate
     if (!tps || !Array.isArray(tps) || tps.length === 0) {
       throw { status: 400, message: 'Phải chọn ít nhất 1 TP' };
     }
 
-    // 2.2. Check dispatch
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
-      include: {
-        dispatchPvts: true,
-      },
+      include: { dispatchPvts: true },
     });
 
     if (!dispatch) {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    // 2.3. Check user: PVT được giao HOẶC VT HOẶC Admin
+    // Check quyền: PVT được giao HOẶC VT HOẶC Admin
     const isAssignedPvt = dispatch.dispatchPvts.some(
       dp => dp.pvtId === currentUser.id
     );
@@ -179,9 +191,7 @@ export const assignmentsService = {
       throw { status: 403, message: 'Bạn không được giao công văn này' };
     }
 
-    // 2.4. Check trạng thái
-    // 2.4. Check trạng thái — ⭐ Nới rộng để cho phép VT sửa từ bất kỳ trạng thái nào
-    // (trừ HOAN_THANH và đã hủy)
+    // Check trạng thái
     const validStatuses = [
       'MOI_TAO',
       'CHO_PVT_XU_LY',
@@ -206,13 +216,12 @@ export const assignmentsService = {
         message: `Công văn đang ở trạng thái "${dispatch.trangThai}", không thể giao`,
       };
     }
-    // 2.5. Check TP tồn tại + có role TRUONG_PHONG
+
+    // Validate TP tồn tại + có role
     for (const tp of tps) {
       const user = await prisma.user.findUnique({
         where: { id: tp.tpId },
-        include: {
-          userRoles: { include: { role: true } },
-        },
+        include: { userRoles: { include: { role: true } } },
       });
 
       if (!user) {
@@ -224,13 +233,15 @@ export const assignmentsService = {
       );
 
       if (!hasTpRole) {
-        throw { status: 400, message: `User ${user.fullName} không phải Trưởng phòng` };
+        throw {
+          status: 400,
+          message: `User ${user.fullName} không phải Trưởng phòng`,
+        };
       }
     }
 
-    // 2.6. Transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Xóa TP cũ (nếu giao lại)
+      // Xóa TP cũ
       await tx.dispatchTp.deleteMany({ where: { dispatchId } });
 
       // Tạo TP mới
@@ -241,13 +252,12 @@ export const assignmentsService = {
           assignedByPvtName: currentUser.fullName,
           tpId: tp.tpId,
           tpName: tp.tpName,
-          roomCode: tp.roomCode || '',           // ← fallback đã có
+          roomCode: tp.roomCode || '',
           isPrimary: tp.isPrimary || tps.length === 1,
           role: tp.isPrimary ? 'CHINH' : 'PHOI_HOP',
           status: 'PENDING',
         })),
       });
-
 
       // Cập nhật dispatch
       await tx.dispatch.update({
@@ -255,51 +265,80 @@ export const assignmentsService = {
         data: {
           trangThai: 'CHO_TP_XU_LY',
           pvtChiDao,
-          // ✅ Legacy fields
           assignedTpId: tps[0].tpId,
           assignedTpName: tps[0].tpName,
           updatedAt: new Date(),
         },
       });
 
-      // ✅ Nếu VT giao trực tiếp (không qua PVT), đánh dấu cờ
+      // Nếu VT giao trực tiếp (không qua PVT)
       if (isVienTruong && !isAssignedPvt) {
         await tx.dispatch.update({
           where: { id: dispatchId },
           data: {
             customFields: {
               ...(dispatch.customFields || {}),
-              assignedDirectlyByVt: true,   // ← Cờ đánh dấu VT giao trực tiếp
+              assignedDirectlyByVt: true,
               assignedByUserId: currentUser.id,
             },
           },
         });
       }
-      // Log + notification
+
+      // ⭐ Log + thông báo cho TỪNG TP
       for (const tp of tps) {
         await tx.assignment.create({
           data: {
             dispatchId,
             fromUserId: currentUser.id,
             fromUserName: currentUser.fullName,
-            fromRole: 'PHO_VIEN_TRUONG',
+            fromRole: currentUser.roles?.[0] || 'PHO_VIEN_TRUONG',
             toUserId: tp.tpId,
             toUserName: tp.tpName,
             toRole: 'TRUONG_PHONG',
-            assignLevel: 'PVT_TO_TP',
+            assignLevel: isVienTruong && !isAssignedPvt ? 'VT_TO_TP' : 'PVT_TO_TP',
             chiDao: pvtChiDao,
             status: 'PENDING',
           },
         });
 
-        await tx.notification.create({
-          data: {
-            userId: tp.tpId,
-            dispatchId,
-            type: 'TASK_ASSIGNED',
-            title: 'Công văn mới được giao',
-            content: `PVT đã giao công văn ${dispatch.soCongVan} cho bạn`,
-          },
+        // ⭐ Gửi notification + push cho TP
+        await createAndPushNotification(tx, {
+          userId: tp.tpId,
+          dispatchId,
+          type: 'TASK_ASSIGNED',
+          title: '📋 Công văn mới được giao',
+          content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho bạn${
+            pvtChiDao ? `: "${pvtChiDao}"` : ''
+          }`,
+        });
+      }
+
+      // ⭐⭐ THÔNG BÁO CHO TẤT CẢ VT
+      // Nếu chính VT đang giao → trừ VT đó (biết rồi)
+      // Nếu PVT đang giao → gửi cho HẾT VT (để theo dõi)
+      const vtFilter = isVienTruong
+        ? { id: { not: currentUser.id } }
+        : {};
+
+      const allVienTruongs = await tx.user.findMany({
+        where: {
+          deletedAt: null,
+          active: true,
+          userRoles: { some: { role: { code: 'VIEN_TRUONG' } } },
+          ...vtFilter,
+        },
+        select: { id: true, fullName: true },
+      });
+
+      const tpNames = tps.map(t => t.tpName).join(', ');
+      for (const vt of allVienTruongs) {
+        await createAndPushNotification(tx, {
+          userId: vt.id,
+          dispatchId,
+          type: 'TASK_ASSIGNED',
+          title: '📋 Phân công mới',
+          content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho ${tpNames}`,
         });
       }
 
@@ -336,7 +375,6 @@ export const assignmentsService = {
       throw { status: 400, message: 'Phải nhập số công văn' };
     }
 
-    // Check dispatch
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
     });
@@ -345,7 +383,6 @@ export const assignmentsService = {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    // Check user được giao
     const tp = await prisma.dispatchTp.findFirst({
       where: {
         dispatchId,
@@ -357,17 +394,14 @@ export const assignmentsService = {
       throw { status: 403, message: 'Bạn không được giao công văn này' };
     }
 
-    // Update
     const updated = await prisma.dispatch.update({
       where: { id: dispatchId },
       data: {
         soCongVanTP,
-        // Thêm field ngayDanhSo nếu có
         updatedAt: new Date(),
       },
     });
 
-    // Audit
     await prisma.auditLog.create({
       data: {
         userId: currentUser.id,
@@ -387,19 +421,15 @@ export const assignmentsService = {
   async tpSubmit(dispatchId, data, currentUser) {
     const { baoCaoTienDo, tienDo, attachmentIds } = data;
 
-    // Check dispatch
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
-      include: {
-        dispatchPvts: true,
-      },
+      include: { dispatchPvts: true },
     });
 
     if (!dispatch) {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    // Check user là TP được giao
     const tp = await prisma.dispatchTp.findFirst({
       where: {
         dispatchId,
@@ -411,14 +441,11 @@ export const assignmentsService = {
       throw { status: 403, message: 'Bạn không được giao công văn này' };
     }
 
-    // Check trạng thái
     if (dispatch.trangThai !== 'DANG_XU_LY' && dispatch.trangThai !== 'PVT_TRA_LAI') {
       throw { status: 400, message: 'Công văn không ở trạng thái có thể gửi' };
     }
 
-    // Transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Cập nhật dispatch
       await tx.dispatch.update({
         where: { id: dispatchId },
         data: {
@@ -429,7 +456,6 @@ export const assignmentsService = {
         },
       });
 
-      // Cập nhật TP
       await tx.dispatchTp.update({
         where: { id: tp.id },
         data: {
@@ -440,7 +466,6 @@ export const assignmentsService = {
         },
       });
 
-      // Log assignment
       await tx.assignment.create({
         data: {
           dispatchId,
@@ -456,15 +481,13 @@ export const assignmentsService = {
         },
       });
 
-      // Thông báo PVT
-      await tx.notification.create({
-        data: {
-          userId: tp.assignedByPvtId,
-          dispatchId,
-          type: 'REPORT_SUBMITTED',
-          title: 'Trưởng phòng đã gửi báo cáo',
-          content: `TP ${currentUser.fullName} đã gửi báo cáo cho công văn ${dispatch.soCongVan}`,
-        },
+      // Thông báo + push cho PVT
+      await createAndPushNotification(tx, {
+        userId: tp.assignedByPvtId,
+        dispatchId,
+        type: 'REPORT_SUBMITTED',
+        title: '📝 Trưởng phòng đã báo cáo',
+        content: `TP ${currentUser.fullName} đã gửi báo cáo cho công văn ${dispatch.soCongVan}`,
       });
 
       await tx.auditLog.create({
@@ -503,7 +526,6 @@ export const assignmentsService = {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    // Check user là PVT được giao
     const pvt = await prisma.dispatchPvt.findFirst({
       where: {
         dispatchId,
@@ -515,12 +537,10 @@ export const assignmentsService = {
       throw { status: 403, message: 'Bạn không được giao công văn này' };
     }
 
-    // Check trạng thái
     if (dispatch.trangThai !== 'CHO_PVT_DUYET') {
       throw { status: 400, message: 'Công văn chưa sẵn sàng để trình' };
     }
 
-    // Update
     const result = await prisma.$transaction(async (tx) => {
       await tx.dispatch.update({
         where: { id: dispatchId },
@@ -531,31 +551,41 @@ export const assignmentsService = {
         },
       });
 
-      await tx.assignment.create({
-        data: {
-          dispatchId,
-          fromUserId: currentUser.id,
-          fromUserName: currentUser.fullName,
-          fromRole: 'PHO_VIEN_TRUONG',
-          toUserId: 'u_vt',  // Viện trưởng
-          toUserName: 'Viện trưởng',
-          toRole: 'VIEN_TRUONG',
-          assignLevel: 'PVT_TO_VT',
-          chiDao: pvtChiDao,
-          status: 'PENDING',
+      // Lấy VT đầu tiên (hoặc tất cả VT) để gửi thông báo
+      const allVienTruongs = await tx.user.findMany({
+        where: {
+          deletedAt: null,
+          active: true,
+          userRoles: { some: { role: { code: 'VIEN_TRUONG' } } },
         },
+        select: { id: true, fullName: true },
       });
 
-      // Thông báo VT
-      await tx.notification.create({
-        data: {
-          userId: 'u_vt',
+      for (const vt of allVienTruongs) {
+        await tx.assignment.create({
+          data: {
+            dispatchId,
+            fromUserId: currentUser.id,
+            fromUserName: currentUser.fullName,
+            fromRole: 'PHO_VIEN_TRUONG',
+            toUserId: vt.id,
+            toUserName: vt.fullName,
+            toRole: 'VIEN_TRUONG',
+            assignLevel: 'PVT_TO_VT',
+            chiDao: pvtChiDao,
+            status: 'PENDING',
+          },
+        });
+
+        // Thông báo + push cho VT
+        await createAndPushNotification(tx, {
+          userId: vt.id,
           dispatchId,
           type: 'REPORT_SUBMITTED',
-          title: 'PVT đã trình công văn',
-          content: `${currentUser.fullName} đã trình công văn ${dispatch.soCongVan}`,
-        },
-      });
+          title: '📤 PVT đã trình công văn',
+          content: `${currentUser.fullName} đã trình công văn ${dispatch.soCongVan} lên Viện trưởng`,
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -605,16 +635,14 @@ export const assignmentsService = {
         },
       });
 
-      // Thông báo PVT
+      // Thông báo cho PVT
       for (const pvt of dispatch.dispatchPvts) {
-        await tx.notification.create({
-          data: {
-            userId: pvt.pvtId,
-            dispatchId,
-            type: 'APPROVED',
-            title: 'Viện trưởng đã đồng ý',
-            content: `Công văn ${dispatch.soCongVan} đã được Viện trưởng đồng ý`,
-          },
+        await createAndPushNotification(tx, {
+          userId: pvt.pvtId,
+          dispatchId,
+          type: 'APPROVED',
+          title: '✅ Viện trưởng đã đồng ý',
+          content: `Công văn ${dispatch.soCongVan} đã được Viện trưởng đồng ý`,
         });
       }
 
@@ -662,12 +690,11 @@ export const assignmentsService = {
         },
       });
 
-      // Lấy PVT chính
-      const primaryPvt = dispatch.dispatchPvts.find(p => p.isPrimary)
-        || dispatch.dispatchPvts[0];
+      const primaryPvt =
+        dispatch.dispatchPvts.find(p => p.isPrimary) ||
+        dispatch.dispatchPvts[0];
 
       if (primaryPvt) {
-        // Log rejection
         await tx.rejection.create({
           data: {
             dispatchId,
@@ -682,15 +709,12 @@ export const assignmentsService = {
           },
         });
 
-        // Thông báo PVT
-        await tx.notification.create({
-          data: {
-            userId: primaryPvt.pvtId,
-            dispatchId,
-            type: 'REJECTED',
-            title: 'Viện trưởng không đồng ý',
-            content: `Công văn ${dispatch.soCongVan}: ${reason}`,
-          },
+        await createAndPushNotification(tx, {
+          userId: primaryPvt.pvtId,
+          dispatchId,
+          type: 'REJECTED',
+          title: '❌ Viện trưởng không đồng ý',
+          content: `Công văn ${dispatch.soCongVan}: ${reason}`,
         });
       }
 
@@ -711,10 +735,9 @@ export const assignmentsService = {
   },
 
   // ============================================
-  // 8. PVT ĐỒNG Ý (KHÔNG CẦN, VÌ PVT TRÌNH VT RỒI)
+  // 8. PVT ĐỒNG Ý
   // ============================================
   async pvtAgree(dispatchId, data, currentUser) {
-    // Có thể dùng để PVT duyệt báo cáo của TP
     const tpId = data.tpId;
 
     const tp = await prisma.dispatchTp.findFirst({
@@ -781,14 +804,12 @@ export const assignmentsService = {
             },
           });
 
-          await tx.notification.create({
-            data: {
-              userId: tp.tpId,
-              dispatchId,
-              type: 'REJECTED',
-              title: 'PVT không đồng ý',
-              content: `Công văn ${dispatch.soCongVan}: ${reason}`,
-            },
+          await createAndPushNotification(tx, {
+            userId: tp.tpId,
+            dispatchId,
+            type: 'REJECTED',
+            title: '❌ PVT không đồng ý',
+            content: `Công văn ${dispatch.soCongVan}: ${reason}`,
           });
         }
       }
@@ -823,7 +844,6 @@ export const assignmentsService = {
       }),
     ]);
 
-    // Merge + sort theo thời gian
     const history = [
       ...assignments.map(a => ({
         type: 'ASSIGNMENT',

@@ -26,6 +26,8 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.4.49",
     "typescript": "~5.8.2",
