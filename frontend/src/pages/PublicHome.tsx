@@ -5,10 +5,12 @@ import { formatDate } from '../utils/format';
 import { PublicMobileCards } from '../components/public/PublicMobileCards';
 import { PublicDesktopTable } from '../components/public/PublicDesktopTable';
 import { apiClient } from '../services/apiClient';
-import { PushPermissionBanner } from '../components/header/PushPermissionBanner';
+import { ChuyenDeDrawer } from '../components/chuyende/ChuyenDeDrawer';
+import { isChuyenDe } from '../utils/chuyenDe';
+
 import {
   Clock, AlertTriangle, CheckCircle2, ArrowUp,
-  LogOut, KeyRound, User as UserIcon, ChevronDown,
+  LogOut, KeyRound, ChevronDown,
   X, Search, Filter,
 } from 'lucide-react';
 import { Dispatch } from '../types/dispatch';
@@ -18,25 +20,23 @@ import { Pagination } from '../components/Pagination';
 import { sortDispatchesNewestFirst } from '../services/dateSort';
 import { PublicHeroSection } from '../components/public/PublicHeroSection';
 import { useAuth } from '../context/AuthContext';
-import { ProfileModal } from '../components/header/ProfileModal';
-import { ChangePasswordModal } from '../components/header/ChangePasswordModal';
+
 import { DispatchDetailDrawer } from '../components/DispatchDetailDrawer';
 import { DEFAULT_COLUMNS } from '../constants/columns';
 
 export const PublicHome: React.FC = () => {
-  const { currentUser, logout, refreshCurrentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
   const [dispatches, setDispatches] = useState<Dispatch[]>([]);
-  const [allPvts, setAllPvts] = useState<User[]>([]);        // ⭐ Lấy TẤT CẢ PVT
+  const [allPvts, setAllPvts] = useState<User[]>([]);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [selectedPvtId, setSelectedPvtId] = useState<string | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
-  // ⭐ Dispatch đang xem chi tiết (mở Drawer)
+  // ⭐ TÁCH RIÊNG 2 STATE: công văn thường vs chuyên đề
   const [detailDispatch, setDetailDispatch] = useState<Dispatch | null>(null);
+  const [detailChuyenDe, setDetailChuyenDe] = useState<Dispatch | null>(null);
 
   // 🎯 Mobile filters
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
@@ -50,7 +50,6 @@ export const PublicHome: React.FC = () => {
   const isVt = currentUser?.role === 'VIEN_TRUONG';
   const isAdmin = currentUser?.role === 'ADMIN';
   const isTp = currentUser?.role === 'TRUONG_PHONG';
-
 
   // 🎯 Chỉ PVT mới được bấm card của chính mình
   const canClickPvtCard = (pvtCard: { id: string; name: string }) => {
@@ -74,7 +73,6 @@ export const PublicHome: React.FC = () => {
   useEffect(() => {
     const loadAllPvts = async () => {
       try {
-        // Gọi API lấy TẤT CẢ user có role PHO_VIEN_TRUONG
         const users = await apiClient.getAllUsers({ role: 'PHO_VIEN_TRUONG', limit: 100 });
         setAllPvts(users);
       } catch (err) {
@@ -112,9 +110,8 @@ export const PublicHome: React.FC = () => {
     return () => clearInterval(t);
   }, []);
 
-  // ⭐ Tính PVT cards — dùng danh sách allPvts (tất cả PVT)
+  // ⭐ Tính PVT cards
   const pvtCards = useMemo(() => {
-    // Nếu chưa load được allPvts → fallback về logic cũ (từ dispatches)
     if (allPvts.length === 0) {
       const pvtMap = new Map<string, {
         id: string; name: string; roomCode: string;
@@ -153,15 +150,11 @@ export const PublicHome: React.FC = () => {
       return Array.from(pvtMap.values());
     }
 
-    // ⭐ Có allPvts → dùng danh sách đầy đủ
     return allPvts
       .filter(u => u.role === 'PHO_VIEN_TRUONG' && u.active !== false)
       .map(pvt => {
-        // Đếm công văn của PVT này
         const pvtDispatches = dispatches.filter(d => {
-          // Match theo ID
           if (d.assignedPvtId && d.assignedPvtId === pvt.id) return true;
-          // Match theo tên
           const cleanAssigned = (d.assignedPvtName || '')
             .replace(/^Đồng chí\s+/i, '')
             .replace(/^Đ\/c\s+/i, '')
@@ -171,7 +164,6 @@ export const PublicHome: React.FC = () => {
             .replace(/^Đ\/c\s+/i, '')
             .trim();
           if (cleanAssigned && cleanPvt && cleanAssigned === cleanPvt) return true;
-          // Match theo roomCode
           if (pvt.roomCode && (d.assignedPvtName || '').includes(pvt.roomCode)) return true;
           return false;
         });
@@ -194,24 +186,11 @@ export const PublicHome: React.FC = () => {
         };
       })
       .sort((a, b) => {
-        // ⭐ Sắp xếp thông minh:
-        // 1. PVT có quá hạn lên đầu (ưu tiên cảnh báo)
-        // 2. PVT có nhiều công văn
-        // 3. PVT rảnh (0 CV) xuống dưới
-        // 4. Cùng nhóm → sort theo roomCode
-
-        // Ưu tiên 1: có quá hạn
         if (a.overdue > 0 && b.overdue === 0) return -1;
         if (a.overdue === 0 && b.overdue > 0) return 1;
-
-        // Ưu tiên 2: có công văn vs rảnh
         if (a.total > 0 && b.total === 0) return -1;
         if (a.total === 0 && b.total > 0) return 1;
-
-        // Ưu tiên 3: nhiều công văn hơn
         if (a.total !== b.total) return b.total - a.total;
-
-        // Cuối cùng: sort theo roomCode
         return a.roomCode.localeCompare(b.roomCode, 'vi', { numeric: true });
       });
   }, [allPvts, dispatches]);
@@ -237,26 +216,38 @@ export const PublicHome: React.FC = () => {
   const filteredByPvt = useMemo(() => {
     let result = dispatches;
 
-    // ⭐ BƯỚC 1: Nếu có lọc PVT
     if (selectedPvtId) {
       const selected = pvtCards.find(p => p.id === selectedPvtId);
       if (selected) {
-        result = result.filter(d => {
-          if (d.assignedPvtId && d.assignedPvtId === selected.id) return true;
-          const cleanAssigned = (d.assignedPvtName || '')
+        const norm = (s?: string) =>
+          (s || '')
             .replace(/^Đồng chí\s+/i, '')
             .replace(/^Đ\/c\s+/i, '')
-            .trim();
-          if (cleanAssigned === selected.name) return true;
-          if (selected.roomCode && (d.assignedPvtName || '').includes(selected.roomCode)) {
-            return true;
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+
+        const selectedName = norm(selected.name);
+        const selectedRoom = (selected.roomCode || '').toUpperCase();
+
+        result = result.filter(d => {
+          if (d.assignedPvtId && d.assignedPvtId === selected.id) return true;
+          const assignedName = norm(d.assignedPvtName);
+          if (assignedName && selectedName && assignedName === selectedName) return true;
+          if (selectedRoom) {
+            const assignedNameUpper = (d.assignedPvtName || '').toUpperCase();
+            if (assignedNameUpper.includes(selectedRoom)) return true;
+          }
+          if (selectedName && assignedName) {
+            if (assignedName.includes(selectedName) || selectedName.includes(assignedName)) {
+              return true;
+            }
           }
           return false;
         });
       }
     }
 
-    // ⭐ BƯỚC 2: Nếu có lọc quá hạn
     if (isOverdueFilterActive) {
       result = result.filter(d => resolveDispatchStatus(d) === 'QUA_HAN');
     }
@@ -289,7 +280,6 @@ export const PublicHome: React.FC = () => {
   }, [filteredByPvt, mobileSearchQuery, mobileStatusFilter]);
 
   const stats = useMemo(() => {
-    // ⭐ Tính stats trên TOÀN BỘ dispatches, không phải filtered
     let dangXuLy = 0, sapDenHan = 0, quaHan = 0, hoanThanh = 0;
     dispatches.forEach(d => {
       const st = resolveDispatchStatus(d);
@@ -310,7 +300,6 @@ export const PublicHome: React.FC = () => {
   const displayDispatches = useMemo(() => {
     const list = [...filteredDispatches];
 
-    // ⭐ Helper tính số ngày đến hạn (âm = quá hạn)
     const daysToDeadline = (d: Dispatch): number => {
       if (!d.hanBaoCaoXuLy) return 9999;
       const deadline = new Date(d.hanBaoCaoXuLy);
@@ -320,21 +309,18 @@ export const PublicHome: React.FC = () => {
       return Math.round((deadline.getTime() - today.getTime()) / 86400000);
     };
 
-    // ⭐ Helper priority: quá hạn trước, sắp hạn, còn nhiều, xong cuối
     const priorityScore = (d: Dispatch): number => {
       if (d.trangThai === 'HOAN_THANH') return 5;
       const days = daysToDeadline(d);
-      if (days < 0) return 1;        // Quá hạn
-      if (days === 0) return 2;      // Hôm nay
-      if (days <= 3) return 3;       // 1-3 ngày
-      if (days <= 10) return 4;      // 4-10 ngày
-      return 4;                       // > 10 ngày
+      if (days < 0) return 1;
+      if (days === 0) return 2;
+      if (days <= 3) return 3;
+      if (days <= 10) return 4;
+      return 4;
     };
 
     switch (sortMode) {
       case 'deadline_asc':
-        // ⭐ Hạn gần nhất lên trước (quá hạn → hôm nay → 1 ngày → 3 ngày...)
-        // Nhưng đẩy HOÀN THÀNH xuống cuối
         return list.sort((a, b) => {
           const aDone = a.trangThai === 'HOAN_THANH' ? 1 : 0;
           const bDone = b.trangThai === 'HOAN_THANH' ? 1 : 0;
@@ -346,15 +332,13 @@ export const PublicHome: React.FC = () => {
         return list.sort((a, b) => daysToDeadline(b) - daysToDeadline(a));
 
       case 'overdue_desc':
-        // ⭐ Quá hạn lâu nhất lên trước
         return list.sort((a, b) => {
           const aDays = daysToDeadline(a);
           const bDays = daysToDeadline(b);
-          // Chỉ xét những cái đã quá hạn
           if (aDays >= 0 && bDays >= 0) return aDays - bDays;
           if (aDays >= 0) return 1;
           if (bDays >= 0) return -1;
-          return aDays - bDays;   // Cả 2 đều âm: aDays âm hơn = quá hạn lâu hơn
+          return aDays - bDays;
         });
 
       case 'oldest':
@@ -411,6 +395,15 @@ export const PublicHome: React.FC = () => {
     logout();
     setIsUserMenuOpen(false);
     window.location.reload();
+  };
+
+  // ⭐ FIX: Handler duy nhất mở detail — phân loại chuyên đề vs công văn
+  const handleOpenDetail = (d: Dispatch) => {
+    if (isChuyenDe(d)) {
+      setDetailChuyenDe(d);
+    } else {
+      setDetailDispatch(d);
+    }
   };
 
   return (
@@ -476,7 +469,7 @@ export const PublicHome: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5"
                           d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                       </svg>
-                      Bàn làm việc
+
                     </Link>
                   )}
 
@@ -513,28 +506,12 @@ export const PublicHome: React.FC = () => {
                                   : currentUser.role === 'PHO_VIEN_TRUONG' ? 'Phó Viện trưởng'
                                     : 'Trưởng phòng'}
                             </div>
-                            {/* <div className="text-sm font-black truncate">{currentUser.fullName}</div> */}
                           </div>
+
                           <div className="py-1">
                             <button
-                              onClick={() => { setIsUserMenuOpen(false); setIsProfileOpen(true); }}
-                              className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
-                            >
-                              <UserIcon className="w-4 h-4 text-blue-600" />
-                              Thông tin cá nhân
-                            </button>
-                            <button
-                              onClick={() => { setIsUserMenuOpen(false); setIsChangePasswordOpen(true); }}
-                              className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition"
-                            >
-                              <KeyRound className="w-4 h-4 text-amber-600" />
-                              Đổi mật khẩu
-                            </button>
-                          </div>
-                          <div className="border-t border-slate-100">
-                            <button
                               onClick={handleLogout}
-                              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 transition"
+                              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                             >
                               <LogOut className="w-4 h-4" />
                               Đăng xuất
@@ -550,8 +527,6 @@ export const PublicHome: React.FC = () => {
           </div>
         </div>
       </header>
-
-      <PushPermissionBanner />
 
       {/* Main */}
       <main className="flex-1 w-full py-2 sm:py-3">
@@ -571,10 +546,8 @@ export const PublicHome: React.FC = () => {
               if (canClickPvtCard(card)) setSelectedPvtId(pvtId);
             }}
             canClickPvtCard={canClickPvtCard}
-            // ⭐ Props mới cho filter quá hạn
             onFilterOverdue={() => {
               setIsOverdueFilterActive(prev => !prev);
-              // Cuộn xuống bảng để user thấy kết quả
               setTimeout(() => {
                 document.getElementById('public-table-section')?.scrollIntoView({
                   behavior: 'smooth',
@@ -620,10 +593,26 @@ export const PublicHome: React.FC = () => {
             {showMobileFilter && (
               <>
                 <div className="px-2.5 pb-2.5 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2.5">
-                  {/* ... status chips giữ nguyên ... */}
+                  {[
+                    { value: 'ALL', label: 'Tất cả' },
+                    { value: 'DANG_XU_LY', label: 'Đang xử lý' },
+                    { value: 'SAP_DEN_HAN', label: 'Sắp hạn' },
+                    { value: 'QUA_HAN', label: 'Quá hạn' },
+                    { value: 'HOAN_THANH', label: 'Hoàn thành' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setMobileStatusFilter(opt.value)}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer ${mobileStatusFilter === opt.value
+                        ? 'bg-red-700 text-white border-red-700'
+                        : 'bg-slate-50 text-slate-700 border-slate-300'
+                        }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
 
-                {/* ⭐ Sort dropdown */}
                 <div className="px-2.5 pb-2.5 border-t border-slate-100 pt-2.5">
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Sắp xếp theo
@@ -651,32 +640,42 @@ export const PublicHome: React.FC = () => {
             className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden w-full"
           >
             <div
-              className="text-white text-center py-2 sm:py-2.5 px-3 sm:px-4 border-b shadow-xs flex items-center justify-between gap-2"
+              className="text-white py-2 sm:py-2.5 px-3 sm:px-4 border-b shadow-xs"
               style={{ backgroundColor: '#B71C1C', borderColor: '#7F0E0E' }}
             >
-              <h2 className="text-xs sm:text-sm md:text-base font-bold tracking-wider uppercase text-white flex-1 text-center truncate">
-                THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN
-                {selectedPvtId && (
-                  <span className="ml-2 text-amber-300 font-black">
-                    — {pvtCards.find(p => p.id === selectedPvtId)?.name}
-                  </span>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-xs sm:text-sm md:text-base font-bold tracking-wider uppercase text-white flex-1 text-center">
+                  THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN
+                </h2>
+                {(selectedPvtId || isOverdueFilterActive) && (
+                  <button
+                    onClick={() => {
+                      setSelectedPvtId(null);
+                      setIsOverdueFilterActive(false);
+                    }}
+                    className="px-2 py-0.5 text-[10px] font-bold bg-white/20 hover:bg-white/30 rounded-lg border border-white/30 transition cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    ✕ Bỏ lọc
+                  </button>
                 )}
-                {isOverdueFilterActive && (
-                  <span className="ml-2 text-rose-200 font-black flex-inline items-center gap-1">
-                    🚨 QUÁ HẠN
+              </div>
+
+              {selectedPvtId && (
+                <div className="mt-1.5 flex items-center justify-center gap-1.5 flex-wrap text-[10px] sm:text-xs">
+                  <span className="text-white/70"></span>
+                  <span className="px-2 py-0.5 bg-amber-400 text-red-950 font-black rounded">
+                    {pvtCards.find(p => p.id === selectedPvtId)?.name}
                   </span>
-                )}
-              </h2>
-              {(selectedPvtId || isOverdueFilterActive) && (
-                <button
-                  onClick={() => {
-                    setSelectedPvtId(null);
-                    setIsOverdueFilterActive(false);
-                  }}
-                  className="px-2 py-0.5 text-[10px] font-bold bg-white/20 hover:bg-white/30 rounded-lg border border-white/30 transition cursor-pointer whitespace-nowrap"
-                >
-                  ✕
-                </button>
+                  <span className="text-white/70">· {displayDispatches.length} công văn</span>
+                </div>
+              )}
+
+              {isOverdueFilterActive && !selectedPvtId && (
+                <div className="mt-1.5 text-center text-[10px] sm:text-xs">
+                  <span className="px-2 py-0.5 bg-rose-400 text-white font-black rounded">
+                    🚨 CHỈ HIỆN QUÁ HẠN
+                  </span>
+                </div>
               )}
             </div>
 
@@ -686,7 +685,7 @@ export const PublicHome: React.FC = () => {
                 currentPage={currentPage}
                 pageSize={pageSize}
                 selectedPvtId={selectedPvtId}
-                onSelectDispatch={(d) => setDetailDispatch(d)}
+                onSelectDispatch={handleOpenDetail}
               />
             </div>
 
@@ -696,7 +695,7 @@ export const PublicHome: React.FC = () => {
                 currentPage={currentPage}
                 pageSize={pageSize}
                 selectedPvtId={selectedPvtId}
-                onSelectDispatch={(d) => setDetailDispatch(d)}
+                onSelectDispatch={handleOpenDetail}
               />
             </div>
 
@@ -731,31 +730,20 @@ export const PublicHome: React.FC = () => {
         </button>
       )}
 
-      <ProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-        user={currentUser}
-        onUpdated={() => refreshCurrentUser()}
-      />
-
-      {currentUser && (
-        <ChangePasswordModal
-          isOpen={isChangePasswordOpen}
-          onClose={() => setIsChangePasswordOpen(false)}
-          userId={currentUser.id}
-          userName={currentUser.fullName}
-        />
-      )}
-
+      {/* ⭐ FIX: Công văn thường → DispatchDetailDrawer */}
       <DispatchDetailDrawer
         dispatch={detailDispatch}
         onClose={() => setDetailDispatch(null)}
         columns={DEFAULT_COLUMNS}
-        readOnly={true}       // ⭐ Cho phép sửa
-        onUpdate={async (id, updates) => {
-          await apiClient.updateDispatch(id, updates);
-          reload();
-        }}
+        readOnly={true}
+      />
+
+      {/* ⭐ FIX: Chuyên đề → ChuyenDeDrawer (TÁCH RIÊNG STATE) */}
+      <ChuyenDeDrawer
+        chuyenDe={detailChuyenDe}
+        onClose={() => setDetailChuyenDe(null)}
+        readOnly={true}
+        canEdit={false}
       />
     </div>
   );

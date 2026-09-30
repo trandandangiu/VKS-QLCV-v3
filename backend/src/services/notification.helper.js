@@ -16,17 +16,17 @@ import { pushService } from './push.service.js';
  *   - content?: string
  *   - url?: string           → deep link khi click notification
  */
+// backend/src/services/notification.helper.js
+
 export async function createAndPushNotification(tx, params) {
   const client = tx || prisma;
 
-  // ⭐ 1. Lưu DB — CHỈ lưu nếu có userId
-  // (khách không có DB record vì bảng notification cần userId)
   let notif = null;
   if (params.userId) {
     notif = await client.notification.create({
       data: {
         userId: params.userId,
-        dispatchId: params.dispatchId || null,
+        dispatchId: params.dispatchId || null,   // ⭐ PHẢI CÓ
         type: params.type,
         title: params.title,
         content: params.content || null,
@@ -36,9 +36,7 @@ export async function createAndPushNotification(tx, params) {
     });
   }
 
-  // ⭐ 2. Push realtime — chạy SAU khi transaction commit
   setImmediate(async () => {
-    // 2a. SSE — CHỈ gửi nếu có userId (khách không có SSE connection)
     if (params.userId && notif) {
       try {
         sseService.sendToUser(params.userId, 'notification', {
@@ -46,7 +44,7 @@ export async function createAndPushNotification(tx, params) {
           type: notif.type,
           title: notif.title,
           content: notif.content,
-          dispatchId: notif.dispatchId,
+          dispatchId: notif.dispatchId,     // ⭐ PHẢI CÓ
           isRead: false,
           createdAt: notif.createdAt,
         });
@@ -55,25 +53,22 @@ export async function createAndPushNotification(tx, params) {
       }
     }
 
-    // 2b. Web Push
     try {
       if (params.broadcast) {
-        // ⭐ BROADCAST — gửi cho TẤT CẢ user + khách
         await pushService.broadcast({
           title: notif?.title || params.title,
           content: notif?.content || params.content,
-          dispatchId: params.dispatchId,
+          dispatchId: params.dispatchId,     // ⭐ PHẢI CÓ
           notificationId: notif?.id,
-          url: params.url || '/',
+          url: params.dispatchId ? `/dispatches/${params.dispatchId}` : '/',
         });
       } else if (params.userId) {
-        // Gửi cho 1 user cụ thể (tất cả thiết bị của user đó)
         await pushService.sendToUser(params.userId, {
           title: notif?.title || params.title,
           content: notif?.content || params.content,
-          dispatchId: params.dispatchId,
+          dispatchId: params.dispatchId,     // ⭐ PHẢI CÓ
           notificationId: notif?.id,
-          url: params.url || '/',
+          url: params.dispatchId ? `/dispatches/${params.dispatchId}` : '/',
         });
       }
     } catch (err) {

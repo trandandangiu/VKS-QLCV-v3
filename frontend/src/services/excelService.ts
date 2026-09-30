@@ -1,7 +1,11 @@
+// src/services/excelService.ts
 import * as XLSX from 'xlsx';
 import { ColumnDefinition, Dispatch, ExcelImportAnalysis, ReconciledDifference, ReconciledExistingItem } from '../types/dispatch';
+import { isChuyenDe, getChuyenDePhase } from '../utils/chuyenDe';
 
-// Normalize Vietnamese string for header matching
+// ============================================
+// NORMALIZE
+// ============================================
 export const normalizeString = (str: string): string => {
   if (!str) return '';
   return str
@@ -13,7 +17,6 @@ export const normalizeString = (str: string): string => {
     .trim();
 };
 
-// Normalize dispatch number for matching (removes symbols, spaces, accents, lowercase)
 export const normalizeDispatchKey = (str: string): string => {
   if (!str) return '';
   return str
@@ -25,12 +28,14 @@ export const normalizeDispatchKey = (str: string): string => {
     .trim();
 };
 
-// Map known aliases to standard fields
+// ============================================
+// HEADER MAPPING
+// ============================================
 const HEADER_MAPPING: Record<string, string[]> = {
   ngayGui: ['ngaygui', 'ngaynhan', 'ngaytiepnhan', 'ngayden', 'ngaychuyen', 'ngay'],
   soCongVan: [
     'socongvan',
-    'scv', // Cực kỳ quan trọng: viết tắt phổ biến trong các cơ quan hành chính
+    'scv',
     'socv',
     'sovanban',
     'sohieu',
@@ -51,21 +56,14 @@ const HEADER_MAPPING: Record<string, string[]> = {
   ghiChu: ['ghichu', 'ykienchidao', 'luuy', 'chidao', 'ketquaxuly', 'note', 'chuyen', 'ykien']
 };
 
-/**
- * Identify matching field for a given column header text
- */
 export const matchFieldToHeader = (headerText: string, customColumns: ColumnDefinition[] = []): string | null => {
   const normalized = normalizeString(headerText);
   if (!normalized) return null;
 
-  // 1. Direct exact matching with alias first
   for (const [fieldKey, aliases] of Object.entries(HEADER_MAPPING)) {
-    if (aliases.includes(normalized)) {
-      return fieldKey;
-    }
+    if (aliases.includes(normalized)) return fieldKey;
   }
 
-  // 2. Partial matching (e.g. "so cv", "ngay gui", "trich yeu noi dung")
   for (const [fieldKey, aliases] of Object.entries(HEADER_MAPPING)) {
     if (
       aliases.some(
@@ -79,7 +77,6 @@ export const matchFieldToHeader = (headerText: string, customColumns: ColumnDefi
     }
   }
 
-  // 3. Check user custom columns
   for (const col of customColumns) {
     if (normalizeString(col.label) === normalized || normalizeString(col.id) === normalized) {
       return `custom_${col.id}`;
@@ -89,23 +86,21 @@ export const matchFieldToHeader = (headerText: string, customColumns: ColumnDefi
   return null;
 };
 
-/**
- * Parse any date string format safely in local timezone without UTC offset glitches
- */
+// ============================================
+// PARSE DATE AN TOÀN
+// ============================================
 export const parseDateSafely = (dateVal: any): Date | null => {
   if (!dateVal) return null;
   if (dateVal instanceof Date) {
     return isNaN(dateVal.getTime()) ? null : dateVal;
   }
   if (typeof dateVal === 'number') {
-    // Excel date serial number (e.g. 45000)
     const d = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
     return isNaN(d.getTime()) ? null : d;
   }
   const s = String(dateVal).trim();
   if (!s) return null;
 
-  // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
   const dmyMatch = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
   if (dmyMatch) {
     const day = parseInt(dmyMatch[1], 10);
@@ -115,7 +110,6 @@ export const parseDateSafely = (dateVal: any): Date | null => {
     return isNaN(d.getTime()) ? null : d;
   }
 
-  // YYYY-MM-DD or YYYY/MM/DD
   const ymdMatch = s.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
   if (ymdMatch) {
     const year = parseInt(ymdMatch[1], 10);
@@ -129,16 +123,35 @@ export const parseDateSafely = (dateVal: any): Date | null => {
   return isNaN(fallback.getTime()) ? null : fallback;
 };
 
-/**
- * Determine dynamic status (HOAN_THANH, QUA_HAN, SAP_DEN_HAN, DANG_XU_LY, etc.)
- * accurately reconciling both the deadline date (hanBaoCaoXuLy) and status text (thoiHanXuLy).
- */
+// ============================================
+// ⭐ RESOLVE STATUS — FULLY FIXED
+// ============================================
 export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai'] => {
   if (!d) return 'DANG_XU_LY';
 
+  // ⭐ CHECK CHUYÊN ĐỀ TRƯỚC — dùng logic mốc active
+  if (isChuyenDe(d)) {
+    const phase = getChuyenDePhase(d);
+    switch (phase.phase) {
+      case 'HOAN_THANH':
+        return 'HOAN_THANH';
+      case 'QUA_HAN':
+        return 'QUA_HAN';
+      case 'SAP_DEN_HAN':
+        return 'SAP_DEN_HAN';
+      case 'DANG_THUC_HIEN':
+      case 'CHUAN_BI':
+      default:
+        return 'DANG_XU_LY';
+    }
+  }
+
+  // ============================================
+  // CÔNG VĂN THƯỜNG — xử lý như cũ
+  // ============================================
   const thoiHanText = String(d.thoiHanXuLy || '').trim().toLowerCase();
 
-  // 1. Explicit Completed status or text
+  // 1. Đã hoàn thành
   if (
     d.trangThai === 'HOAN_THANH' ||
     thoiHanText.includes('hoàn thành') ||
@@ -154,7 +167,7 @@ export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai
     return 'CHO_Y_KIEN_LANH_DAO';
   }
 
-  // 3. Quá hạn xử lý (from explicit status, text, or passed date)
+  // 3. Quá hạn (từ text)
   if (
     d.trangThai === 'QUA_HAN' ||
     thoiHanText.includes('quá hạn') ||
@@ -164,7 +177,7 @@ export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai
     return 'QUA_HAN';
   }
 
-  // 4. Sắp đến hạn (from explicit status, text)
+  // 4. Sắp đến hạn (từ text)
   if (
     d.trangThai === 'SAP_DEN_HAN' ||
     thoiHanText.includes('sắp đến hạn') ||
@@ -178,7 +191,7 @@ export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai
     return 'SAP_DEN_HAN';
   }
 
-  // 5. Calculate from deadline date (hanBaoCaoXuLy)
+  // 5. Tính từ hạn báo cáo
   if (d.hanBaoCaoXuLy) {
     const dDate = parseDateSafely(d.hanBaoCaoXuLy);
     if (dDate) {
@@ -188,22 +201,18 @@ export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai
       const diffMs = dDate.getTime() - today.getTime();
       const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
-      if (diffDays < 0) {
-        return 'QUA_HAN';
-      } else if (diffDays <= 3) {
-        return 'SAP_DEN_HAN';
-      } else {
-        return 'DANG_XU_LY';
-      }
+      if (diffDays < 0) return 'QUA_HAN';
+      if (diffDays <= 3) return 'SAP_DEN_HAN';
+      return 'DANG_XU_LY';
     }
   }
 
   return d.trangThai || 'DANG_XU_LY';
 };
 
-/**
- * Calculate dynamic status and days remaining based on deadline date and existing status text
- */
+// ============================================
+// ⭐ CALCULATE TIME REMAINING
+// ============================================
 export const calculateTimeRemaining = (
   deadlineDateStr: string,
   currentStatus?: string,
@@ -264,9 +273,9 @@ export const calculateTimeRemaining = (
   }
 };
 
-/**
- * Format date values safely
- */
+// ============================================
+// FORMAT DATE VALUE
+// ============================================
 export const formatDateValue = (val: any): string => {
   if (!val) return '';
   if (val instanceof Date) {
@@ -276,7 +285,6 @@ export const formatDateValue = (val: any): string => {
     return `${yyyy}-${mm}-${dd}`;
   }
   if (typeof val === 'number') {
-    // Excel date serial number handling
     const date = new Date(Math.round((val - 25569) * 86400 * 1000));
     if (!isNaN(date.getTime())) {
       const yyyy = date.getFullYear();
@@ -286,7 +294,6 @@ export const formatDateValue = (val: any): string => {
     }
   }
   const str = String(val).trim();
-  // Check if DD/MM/YYYY
   const dmYRegex = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/;
   const match = str.match(dmYRegex);
   if (match) {
@@ -298,20 +305,20 @@ export const formatDateValue = (val: any): string => {
   return str;
 };
 
-/**
- * Check if a cell looks like a date string (DD/MM/YYYY or YYYY-MM-DD or Date object)
- */
+// ============================================
+// IS DATE LIKE
+// ============================================
 export const isDateLike = (val: any): boolean => {
   if (!val) return false;
   if (val instanceof Date) return true;
-  if (typeof val === 'number' && val > 30000 && val < 60000) return true; // typical Excel serial date
+  if (typeof val === 'number' && val > 30000 && val < 60000) return true;
   const str = String(val).trim();
   return /^\d{1,2}[/-]\d{1,2}[/-]\d{4}$/.test(str) || /^\d{4}-\d{2}-\d{2}$/.test(str);
 };
 
-/**
- * Smart inference for Issuing Agency from dispatch number (e.g. 4320/BTP-CQLTHADS)
- */
+// ============================================
+// INFERENCE
+// ============================================
 export const inferAgencyFromDispatchNumber = (scv: string): string => {
   if (!scv) return 'Chưa xác định';
   const parts = scv.split('/');
@@ -334,14 +341,10 @@ export const inferAgencyFromDispatchNumber = (scv: string): string => {
   return 'Chưa xác định';
 };
 
-/**
- * Smart inference for Assignee from Notes (e.g. "Chuyển PVT - Nguyễn Phước Trung")
- */
 export const inferAssigneeFromNotes = (notes: string): string => {
   if (!notes) return 'Chưa phân công';
-  // Matches "Chuyển PVT - Nguyễn Phước Trung", "Đ/c Trần Văn Minh", "Giao cho Nguyễn Phước Trung"
   const nameMatch = notes.match(
-    /(?:chuy[ểe]n|giao|ph[âa]n\s*c[ôo]ng|k[íi]nh\s*chuy[ểe]n|[đd]\/c|[đd][ồo]ng\s*ch[íi])\s*(?:pvt|vt|pct|ct|pbgd|bgd|tr[ưở]ng\s*ph[òo]ng|ph[óo]\s*ph[òo]ng|chuy[êe]n\s*vi[êe]n)?\s*[-:–]?\s*([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+){1,3})/i
+    /(?:chuy[ểe]n|giao|ph[âa]n\s*c[ôo]ng|k[íi]nh\s*chuy[ểe]n|[đd]\/c|[đd][ồồ]ng\s*ch[íi])\s*(?:pvt|vt|pct|ct|pbgd|bgd|tr[ưở]ng\s*ph[òo]ng|ph[óo]\s*ph[òo]ng|chuy[êe]n\s*vi[êe]n)?\s*[-:–]?\s*([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+){1,3})/i
   );
   if (nameMatch && nameMatch[1]) {
     return nameMatch[1].trim();
@@ -349,9 +352,9 @@ export const inferAssigneeFromNotes = (notes: string): string => {
   return 'Chưa phân công';
 };
 
-/**
- * Split pasted raw text (from Excel clipboard or text area) into array of rows
- */
+// ============================================
+// PARSE TEXT TO ROWS
+// ============================================
 export const parseTextToRows = (text: string): any[][] => {
   const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
   return lines.map(line => {
@@ -380,9 +383,9 @@ export const parseTextToRows = (text: string): any[][] => {
   });
 };
 
-/**
- * Core engine: parses raw array of rows and reconciles against existing dispatches
- */
+// ============================================
+// PARSE ROWS TO ANALYSIS
+// ============================================
 export const parseRowsToAnalysis = (
   rows: any[][],
   sourceName: string,
@@ -393,7 +396,6 @@ export const parseRowsToAnalysis = (
     throw new Error('Không có dữ liệu nào được cung cấp.');
   }
 
-  // 1. Detect header row
   let headerRowIndex = -1;
   let maxMatchedHeaders = 0;
 
@@ -416,7 +418,6 @@ export const parseRowsToAnalysis = (
     }
   }
 
-  // If no clear multi-header row found, check for single signature indicator
   if (headerRowIndex === -1 || maxMatchedHeaders < 1) {
     for (let r = 0; r < Math.min(rows.length, 15); r++) {
       const row = rows[r];
@@ -438,7 +439,6 @@ export const parseRowsToAnalysis = (
     headerRowIndex = 0;
   }
 
-  // 2. Map columns from header row
   const rawHeaders: string[] = rows[headerRowIndex].map((cell: any) => String(cell || '').trim());
   const columnMapping: { index: number; originalHeader: string; mappedField: string | null }[] = [];
   const unrecognizedColumns: string[] = [];
@@ -456,8 +456,6 @@ export const parseRowsToAnalysis = (
   });
 
   const parsedItems: Dispatch[] = [];
-
-  // 3. Parse subsequent data rows with Date Carry-over & Hierarchy support
   let lastSeenNgayGui = '';
 
   for (let r = headerRowIndex + 1; r < rows.length; r++) {
@@ -466,14 +464,12 @@ export const parseRowsToAnalysis = (
       continue;
     }
 
-    // Check if this row is purely a Date Group Row (e.g. "18/06/2026" with all other cells empty)
     const nonDateValues = row.filter((c: any) => {
       const s = String(c || '').trim();
       return s !== '' && !isDateLike(s);
     });
 
     if (nonDateValues.length === 0) {
-      // Find the date cell
       const dateCell = row.find((c: any) => isDateLike(c));
       if (dateCell) {
         lastSeenNgayGui = formatDateValue(dateCell);
@@ -511,9 +507,7 @@ export const parseRowsToAnalysis = (
       }
     });
 
-    // If neither soCongVan nor tenCongVan is found, check if cells contain them positionally
     if (!rowObj.soCongVan && !rowObj.tenCongVan) {
-      // Look for a cell that looks like a dispatch number (e.g. 4320/BTP-CQLTHADS)
       const dispatchNumberCell = row.find((c: any) => {
         const s = String(c || '').trim();
         return /\d+\/[A-Za-z0-9-]+/.test(s);
@@ -521,11 +515,10 @@ export const parseRowsToAnalysis = (
       if (dispatchNumberCell) {
         rowObj.soCongVan = String(dispatchNumberCell).trim();
       } else {
-        continue; // skip invalid row
+        continue;
       }
     }
 
-    // Set fallback values and carry-overs
     if (!rowObj.ngayGui) {
       rowObj.ngayGui = lastSeenNgayGui || formatDateValue(new Date());
     } else {
@@ -540,12 +533,10 @@ export const parseRowsToAnalysis = (
       rowObj.tenCongVan = 'Công văn chưa có trích yếu';
     }
 
-    // Smart inference for issuing agency
     if (!rowObj.donViBanHanh || rowObj.donViBanHanh === 'Chưa xác định') {
       rowObj.donViBanHanh = inferAgencyFromDispatchNumber(rowObj.soCongVan);
     }
 
-    // Smart inference for assignee from notes
     if (!rowObj.nguoiThucHien || rowObj.nguoiThucHien === 'Chưa phân công') {
       if (rowObj.ghiChu) {
         const inferredName = inferAssigneeFromNotes(rowObj.ghiChu);
@@ -563,7 +554,6 @@ export const parseRowsToAnalysis = (
       rowObj.ghiChu = '';
     }
 
-    // Calculate time status and resolve exact status
     const timing = calculateTimeRemaining(rowObj.hanBaoCaoXuLy || '', rowObj.trangThai, rowObj.thoiHanXuLy);
     if (!rowObj.thoiHanXuLy) {
       rowObj.thoiHanXuLy = timing.text;
@@ -573,7 +563,7 @@ export const parseRowsToAnalysis = (
     parsedItems.push(rowObj as Dispatch);
   }
 
-  // 4. Reconciliation against existingDispatches
+  // Reconciliation
   const newItems: Dispatch[] = [];
   const existingMatches: ReconciledExistingItem[] = [];
 
@@ -627,7 +617,6 @@ export const parseRowsToAnalysis = (
         }
       });
 
-      // Check custom fields differences
       if (incoming.customFields) {
         Object.entries(incoming.customFields).forEach(([cKey, cVal]) => {
           const oldCVal = matchedExisting.customFields?.[cKey] || '';
@@ -663,9 +652,9 @@ export const parseRowsToAnalysis = (
   };
 };
 
-/**
- * Parse Excel file and reconcile against existing records
- */
+// ============================================
+// PARSE EXCEL & RECONCILE
+// ============================================
 export const parseExcelAndReconcile = async (
   file: File,
   existingDispatches: Dispatch[],
@@ -680,9 +669,9 @@ export const parseExcelAndReconcile = async (
   return parseRowsToAnalysis(rows, file.name, existingDispatches, customColumns);
 };
 
-/**
- * Parse pasted text and reconcile against existing records
- */
+// ============================================
+// PARSE PASTED TEXT & RECONCILE
+// ============================================
 export const parsePastedTextAndReconcile = (
   text: string,
   existingDispatches: Dispatch[],
@@ -692,69 +681,161 @@ export const parsePastedTextAndReconcile = (
   return parseRowsToAnalysis(rows, 'Dữ liệu dán trực tiếp', existingDispatches, customColumns);
 };
 
-/**
- * Export dispatches to an Excel file formatted matching the leadership document template
- */
+// ============================================
+// EXPORT DISPATCHES TO EXCEL
+// ============================================
 export const exportDispatchesToExcel = (
   dispatches: Dispatch[],
   columns: ColumnDefinition[],
-  reportTitle: string = 'CÔNG VĂN GỬI LÃNH ĐẠO'
+  reportTitle: string = 'THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN'
 ) => {
   const visibleColumns = columns.filter(c => c.visible);
-  const headerLabels = visibleColumns.map(c => c.label.toUpperCase());
-  const tableData: any[][] = [];
 
-  const titleRow = new Array(visibleColumns.length).fill('');
-  titleRow[0] = reportTitle.toUpperCase();
-  tableData.push(titleRow);
-  tableData.push(headerLabels);
+  const headerRow: string[] = [
+    'STT',
+    ...visibleColumns.map(c => c.label.toUpperCase()),
+  ];
 
-  dispatches.forEach(item => {
-    const row = visibleColumns.map(col => {
+  const dataRows: any[][] = dispatches.map((item, idx) => {
+    const row: any[] = [idx + 1];
+
+    visibleColumns.forEach(col => {
+      let cell: any = '';
+
+      if (col.id === 'donViThucHien' || col.label.toLowerCase().includes('thực hiện')) {
+        const parts: string[] = [];
+        if (item.assignedPvtName) {
+          parts.push(
+            `PVT: ${item.assignedPvtName.replace(/^Đ\/c\s+/, '').replace(/^Đồng chí\s+/i, '').trim()}`
+          );
+        }
+        if (item.assignedTpName) {
+          parts.push(
+            `TP: ${item.assignedTpName.replace(/^Đ\/c\s+/, '').replace(/^Đồng chí\s+/i, '').trim()}`
+          );
+        }
+        if (item.nguoiThucHien) {
+          parts.push(item.nguoiThucHien);
+        }
+        cell = parts.join('\n');
+        row.push(cell);
+        return;
+      }
+
+      if (col.id === 'attachments' || col.label.toLowerCase() === 'file') {
+        const cnt =
+          (item as any)._count?.attachments ??
+          (Array.isArray((item as any).attachments)
+            ? (item as any).attachments.length
+            : 0);
+        cell = cnt > 0 ? cnt : '';
+        row.push(cell);
+        return;
+      }
+
+      if (col.id === 'trangThai') {
+        const st = resolveDispatchStatus(item);
+        const map: Record<string, string> = {
+          HOAN_THANH: 'Đã hoàn thành',
+          QUA_HAN: 'Quá hạn',
+          SAP_DEN_HAN: 'Sắp đến hạn',
+          DANG_XU_LY: 'Đang xử lý',
+          CHO_PVT_XU_LY: 'Chờ PVT xử lý',
+          CHO_TP_XU_LY: 'Chờ TP xử lý',
+          CHO_PVT_DUYET: 'Chờ PVT duyệt',
+          CHO_VT_DUYET: 'Chờ VT duyệt',
+          MOI_TAO: 'Mới tạo',
+        };
+        cell = map[st || ''] || st || '';
+        row.push(cell);
+        return;
+      }
+
       if (col.isCustom) {
         const val = item.customFields?.[col.id];
-        if (val && typeof val === 'object' && val.name) {
-          return val.name;
+        if (val && typeof val === 'object' && (val as any).name) {
+          cell = (val as any).name;
+        } else {
+          cell = val ?? '';
         }
-        return val ?? '';
+        row.push(cell);
+        return;
       }
-      const standardVal = (item as any)[col.id];
-      if (standardVal && typeof standardVal === 'object' && standardVal.name) {
-        return standardVal.name;
+
+      if (col.type === 'date') {
+        const val = (item as any)[col.id];
+        if (val) {
+          const d = new Date(val);
+          if (!isNaN(d.getTime())) {
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            cell = `${dd}/${mm}/${d.getFullYear()}`;
+          } else {
+            cell = String(val);
+          }
+        }
+        row.push(cell);
+        return;
       }
-      return standardVal ?? '';
+
+      const val = (item as any)[col.id];
+      if (val && typeof val === 'object' && (val as any).name) {
+        cell = (val as any).name;
+      } else {
+        cell = val ?? '';
+      }
+      row.push(cell);
     });
-    tableData.push(row);
+
+    return row;
   });
+
+  const tableData: any[][] = [];
+
+  const titleRow = new Array(headerRow.length).fill('');
+  titleRow[0] = reportTitle.toUpperCase();
+  tableData.push(titleRow);
+
+  tableData.push(headerRow);
+
+  dataRows.forEach(r => tableData.push(r));
 
   const ws = XLSX.utils.aoa_to_sheet(tableData);
 
-  if (visibleColumns.length > 1) {
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: visibleColumns.length - 1 } }
-    ];
-  }
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: headerRow.length - 1 } },
+  ];
 
-  ws['!cols'] = visibleColumns.map(c => {
-    if (c.id === 'tenCongVan') return { wch: 45 };
-    if (c.id === 'ghiChu') return { wch: 30 };
-    if (c.id === 'donViBanHanh') return { wch: 22 };
-    if (c.id === 'soCongVan') return { wch: 18 };
-    if (c.id === 'thoiHanXuLy') return { wch: 18 };
+  ws['!cols'] = headerRow.map((label, idx) => {
+    if (idx === 0) return { wch: 6 };
+    const col = visibleColumns[idx - 1];
+    if (!col) return { wch: 15 };
+
+    if (col.id === 'tenCongVan') return { wch: 55 };
+    if (col.id === 'donViThucHien') return { wch: 30 };
+    if (col.id === 'donViBanHanh') return { wch: 25 };
+    if (col.id === 'soCongVan') return { wch: 20 };
+    if (col.id === 'ngayGui' || col.id === 'hanBaoCaoXuLy') return { wch: 14 };
+    if (col.id === 'thoiHanXuLy') return { wch: 16 };
+    if (col.id === 'trangThai') return { wch: 18 };
+    if (col.id === 'ghiChu') return { wch: 30 };
+    if (col.id === 'nguoiThucHien') return { wch: 22 };
+    if (col.id === 'attachments') return { wch: 8 };
     return { wch: 15 };
   });
 
+  ws['!rows'] = [{ hpt: 24 }];
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'CongVanLanhDao');
+  XLSX.utils.book_append_sheet(wb, ws, 'CongVan');
 
   const currentDate = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `BaoCao_TienDo_CongVan_LanhDao_${currentDate}.xlsx`);
+  XLSX.writeFile(wb, `BaoCao_CongVan_${currentDate}.xlsx`);
 };
 
-/**
- * Xuất dữ liệu công văn gửi Lãnh đạo dưới dạng file Excel
- * Đầy đủ cột nghiệp vụ: Chỉ đạo Viện trưởng, PVT phụ trách, Trưởng phòng thụ lý, tiến độ, báo cáo
- */
+// ============================================
+// EXPORT LEADERSHIP REPORT
+// ============================================
 export const exportLeadershipReportToExcel = (
   dispatches: Dispatch[],
   title: string = 'BÁO CÁO TIẾN ĐỘ XỬ LÝ CÔNG VĂN GỬI LÃNH ĐẠO VIỆN KIỂM SÁT'
@@ -785,6 +866,7 @@ export const exportLeadershipReportToExcel = (
   tableData.push(headers);
 
   dispatches.forEach((d, idx) => {
+    const st = resolveDispatchStatus(d);
     tableData.push([
       idx + 1,
       d.soCongVan || '',
@@ -800,13 +882,13 @@ export const exportLeadershipReportToExcel = (
       d.hanBaoCaoXuLy || '',
       d.thoiHanXuLy || '',
       `${d.tienDo ?? 0}%`,
-      d.trangThai === 'HOAN_THANH'
+      st === 'HOAN_THANH'
         ? 'Đã hoàn thành'
-        : d.trangThai === 'QUA_HAN'
-        ? 'Quá hạn'
-        : d.trangThai === 'SAP_DEN_HAN'
-        ? 'Sắp đến hạn'
-        : 'Đang xử lý',
+        : st === 'QUA_HAN'
+          ? 'Quá hạn'
+          : st === 'SAP_DEN_HAN'
+            ? 'Sắp đến hạn'
+            : 'Đang xử lý',
       d.baoCaoTienDo || ''
     ]);
   });
@@ -841,9 +923,9 @@ export const exportLeadershipReportToExcel = (
   XLSX.writeFile(wb, `BaoCao_CongVan_Gui_LanhDao_${currentDate}.xlsx`);
 };
 
-/**
- * Generate and download a sample Excel template matching the exact leadership specification
- */
+// ============================================
+// DOWNLOAD SAMPLE TEMPLATE
+// ============================================
 export const downloadSampleTemplate = (columns: ColumnDefinition[]) => {
   const visibleColumns = columns.filter(c => c.visible);
   const headerLabels = visibleColumns.map(c => c.label.toUpperCase());

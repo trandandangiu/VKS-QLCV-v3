@@ -12,7 +12,7 @@ import {
 
 const router = express.Router();
 
-// ⚠️ KHÔNG dùng router.use(authenticate)
+// ⚠️ KHÔNG dùng router.use(authenticate) — vì GET cần public
 
 // ============================================
 // GET /api/users — CHO PHÉP KHÁCH
@@ -33,11 +33,19 @@ router.get(
 );
 
 // ============================================
-// POST /api/users — CẦN LOGIN
+// ⭐ POST /api/users — CẦN LOGIN + QUYỀN user:create
+// (ĐÃ THÊM LẠI — TRƯỚC ĐÓ BỊ THIẾU)
 // ============================================
+router.post(
+  '/',
+  authenticate,
+  requirePermission('user:create'),
+  validateCreateUser,
+  usersController.createUser
+);
+
 // ============================================
-// POST /api/users/verify-pvt-username
-// Public — dùng để khách xác thực khi xem công văn của PVT
+// POST /api/users/verify-pvt-username — Public
 // ============================================
 router.post(
   '/verify-pvt-username',

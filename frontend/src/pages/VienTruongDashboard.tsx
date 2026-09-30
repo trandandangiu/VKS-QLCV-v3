@@ -20,6 +20,9 @@ import { VtHeroHeader } from '../components/vt/VtHeroHeader';
 import { VtKpiGrid } from '../components/vt/VtKpiGrid';
 import { VtPvtLeaderboard } from '../components/vt/VtPvtLeaderboard';
 import { VtDeptHeatmap } from '../components/vt/VtDeptHeatmap';
+import { ChuyenDeModal } from '../components/chuyende/ChuyenDeModal';
+import { ChuyenDeDrawer } from '../components/chuyende/ChuyenDeDrawer';
+import { isChuyenDe } from '../utils/chuyenDe';
 import {
   VtTrendChart,
   VtTopPvtChart,
@@ -53,28 +56,24 @@ function getStatusPriority(d: Dispatch): number {
 
   const days = Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (days <= 0) return 1;   // QUÁ HẠN
-  if (days === 1) return 2;   // ĐẾN HẠN
-  if (days <= 10) return 3;   // SẮP HẾT HẠN
-  return 4;                    // CÒN NHIỀU
+  if (days <= 0) return 1;
+  if (days === 1) return 2;
+  if (days <= 10) return 3;
+  return 4;
 }
 
 // ============================================
 // 🎯 HELPER — PARSE NGÀY AN TOÀN
-//    Chấp nhận: "2026-09-20", "2026-09-20T00:00:00.000Z",
-//               "20/09/2026", Date, broken ISO...
 // ============================================
 function parseToDate(input?: string | null): Date | null {
   if (!input) return null;
 
-  // 1. Thử parse trực tiếp (ISO đầy đủ có timezone)
   const d = new Date(input);
   if (!isNaN(d.getTime())) {
     d.setHours(0, 0, 0, 0);
     return d;
   }
 
-  // 2. Fallback qua formatDate → "DD/MM/YYYY" → parse lại
   const formatted = formatDate(input);
   const parts = formatted.split('/');
   if (parts.length === 3) {
@@ -84,27 +83,6 @@ function parseToDate(input?: string | null): Date | null {
   }
 
   return null;
-}
-
-// ============================================
-// 🎯 HELPER — TÍNH SỐ NGÀY GIỮA 2 NGÀY
-// ============================================
-function diffDaysBetween(fromISO?: string, toISO?: string): number | null {
-  const a = parseToDate(fromISO);
-  const b = parseToDate(toISO);
-  if (!a || !b) return null;
-  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-// ============================================
-// 🎯 HELPER — TÍNH SỐ NGÀY CÒN LẠI
-// ============================================
-function daysUntil(deadlineISO?: string): number | null {
-  const deadline = parseToDate(deadlineISO);
-  if (!deadline) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 // ============================================
@@ -129,12 +107,21 @@ export const VienTruongDashboard: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  // Modal states
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isAssignTpDirectOpen, setIsAssignTpDirectOpen] = useState(false);
   const [dispatchToAssign, setDispatchToAssign] = useState<Dispatch | null>(null);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [dispatchToEdit, setDispatchToEdit] = useState<Dispatch | null>(null);
+
+  // ⭐ FIX: Tách riêng state cho công văn và chuyên đề
   const [detailDispatch, setDetailDispatch] = useState<Dispatch | null>(null);
+  const [chuyenDeDetail, setChuyenDeDetail] = useState<Dispatch | null>(null);
+
+  // ⭐ Modal tạo/sửa chuyên đề
+  const [isChuyenDeModalOpen, setIsChuyenDeModalOpen] = useState(false);
+  const [chuyenDeToEdit, setChuyenDeToEdit] = useState<Dispatch | null>(null);
+
   const [pvtDetailStat, setPvtDetailStat] = useState<any>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -166,10 +153,12 @@ export const VienTruongDashboard: React.FC = () => {
   }, [allUsers]);
 
   // ============================================
-  // FILTER + SORT THEO TRẠNG THÁI
+  // FILTER + SORT
   // ============================================
   const filteredDispatches = useMemo(() => {
     const list = dispatches.filter(d => {
+      if (filters.loaiVanBan === 'CONG_VAN' && isChuyenDe(d)) return false;
+      if (filters.loaiVanBan === 'CHUYEN_DE' && !isChuyenDe(d)) return false;
       if (filters.searchQuery.trim()) {
         const q = filters.searchQuery.toLowerCase();
         const match =
@@ -216,8 +205,6 @@ export const VienTruongDashboard: React.FC = () => {
       return true;
     });
 
-    // Sort: quá hạn > đến hạn > sắp hết hạn > còn nhiều > hoàn thành
-    // ⭐ SORT theo sortMode
     const sortMode = filters.sortMode || 'deadline_asc';
     const daysToDeadline = (d: Dispatch): number => {
       if (!d.hanBaoCaoXuLy) return 9999;
@@ -275,7 +262,6 @@ export const VienTruongDashboard: React.FC = () => {
     }
   }, [dispatches, filters, pvtList]);
 
-  // Clear selection khi filter đổi
   useEffect(() => {
     setSelectedIds([]);
   }, [filters]);
@@ -297,9 +283,6 @@ export const VienTruongDashboard: React.FC = () => {
     );
   };
 
-  // ============================================
-  // TÍNH NÚT BULK "HOÀN THÀNH" CÓ KHẢ DỤNG KHÔNG
-  // ============================================
   const selectedDispatches = useMemo(
     () => dispatches.filter(d => selectedIds.includes(d.id)),
     [dispatches, selectedIds]
@@ -366,7 +349,6 @@ export const VienTruongDashboard: React.FC = () => {
     setIsAddEditModalOpen(true);
   };
 
-  // Khi đóng modal edit → clear tick
   const handleCloseEditModal = () => {
     setIsAddEditModalOpen(false);
     setSelectedIds([]);
@@ -390,6 +372,55 @@ export const VienTruongDashboard: React.FC = () => {
       showToast(err?.message || 'Không mở được file', 'error');
     }
   };
+
+  // ⭐ FIX: Handler mở detail — phân loại chuyên đề vs công văn
+  const handleOpenDetail = (d: Dispatch) => {
+    if (isChuyenDe(d)) {
+      setChuyenDeDetail(d);
+    } else {
+      setDetailDispatch(d);
+    }
+  };
+  // ⭐ Handler sửa — phân loại chuyên đề vs công văn
+  const handleEditItem = (d: Dispatch) => {
+    if (isChuyenDe(d)) {
+      setChuyenDeToEdit(d);
+      setIsChuyenDeModalOpen(true);
+    } else {
+      setDispatchToEdit(d);
+      setIsAddEditModalOpen(true);
+    }
+  };
+
+  // ⭐ Handler xóa — phân loại chuyên đề vs công văn
+  const handleDeleteItem = async (d: Dispatch) => {
+    const isCD = isChuyenDe(d);
+    const label = isCD ? 'chuyên đề' : 'công văn';
+    const confirmed = window.confirm(
+      `Xác nhận xóa ${label} "${d.soCongVan}"?\n\nHành động này không thể hoàn tác.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const ok = await apiClient.deleteDispatch(d.id);
+      if (ok) {
+        showToast(`Đã xóa ${label} ${d.soCongVan}`, 'success');
+        // Nếu item đang xem bị xóa → đóng drawer
+        if (detailDispatch?.id === d.id) setDetailDispatch(null);
+        if (chuyenDeDetail?.id === d.id) setChuyenDeDetail(null);
+        reload();
+      } else {
+        showToast(`Không thể xóa ${label}`, 'error');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Lỗi', 'error');
+    }
+  };
+  // ⭐ Đếm số chuyên đề trong kết quả
+  const chuyenDeCount = useMemo(
+    () => filteredDispatches.filter(d => isChuyenDe(d)).length,
+    [filteredDispatches]
+  );
 
   // ============================================
   // RENDER
@@ -511,9 +542,7 @@ export const VienTruongDashboard: React.FC = () => {
               </>
             )}
 
-            {/* ============================================
-                TAB: THAO TÁC — BẢNG CÔNG VĂN
-                ============================================ */}
+            {/* TAB: THAO TÁC — BẢNG CÔNG VĂN */}
             {(activeSidebarTab === 'action-all' ||
               activeSidebarTab === 'action-assigned' ||
               activeSidebarTab === 'action-pending' ||
@@ -523,7 +552,7 @@ export const VienTruongDashboard: React.FC = () => {
                   <div className="flex items-center justify-between bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
                     <div>
                       <h1 className="text-base font-black text-slate-900">
-                        {activeSidebarTab === 'action-all' && '📋 Tất cả công văn'}
+                        {activeSidebarTab === 'action-all' && ' Tất cả công văn'}
                         {activeSidebarTab === 'action-assigned' && '👥 Đã phân công'}
                         {activeSidebarTab === 'action-pending' && '⏳ Chờ phân công PVT'}
                         {activeSidebarTab === 'action-approve' && '✅ Chờ phê duyệt'}
@@ -541,6 +570,21 @@ export const VienTruongDashboard: React.FC = () => {
                         <Download className="w-3.5 h-3.5" />
                         Xuất Excel
                       </button>
+
+                      {/* ⭐ Nút Tạo chuyên đề */}
+                      <button
+                        onClick={() => {
+                          setChuyenDeToEdit(null);
+                          setIsChuyenDeModalOpen(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95"
+                        style={{ backgroundColor: '#0D9488' }}
+                      >
+                        <span className="text-base leading-none">+</span>
+                        Tạo chuyên đề
+                      </button>
+
+                      {/* Nút Tạo công văn */}
                       <button
                         onClick={() => { setDispatchToEdit(null); setIsAddEditModalOpen(true); }}
                         className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition cursor-pointer active:scale-95"
@@ -559,47 +603,24 @@ export const VienTruongDashboard: React.FC = () => {
                     pvtList={pvtList}
                     deptList={deptList}
                     totalResults={filteredDispatches.length}
+                    chuyenDeCount={chuyenDeCount}
                   />
 
                   {/* BẢNG */}
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-
-
-
                     <PublicDesktopTable
                       dispatches={filteredDispatches}
                       currentPage={1}
                       pageSize={filteredDispatches.length || 20}
                       selectedPvtId={null}
-                      onSelectDispatch={d => setDetailDispatch(d)}
+                      onSelectDispatch={handleOpenDetail}
                       onViewFiles={handleViewFiles}
+                     
                     />
                   </div>
                 </>
               )}
 
-            {/* TAB: TẠO CÔNG VĂN */}
-            {activeSidebarTab === 'action-create' && (
-              <div className="bg-white rounded-3xl shadow-xs border border-slate-200 p-8 text-center">
-                <div className="w-16 h-16 rounded-full bg-red-50 border-2 border-red-200 flex items-center justify-center mx-auto mb-4">
-                  <Plus className="w-8 h-8 text-red-600" />
-                </div>
-                <h2 className="text-lg font-black text-slate-900 mb-2">
-                  Tạo công văn mới
-                </h2>
-                <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
-                  Nhấn nút bên dưới để mở form tạo công văn.
-                </p>
-                <button
-                  onClick={() => { setDispatchToEdit(null); setIsAddEditModalOpen(true); }}
-                  className="inline-flex items-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-xl shadow-md transition cursor-pointer active:scale-95"
-                  style={{ backgroundColor: '#B71C1C' }}
-                >
-                  <Plus className="w-4 h-4" />
-                  Mở form tạo công việc
-                </button>
-              </div>
-            )}
 
           </div>
         </div>
@@ -751,6 +772,7 @@ export const VienTruongDashboard: React.FC = () => {
         }}
       />
 
+      {/* ⭐ FIX: Drawer công văn thường */}
       <DispatchDetailDrawer
         dispatch={detailDispatch}
         onClose={() => setDetailDispatch(null)}
@@ -760,15 +782,13 @@ export const VienTruongDashboard: React.FC = () => {
           await apiClient.updateDispatch(id, updates);
           reload();
         }}
-
         onMarkComplete={async (d) => {
           const res = await apiClient.markComplete(d.id);
           if (!res?.success) throw new Error(res?.message || 'Lỗi');
-          // Update detailDispatch để refresh drawer
           setDetailDispatch(prev => prev ? { ...prev, trangThai: 'HOAN_THANH', tienDo: 100 } : prev);
           reload();
         }}
-        onDelete={async (d) => {                              // ⭐ THÊM
+        onDelete={async (d) => {
           const ok = await apiClient.deleteDispatch(d.id);
           if (!ok) throw new Error('Không thể xoá công văn');
           setDetailDispatch(null);
@@ -782,7 +802,7 @@ export const VienTruongDashboard: React.FC = () => {
         onClose={() => setPvtDetailStat(null)}
         onViewDispatch={d => {
           setPvtDetailStat(null);
-          setDetailDispatch(d);
+          handleOpenDetail(d);
         }}
       />
 
@@ -801,6 +821,88 @@ export const VienTruongDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ⭐ MODAL CHUYÊN ĐỀ */}
+      <ChuyenDeModal
+        isOpen={isChuyenDeModalOpen}
+        onClose={() => {
+          setIsChuyenDeModalOpen(false);
+          setChuyenDeToEdit(null);
+        }}
+        chuyenDeToEdit={chuyenDeToEdit}
+        onSaved={() => {
+          reload();
+        }}
+        onSave={async (formData: any) => {
+          try {
+            const { __attachments, __assignPvt, __assignTp, ...dispatchData } = formData;
+            let createdId = chuyenDeToEdit?.id;
+
+            if (chuyenDeToEdit) {
+              const updated = await apiClient.updateDispatch(chuyenDeToEdit.id, dispatchData);
+              if (!updated) {
+                showToast('Lỗi cập nhật chuyên đề', 'error');
+                return false;
+              }
+            } else {
+              const created = await apiClient.createDispatch(dispatchData);
+              if (!created) {
+                showToast('Lỗi tạo chuyên đề', 'error');
+                return false;
+              }
+              createdId = created.id;
+
+              if (Array.isArray(__attachments) && __attachments.length > 0) {
+                for (const item of __attachments) {
+                  if (item?.file instanceof File) {
+                    await apiClient.uploadAttachment(
+                      created.id,
+                      item.file,
+                      item.fileCategory || 'ORIGINAL'
+                    );
+                  }
+                }
+              }
+            }
+
+            if (__assignPvt && createdId) {
+              try {
+                await apiClient.assignToPvts(createdId, { pvts: [__assignPvt] });
+              } catch (err) {
+                console.error('Lỗi phân công PVT:', err);
+              }
+            }
+
+            if (__assignTp && createdId) {
+              try {
+                await apiClient.assignToTps(createdId, { tps: [__assignTp] });
+              } catch (err) {
+                console.error('Lỗi phân công TP:', err);
+              }
+            }
+
+            showToast(
+              chuyenDeToEdit ? 'Đã cập nhật chuyên đề' : 'Đã tạo chuyên đề mới',
+              'success'
+            );
+            return true;
+          } catch (err: any) {
+            showToast(err?.message || 'Lỗi lưu chuyên đề', 'error');
+            return false;
+          }
+        }}
+      />
+
+      {/* ⭐ FIX: DRAWER CHI TIẾT CHUYÊN ĐỀ — TÁCH RIÊNG STATE */}
+      <ChuyenDeDrawer
+        chuyenDe={chuyenDeDetail}
+        onClose={() => setChuyenDeDetail(null)}
+        canEdit={true}
+        onUpdate={async (id, updates) => {
+          await apiClient.updateDispatch(id, updates);
+          reload();
+        }}
+      />
     </div>
   );
 };

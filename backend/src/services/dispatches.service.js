@@ -250,11 +250,10 @@ export const dispatchesService = {
       nguoiThucHien,
       ghiChu,
       mucDoKhan,
-      loaiCongVan,
+      loaiCongVan,       // ⭐ THÊM DÒNG NÀY
       customFields,
       tags,
     } = data;
-
     // Validate
     if (!soCongVan || !tenCongVan || !donViBanHanh) {
       throw { status: 400, message: 'Thiếu thông tin bắt buộc' };
@@ -284,7 +283,7 @@ export const dispatchesService = {
         nguoiThucHien: nguoiThucHien || null,
         ghiChu: ghiChu || null,
         mucDoKhan: mucDoKhan || 'THUONG',
-        loaiCongVan: loaiCongVan || null,
+        loaiCongVan: loaiCongVan || null,     // ⭐ THÊM DÒNG NÀY
         trangThai: 'MOI_TAO',
         tienDo: 0,
         customFields: customFields || {},
@@ -297,7 +296,6 @@ export const dispatchesService = {
         },
       },
     });
-
     // Audit log
     await prisma.auditLog.create({
       data: {
@@ -427,7 +425,7 @@ export const dispatchesService = {
       'nguoiThucHien',
       'ghiChu',
       'mucDoKhan',
-      'loaiCongVan',
+      'loaiCongVan',      // ⭐ THÊM DÒNG NÀY
       'customFields',
       'tags',
     ];

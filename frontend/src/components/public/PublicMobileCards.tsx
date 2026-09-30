@@ -1,7 +1,7 @@
 // src/components/public/PublicMobileCards.tsx
 import React from 'react';
 import { formatDate } from '../../utils/format';
-import { Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle2, UserCheck, CornerDownRight, User, Building2 } from 'lucide-react';
 import { Dispatch } from '../../types/dispatch';
 import { resolveDispatchStatus } from '../../services/excelService';
 
@@ -83,8 +83,8 @@ export const PublicMobileCards: React.FC<Props> = ({
               isOverdue
                 ? 'border-rose-300 border-l-4 border-l-rose-500'
                 : isCompleted
-                ? 'border-emerald-300 border-l-4 border-l-emerald-500'
-                : 'border-slate-200 border-l-4 border-l-blue-400'
+                  ? 'border-emerald-300 border-l-4 border-l-emerald-500'
+                  : 'border-slate-200 border-l-4 border-l-blue-400'
             }`}
           >
             {/* Header */}
@@ -124,8 +124,8 @@ export const PublicMobileCards: React.FC<Props> = ({
                       isOverdue
                         ? 'text-rose-700'
                         : isCompleted
-                        ? 'text-emerald-700'
-                        : 'text-slate-800'
+                          ? 'text-emerald-700'
+                          : 'text-slate-800'
                     }`}
                   >
                     {formatDate(disp.hanBaoCaoXuLy) || '—'}
@@ -133,38 +133,72 @@ export const PublicMobileCards: React.FC<Props> = ({
                 </div>
               </div>
 
+              {/* ⭐ ĐƠN VỊ BAN HÀNH */}
               <div>
                 <div className="text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-0.5">
                   Đơn vị ban hành
                 </div>
-                <div className="text-[11px] text-slate-700 font-medium">
-                  {disp.donViBanHanh || '—'}
+                <div className="flex items-start gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                  <span className="text-[11px] text-slate-700 font-medium">
+                    {disp.donViBanHanh || '—'}
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <div>
-                  <div className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">
-                    Người thực hiện
-                  </div>
-                  <div className="text-[11px] text-slate-700 font-semibold">
-                    {disp.nguoiThucHien || 'Chưa giao'}
-                  </div>
+              {/* ⭐ PHÓ VIỆN TRƯỞNG PHỤ TRÁCH */}
+              <div>
+                <div className="text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-0.5">
+                  Phó Viện trưởng phụ trách
                 </div>
-                {disp.assignedPvtName && (
-                  <div className="text-right">
-                    <div className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">
-                      PVT
-                    </div>
-                    <div className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                {disp.assignedPvtName ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-800 bg-purple-50 px-2 py-1 rounded-lg border border-purple-200">
+                    <UserCheck className="w-3 h-3 shrink-0" />
+                    <span className="truncate">
                       {disp.assignedPvtName
-                        .replace('Đ/c ', '')
-                        .replace('Đồng chí ', '')
-                        .split(' ')
-                        .slice(-2)
-                        .join(' ')}
-                    </div>
+                        .replace(/^Đ\/c\s+/, '')
+                        .replace(/^Đồng chí\s+/i, '')
+                        .trim()}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-400 italic">
+                    Chưa phân công
+                  </span>
+                )}
+              </div>
+
+              {/* ⭐ ĐƠN VỊ THỰC HIỆN (TP + Người) */}
+              <div>
+                <div className="text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-0.5">
+                  Đơn vị thực hiện
+                </div>
+                {disp.assignedTpName || disp.nguoiThucHien ? (
+                  <div className="space-y-1">
+                    {disp.assignedTpName && (
+                      <div className="flex items-start gap-1.5">
+                        <CornerDownRight className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                        <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          {disp.assignedTpName
+                            .replace(/^Đ\/c\s+/, '')
+                            .replace(/^Đồng chí\s+/i, '')
+                            .trim()}
+                        </span>
+                      </div>
+                    )}
+                    {disp.nguoiThucHien && (
+                      <div className="flex items-start gap-1.5 ml-5">
+                        <User className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
+                        <span className="text-[10px] text-slate-600 font-medium italic">
+                          {disp.nguoiThucHien}
+                        </span>
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <span className="text-[11px] text-slate-400 italic">
+                    Chưa phân công
+                  </span>
                 )}
               </div>
 

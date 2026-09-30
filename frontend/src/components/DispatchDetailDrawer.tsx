@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   X, Flame, Paperclip, Download, FileText, Loader2, CheckCircle2,
   AlertCircle, Upload, Trash2, Plus, UserCheck, Pencil, Check,
-  ExternalLink, RotateCcw,CornerDownRight, 
+  ExternalLink, RotateCcw, CornerDownRight,
 } from 'lucide-react';
 import { ColumnDefinition, Dispatch } from '../types/dispatch';
 import { apiClient } from '../services/apiClient';
@@ -819,7 +819,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                   </p>
                   {canEdit && (
                     <p className="text-[10px] text-slate-400 mt-0.5">
-                      PDF, Word, Excel, ảnh — tối đa {MAX_FILE_SIZE_MB}MB
+
                     </p>
                   )}
                 </div>

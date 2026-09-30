@@ -41,13 +41,14 @@ interface VtSidebarProps {
   onCloseMobile: () => void;
 }
 
+// src/components/vt/VtSidebar.tsx
+// ... (giữ nguyên import)
+
 export const VtSidebar: React.FC<VtSidebarProps> = ({
   activeTab,
   onChangeTab,
   isMobileOpen,
   onCloseMobile,
-  // pendingCount,
-  // approveCount,
 }) => {
   const handleClick = (tab: VtSidebarTab) => {
     onChangeTab(tab);
@@ -56,11 +57,10 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
 
   return (
     <aside
-      className={`w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${
-        isMobileOpen ? 'block' : 'hidden lg:block'
-      }`}
+      className={`w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${isMobileOpen ? 'block' : 'hidden lg:block'
+        }`}
     >
-      {/* Header đỏ — đơn giản, không có "BÀN LÀM VIỆC" */}
+      {/* Header đỏ */}
       <div
         className="px-4 py-3.5 text-white"
         style={{
@@ -80,7 +80,7 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
         </div>
       </div>
 
-      {/* MENU — chỉ 2 mục */}
+      {/* MENU — chỉ còn 1 mục */}
       <nav className="p-3 space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto">
         <div className="space-y-0.5">
           <MenuItem
@@ -89,109 +89,15 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
             isActive={activeTab === 'action-all'}
             onClick={() => handleClick('action-all')}
           />
-          <MenuItem
-            icon={Plus}
-            label="Tạo công văn mới"
-            isActive={activeTab === 'action-create'}
-            onClick={() => handleClick('action-create')}
-            accent
-          />
+
+          {/* ❌ ĐÃ XÓA: Nút "Tạo công văn mới" */}
         </div>
-
-        {/* ═══════════════════════════════════════════════════
-            CÁC MỤC CŨ — COMMENT LẠI, BẬT KHI CẦN
-            ═══════════════════════════════════════════════════ */}
-
-        {/*
-        <div className="border-t border-slate-100" />
-
-        <div>
-          <div className="px-3 py-1.5 flex items-center gap-2">
-            <span className="w-1 h-3 rounded-full" style={{ backgroundColor: '#B71C1C' }} />
-            <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase">
-              📊 Báo cáo
-            </span>
-          </div>
-          <div className="space-y-0.5">
-            <MenuItem
-              icon={LayoutDashboard}
-              label="Tổng quan"
-              isActive={activeTab === 'report-overview'}
-              onClick={() => handleClick('report-overview')}
-            />
-            <MenuItem
-              icon={PieChart}
-              label="Theo phòng ban"
-              isActive={activeTab === 'report-by-dept'}
-              onClick={() => handleClick('report-by-dept')}
-            />
-            <MenuItem
-              icon={Calendar}
-              label="Theo thời gian"
-              isActive={activeTab === 'report-by-time'}
-              onClick={() => handleClick('report-by-time')}
-            />
-            <MenuItem
-              icon={Trophy}
-              label="Xếp hạng PVT"
-              isActive={activeTab === 'report-leaderboard'}
-              onClick={() => handleClick('report-leaderboard')}
-            />
-          </div>
-        </div>
-
-        <div className="border-t border-slate-100" />
-
-        <div>
-          <div className="px-3 py-1.5 flex items-center gap-2">
-            <span className="w-1 h-3 rounded-full" style={{ backgroundColor: '#FFD700' }} />
-            <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase">
-              ⚙️ Thao tác nghiệp vụ
-            </span>
-          </div>
-          <div className="space-y-0.5">
-            <MenuItem
-              icon={FileText}
-              label="Tất cả công văn"
-              isActive={activeTab === 'action-all'}
-              onClick={() => handleClick('action-all')}
-            />
-            <MenuItem
-              icon={Plus}
-              label="Tạo công văn mới"
-              isActive={activeTab === 'action-create'}
-              onClick={() => handleClick('action-create')}
-              accent
-            />
-            <MenuItem
-              icon={Clock}
-              label="Chờ phân công PVT"
-              isActive={activeTab === 'action-pending'}
-              onClick={() => handleClick('action-pending')}
-              badge={pendingCount}
-              badgeColor="amber"
-            />
-            <MenuItem
-              icon={Users}
-              label="Đã phân công"
-              isActive={activeTab === 'action-assigned'}
-              onClick={() => handleClick('action-assigned')}
-            />
-            <MenuItem
-              icon={CheckCircle2}
-              label="Chờ phê duyệt"
-              isActive={activeTab === 'action-approve'}
-              onClick={() => handleClick('action-approve')}
-              badge={approveCount}
-              badgeColor="purple"
-            />
-          </div>
-        </div>
-        */}
       </nav>
     </aside>
   );
 };
+
+// ... (giữ nguyên MenuItem ở dưới)
 
 // ============================================
 // MENU ITEM
@@ -224,11 +130,10 @@ const MenuItem: React.FC<MenuItemProps> = ({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs transition cursor-pointer group ${
-        isActive
+      className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs transition cursor-pointer group ${isActive
           ? 'bg-red-50 text-red-900 font-bold border shadow-2xs'
           : 'text-slate-700 hover:bg-slate-50 font-medium border border-transparent'
-      }`}
+        }`}
       style={
         isActive
           ? { borderColor: '#B71C1C', backgroundColor: '#FEF2F2' }
@@ -237,13 +142,12 @@ const MenuItem: React.FC<MenuItemProps> = ({
     >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <div
-          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${
-            isActive
+          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${isActive
               ? 'text-white border-transparent'
               : accent
-              ? 'bg-amber-50 text-amber-700 border-amber-200'
-              : 'bg-slate-50 text-slate-600 border-slate-200 group-hover:bg-white'
-          }`}
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-slate-50 text-slate-600 border-slate-200 group-hover:bg-white'
+            }`}
           style={isActive ? { backgroundColor: '#B71C1C' } : undefined}
         >
           <Icon className="w-3.5 h-3.5" />

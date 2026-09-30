@@ -1,19 +1,13 @@
 // src/components/Header.tsx
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserMenuDropdown } from './header/UserMenuDropdown';
 import { NotificationBell } from './header/NotificationBell';
-import { PushPermissionBanner } from './header/PushPermissionBanner';
-import { ProfileModal } from './header/ProfileModal';
-import { ChangePasswordModal } from './header/ChangePasswordModal';
 
 export const Header: React.FC = () => {
-  const { currentUser, logout, refreshCurrentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
-
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -25,65 +19,50 @@ export const Header: React.FC = () => {
       className="text-white sticky top-0 z-40 shadow-md border-b-2"
       style={{ backgroundColor: '#B71C1C', borderColor: '#7F0E0E' }}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between py-3 gap-3.5 sm:gap-4">
-          {/* Logo & Brand */}
-          <Link to="/" className="flex items-center gap-3 shrink-0 group">
+      {/* Padding: nhỏ trên mobile, lớn trên desktop */}
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-4 lg:px-6">
+        <div className="flex items-center justify-between py-2 sm:py-3 gap-2 sm:gap-3">
+          {/* Logo + Brand */}
+          <Link to="/" className="flex items-center gap-2 sm:gap-3 shrink-0 group min-w-0">
             <img
               src="/logo.svg"
-              alt="Huy hiệu Viện Kiểm sát Nhân dân"
-              className="w-10 h-10 sm:w-12 sm:h-12 object-contain shrink-0 drop-shadow-sm group-hover:scale-105 transition"
+              alt="Logo VKSND"
+              className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 object-contain shrink-0 drop-shadow-sm group-hover:scale-105 transition"
               referrerPolicy="no-referrer"
             />
-            <div className="space-y-0.5">
+
+            <div className="min-w-0 space-y-0.5">
+              {/* Tên cơ quan — ẩn/ngắn trên mobile */}
               <div
-                className="text-[11px] sm:text-xs font-bold tracking-wider uppercase"
+                className="text-[8px] sm:text-[11px] font-bold tracking-wider uppercase truncate"
                 style={{ color: '#FFD700' }}
               >
-                VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
+                <span className="hidden sm:inline">
+                  VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
+                </span>
+                <span className="sm:hidden">
+                  VKSND TP.HCM
+                </span>
               </div>
-              <h1 className="text-base sm:text-xl font-black tracking-wide uppercase text-white">
-                Theo dõi tiến độ xử lý công văn
+
+              {/* Tiêu đề — ngắn trên mobile */}
+              <h1 className="text-xs sm:text-base lg:text-xl font-black tracking-wide uppercase text-white leading-tight">
+                <span className="hidden sm:inline">Theo dõi tiến độ xử lý công văn</span>
+                <span className="sm:hidden">Tiến độ công văn</span>
               </h1>
             </div>
           </Link>
 
           {/* User Menu */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <NotificationBell />
             <UserMenuDropdown
               currentUser={currentUser}
               onLogout={handleLogout}
-              onOpenProfile={() => setIsProfileOpen(true)}
-              onOpenChangePassword={() => setIsChangePasswordOpen(true)}
             />
           </div>
         </div>
       </div>
-      <PushPermissionBanner />
-
-      {/* Modals */}
-      <ProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-        user={currentUser}
-        onUpdated={(updatedUser) => {
-          // Refresh context để mọi nơi dùng user mới
-          refreshCurrentUser();
-        }}
-      />
-
-      {currentUser && (
-        <ChangePasswordModal
-          isOpen={isChangePasswordOpen}
-          onClose={() => setIsChangePasswordOpen(false)}
-          userId={currentUser.id}
-          userName={currentUser.fullName}
-          onSuccess={() => {
-            // Optional: hiển thị thông báo
-          }}
-        />
-      )}
     </header>
   );
 };

@@ -1,26 +1,22 @@
 // src/components/header/UserMenuDropdown.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';   // 🎯 THÊM LẠI
+import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
   LogOut,
-  User as UserIcon,
-  KeyRound,
   Shield,
-  Eye,          // 🎯 THÊM — icon cho "Trang công khai"
-  ChevronRight, // 🎯 THÊM — mũi tên chỉ
+  Eye,
+  ChevronRight,
 } from 'lucide-react';
 import { User } from '../../types/auth';
 
 interface UserMenuDropdownProps {
   currentUser: User | null;
   onLogout: () => void;
-  onOpenProfile: () => void;
-  onOpenChangePassword: () => void;
 }
 
 // ============================================
-// ROLE LABEL — ngắn gọn, chỉ hiện chức danh
+// ROLE LABEL
 // ============================================
 const getRoleLabel = (role?: string): string => {
   switch (role) {
@@ -66,12 +62,10 @@ const getInitials = (name?: string): string => {
 export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
   currentUser,
   onLogout,
-  onOpenProfile,
-  onOpenChangePassword,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();   // 🎯 THÊM LẠI
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -101,7 +95,6 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
   const roleColor = getRoleColor(currentUser.role);
   const roleBadge = getRoleBadgeClass(currentUser.role);
 
-  // 🎯 Hàm chuyển trang
   const handleNavigate = (path: string) => {
     setIsOpen(false);
     navigate(path);
@@ -123,9 +116,6 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
         </div>
 
         <div className="text-left hidden sm:block min-w-0">
-          {/* <div className="text-xs font-bold text-white truncate max-w-[130px]">
-            {currentUser.fullName}
-          </div> */}
           <div className="flex items-center gap-1 mt-0.5">
             <span
               className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${roleBadge}`}
@@ -137,9 +127,8 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
         </div>
 
         <ChevronDown
-          className={`w-3.5 h-3.5 text-white/80 transition-transform duration-200 ${
-            isOpen ? 'rotate-180' : ''
-          }`}
+          className={`w-3.5 h-3.5 text-white/80 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''
+            }`}
         />
       </button>
 
@@ -171,52 +160,13 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
                 <div className="text-[10px] font-bold text-amber-200 uppercase tracking-wider">
                   {getRoleLabel(currentUser.role)}
                 </div>
-                {/* <div className="text-sm font-black text-white truncate">
-                  {currentUser.fullName}
-                </div> */}
-                {/* <div className="text-[11px] text-red-100 truncate font-mono mt-0.5">
-                  {currentUser.email || currentUser.username}
-                </div> */}
               </div>
             </div>
           </div>
 
-          {/* Account section */}
+          {/* Điều hướng nhanh */}
           <div className="py-1.5">
             <div className="px-4 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Tài khoản
-            </div>
-
-            <MenuButton
-              icon={UserIcon}
-              label="Thông tin cá nhân"
-              description="Xem hồ sơ cán bộ"
-              color="text-blue-600"
-              onClick={() => {
-                setIsOpen(false);
-                onOpenProfile();
-              }}
-            />
-
-            <MenuButton
-              icon={KeyRound}
-              label="Đổi mật khẩu"
-              description="Cập nhật bảo mật"
-              color="text-amber-600"
-              onClick={() => {
-                setIsOpen(false);
-                onOpenChangePassword();
-              }}
-            />
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-slate-100" />
-
-          {/* 🎯 SECTION: Điều hướng nhanh — CHỈ CÓ "Trang công khai" */}
-          <div className="py-1.5">
-            <div className="px-4 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Điều hướng
             </div>
 
             <button
@@ -228,7 +178,7 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
               </div>
               <div className="flex-1 text-left min-w-0">
                 <div className="text-xs font-bold text-slate-800 group-hover:text-red-700 transition">
-                  Trang công khai
+                  Trang tiến độ
                 </div>
                 <div className="text-[10px] text-slate-500 truncate">
                   Xem danh sách công văn công khai
@@ -261,41 +211,5 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
     </div>
   );
 };
-
-// ============================================
-// MENU BUTTON
-// ============================================
-interface MenuButtonProps {
-  icon: React.ElementType;
-  label: string;
-  description?: string;
-  color: string;
-  onClick: () => void;
-}
-
-const MenuButton: React.FC<MenuButtonProps> = ({
-  icon: Icon,
-  label,
-  description,
-  color,
-  onClick,
-}) => (
-  <button
-    onClick={onClick}
-    className="w-full flex items-center gap-3 px-4 py-2 text-xs hover:bg-slate-50 transition cursor-pointer group"
-  >
-    <div className={`w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 group-hover:bg-white border border-slate-100`}>
-      <Icon className={`w-3.5 h-3.5 ${color}`} />
-    </div>
-    <div className="flex-1 text-left min-w-0">
-      <div className="text-xs font-bold text-slate-800 group-hover:text-red-700 transition">
-        {label}
-      </div>
-      {description && (
-        <div className="text-[10px] text-slate-500 truncate">{description}</div>
-      )}
-    </div>
-  </button>
-);
 
 export default UserMenuDropdown;

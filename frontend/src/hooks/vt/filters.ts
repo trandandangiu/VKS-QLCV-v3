@@ -6,7 +6,8 @@ export interface VtFilters {
   urgency: string;
   dateFrom: string;
   dateTo: string;
-  sortMode?: 'priority' | 'deadline_asc' | 'deadline_desc' | 'overdue_desc' | 'newest' | 'oldest';   // ⭐ THÊM
+  sortMode?: 'priority' | 'deadline_asc' | 'deadline_desc' | 'overdue_desc' | 'newest' | 'oldest';
+  loaiVanBan: 'ALL' | 'CONG_VAN' | 'CHUYEN_DE';
 }
 
 export const DEFAULT_VT_FILTERS: VtFilters = {
@@ -17,5 +18,6 @@ export const DEFAULT_VT_FILTERS: VtFilters = {
   urgency: 'ALL',
   dateFrom: '',
   dateTo: '',
-  sortMode: 'priority',   // ⭐ THÊM
+  sortMode: 'priority',  
+   loaiVanBan: 'ALL',
 };
