@@ -33,10 +33,18 @@ app.use(cors({
 
     // Cho phép: Cloudflare + localhost + LAN
     const allowed =
-      origin.endsWith('.trycloudflare.com') ||       // Cloudflare Tunnel
+      origin.endsWith('.trycloudflare.com') ||
       origin.startsWith('http://localhost') ||
       origin.startsWith('https://localhost') ||
-      /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin);
+      /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin) ||
+      origin === 'http://vksqlcv.com' ||
+      origin === 'https://vksqlcv.com' ||
+      origin === 'http://www.vksqlcv.com' ||
+      origin === 'https://www.vksqlcv.com' ||
+      origin === 'http://app.vksqlcv.com' ||
+      origin === 'https://app.vksqlcv.com' ||
+      origin === 'http://api.vksqlcv.com' ||
+      origin === 'https://api.vksqlcv.com';
 
     if (allowed) {
       return callback(null, true);
