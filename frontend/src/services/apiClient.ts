@@ -610,36 +610,7 @@ export const apiClient = {
     return data;
   },
 
-  async getUnreadCount(): Promise<number> {
-    const data = await request<{ success: boolean; unreadCount: number }>(
-      '/notifications/unread-count'
-    );
-    return data.success ? data.unreadCount : 0;
-  },
 
-  async markNotificationRead(id: string): Promise<{ success: boolean; unreadCount?: number }> {
-    const data = await request<{ success: boolean; unreadCount?: number }>(
-      `/notifications/${id}/read`,
-      { method: 'PATCH' }
-    );
-    return data;
-  },
-
-  async markAllNotificationsRead(): Promise<boolean> {
-    const data = await request<{ success: boolean }>(
-      '/notifications/read-all',
-      { method: 'PATCH' }
-    );
-    return !!data.success;
-  },
-
-  async deleteNotification(id: string): Promise<boolean> {
-    const data = await request<{ success: boolean }>(
-      `/notifications/${id}`,
-      { method: 'DELETE' }
-    );
-    return !!data.success;
-  },
   // Public — không cần token
   async verifyPvtUsername(
     username: string,
