@@ -483,6 +483,8 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
       const pvtUser = pvtUsers.find(u => u.id === selectedPvtId);
       const tpUser = filteredTpUsers.find(u => u.id === selectedTpId);
+      // ⭐ Lấy phòng đã chọn
+      const selectedDept = departments.find(d => d.code === selectedDeptCode);
 
       const finalTienDo = !formData.hanBaoCaoXuLy
         ? 100
@@ -493,12 +495,42 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         trangThai: resolvedStatus,
         tienDo: finalTienDo,
         __attachments: attachments,
+
+        // ⭐ PVT
         __assignPvt: pvtUser
-          ? { pvtId: pvtUser.id, pvtName: pvtUser.fullName, roomCode: pvtUser.roomCode || '', isPrimary: true }
+          ? {
+            pvtId: pvtUser.id,
+            pvtName: pvtUser.fullName,
+            roomCode: pvtUser.roomCode || '',
+            isPrimary: true,
+          }
           : undefined,
-        __assignTp: tpUser
-          ? { tpId: tpUser.id, tpName: tpUser.fullName, roomCode: tpUser.roomCode || '', isPrimary: true }
-          : undefined,
+
+        // ⭐ FIX: Ưu tiên selectedDeptCode (từ dropdown)
+        __assignTp: (() => {
+          const roomCode = selectedDeptCode || tpUser?.roomCode || '';
+
+          if (tpUser) {
+            return {
+              tpId: tpUser.id,
+              tpName: tpUser.fullName,
+              roomCode,
+              isPrimary: true,
+            };
+          }
+
+          // Fallback: nếu không có TP user nhưng có chọn phòng
+          if (selectedDept) {
+            return {
+              tpId: selectedDept.id,
+              tpName: selectedDept.name,
+              roomCode: selectedDept.code,
+              isPrimary: true,
+            };
+          }
+
+          return undefined;
+        })(),
       });
 
       if (success === false) {

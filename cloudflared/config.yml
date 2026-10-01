@@ -1,0 +1,9 @@
+tunnel: 81d5c055-bfc5-4fb1-886f-6e20e17bcbc9
+credentials-file: /etc/cloudflared/81d5c055-bfc5-4fb1-886f-6e20e17bcbc9.json
+
+ingress:
+  - hostname: vks.anphapie.com        # ← Đổi ở đây
+    service: http://frontend:80
+  - hostname: api.anphapie.com
+    service: http://backend:3000
+  - service: http_status:404

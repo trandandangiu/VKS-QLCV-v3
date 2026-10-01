@@ -201,6 +201,7 @@ export const PublicDesktopTable: React.FC<Props> = ({
   // CỘT: ĐƠN VỊ THỰC HIỆN — Chỉ hiện tên phòng
   // ============================================
   const renderDonViThucHien = (disp: Dispatch) => {
+    // ⭐ Lấy tên phòng
     const tpRelation = (disp as any).dispatchTps?.[0];
     const roomCode = tpRelation?.roomCode || '';
 
@@ -209,17 +210,37 @@ export const PublicDesktopTable: React.FC<Props> = ({
       ? shortenDeptName(matchedDept.name)
       : (roomCode || '');
 
-    if (!deptName) {
+    // ⭐ Người thực hiện (text)
+    const nguoiThucHien = disp.nguoiThucHien?.trim() || '';
+
+    // Cả 2 đều trống
+    if (!deptName && !nguoiThucHien) {
       return (
         <span className="text-slate-300 italic text-[11px]">Chưa phân công</span>
       );
     }
 
     return (
-      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
-        <CornerDownRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-        {deptName}
-      </span>
+      <div className="flex flex-col gap-0.5">
+        {/* Dòng 1: Tên phòng */}
+        {deptName && (
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
+            <CornerDownRight className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            {deptName}
+          </span>
+        )}
+
+        {/* Dòng 2: Người thực hiện */}
+        {nguoiThucHien && (
+          <span
+            className="inline-flex items-center gap-1 text-[11px] text-slate-700 font-medium truncate max-w-[220px] pl-[22px]"
+            title={nguoiThucHien}
+          >
+            <UserCheck className="w-3 h-3 text-purple-500 shrink-0" />
+            {nguoiThucHien}
+          </span>
+        )}
+      </div>
     );
   };
 
