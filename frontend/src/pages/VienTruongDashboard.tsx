@@ -14,6 +14,7 @@ import { useVtDashboard } from '../hooks/vt/useVtDashboard';
 import { PublicDesktopTable } from '../components/public/PublicDesktopTable';
 import { VtFilters, DEFAULT_VT_FILTERS } from '../types/vt';
 import { formatDate } from '../utils/format';
+import { resolveDispatchStatus } from '../services/excelService';
 
 // VT Components
 import { VtHeroHeader } from '../components/vt/VtHeroHeader';
@@ -41,6 +42,7 @@ import {
   Paperclip,
   Trash2,
 } from 'lucide-react';
+import { list } from 'postcss/lib/postcss';
 
 // ============================================
 // 🎯 HELPER — XẾP HẠNG ƯU TIÊN TRẠNG THÁI
@@ -105,6 +107,21 @@ export const VienTruongDashboard: React.FC = () => {
   const [filters, setFilters] = useState<VtFilters>(DEFAULT_VT_FILTERS);
   const [activeSidebarTab, setActiveSidebarTab] = useState<VtSidebarTab>('action-all');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  // ⭐ THÊM dòng này
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('vt_sidebar_collapsed') === '1';
+    }
+    return false;
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('vt_sidebar_collapsed', next ? '1' : '0');
+      return next;
+    });
+  };
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Modal states
@@ -155,10 +172,21 @@ export const VienTruongDashboard: React.FC = () => {
   // ============================================
   // FILTER + SORT
   // ============================================
+  // src/pages/VienTruongDashboard.tsx
+
   const filteredDispatches = useMemo(() => {
-    const list = dispatches.filter(d => {
+    // ⭐ BƯỚC 1: Đảm bảo dispatches là array
+    const safeDispatches: Dispatch[] = Array.isArray(dispatches) ? dispatches : [];
+
+    // ⭐ BƯỚC 2: Filter (trả về array mới)
+    const list: Dispatch[] = safeDispatches.filter(d => {
+      if (!d) return false;
+
+      // Filter theo loại VB
       if (filters.loaiVanBan === 'CONG_VAN' && isChuyenDe(d)) return false;
       if (filters.loaiVanBan === 'CHUYEN_DE' && !isChuyenDe(d)) return false;
+
+      // Filter theo search
       if (filters.searchQuery.trim()) {
         const q = filters.searchQuery.toLowerCase();
         const match =
@@ -170,6 +198,7 @@ export const VienTruongDashboard: React.FC = () => {
         if (!match) return false;
       }
 
+      // Filter theo PVT
       if (filters.pvtIds.length > 0) {
         const matchPvt = filters.pvtIds.some(id => {
           const pvt = pvtList.find(p => p.id === id);
@@ -182,6 +211,7 @@ export const VienTruongDashboard: React.FC = () => {
         if (!matchPvt) return false;
       }
 
+      // Filter theo deptCodes
       if (filters.deptCodes.length > 0) {
         const matchDept = filters.deptCodes.some(code => {
           return (
@@ -193,9 +223,13 @@ export const VienTruongDashboard: React.FC = () => {
         if (!matchDept) return false;
       }
 
+      // Filter theo status
       if (filters.status !== 'ALL' && d.trangThai !== filters.status) return false;
+
+      // Filter theo urgency
       if (filters.urgency !== 'ALL' && d.mucDoKhan !== filters.urgency) return false;
 
+      // Filter theo date range
       if (filters.dateFrom || filters.dateTo) {
         const dateStr = (d.ngayGui || d.ngayPhatHanh || '').slice(0, 10);
         if (filters.dateFrom && dateStr < filters.dateFrom) return false;
@@ -205,61 +239,128 @@ export const VienTruongDashboard: React.FC = () => {
       return true;
     });
 
-    const sortMode = filters.sortMode || 'deadline_asc';
-    const daysToDeadline = (d: Dispatch): number => {
-      if (!d.hanBaoCaoXuLy) return 9999;
-      const dl = new Date(d.hanBaoCaoXuLy);
-      dl.setHours(0, 0, 0, 0);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      return Math.round((dl.getTime() - today.getTime()) / 86400000);
+    // ⭐ BƯỚC 3: Sort (list đã chắc chắn là array)
+    const sortMode = filters.sortMode || 'newest';
+
+    // Helper extract value từ mode động
+    const extractSortValue = (mode: string, prefix: string): string | null => {
+      if (!mode.startsWith(prefix)) return null;
+      const rest = mode.substring(prefix.length);
+      // Bỏ _asc_ hoặc _desc_ ở đầu
+      if (rest.startsWith('asc_')) return rest.substring(4);
+      if (rest.startsWith('desc_')) return rest.substring(5);
+      return null;
     };
 
-    switch (sortMode) {
-      case 'priority':
-        return list.sort((a, b) => {
-          const pa = getStatusPriority(a);
-          const pb = getStatusPriority(b);
-          if (pa !== pb) return pa - pb;
-          return daysToDeadline(a) - daysToDeadline(b);
-        });
+    const isDesc = sortMode.includes('_desc_');
 
-      case 'deadline_asc':
-        return list.sort((a, b) => {
-          const aDone = a.trangThai === 'HOAN_THANH' ? 1 : 0;
-          const bDone = b.trangThai === 'HOAN_THANH' ? 1 : 0;
-          if (aDone !== bDone) return aDone - bDone;
-          return daysToDeadline(a) - daysToDeadline(b);
-        });
+    // ===== SORT THEO LOẠI VĂN BẢN =====
+    const loaiVbValue = extractSortValue(sortMode, 'sort_loai_vb_');
+    if (loaiVbValue !== null) {
+      return list.slice().sort((a, b) => {
+        const aVal = (a.loaiCongVan || '').toLowerCase();
+        const bVal = (b.loaiCongVan || '').toLowerCase();
+        const target = loaiVbValue.toLowerCase();
 
-      case 'deadline_desc':
-        return list.sort((a, b) => daysToDeadline(b) - daysToDeadline(a));
+        // Ưu tiên khớp lên đầu
+        const aMatch = aVal === target ? 1 : 0;
+        const bMatch = bVal === target ? 1 : 0;
+        if (aMatch !== bMatch) return bMatch - aMatch;
 
-      case 'overdue_desc':
-        return list.sort((a, b) => {
-          const aD = daysToDeadline(a);
-          const bD = daysToDeadline(b);
-          if (aD >= 0 && bD >= 0) return aD - bD;
-          if (aD >= 0) return 1;
-          if (bD >= 0) return -1;
-          return aD - bD;
-        });
-
-      case 'oldest':
-        return list.sort((a, b) => {
-          const da = new Date(a.ngayGui || a.ngayPhatHanh || 0).getTime();
-          const db = new Date(b.ngayGui || b.ngayPhatHanh || 0).getTime();
-          return da - db;
-        });
-
-      case 'newest':
-      default:
-        return list.sort((a, b) => {
-          const da = new Date(a.ngayGui || a.ngayPhatHanh || 0).getTime();
-          const db = new Date(b.ngayGui || b.ngayPhatHanh || 0).getTime();
-          return db - da;
-        });
+        return isDesc
+          ? bVal.localeCompare(aVal, 'vi')
+          : aVal.localeCompare(bVal, 'vi');
+      });
     }
+
+    // ===== SORT THEO ĐƠN VỊ BAN HÀNH =====
+    const donViValue = extractSortValue(sortMode, 'sort_don_vi_');
+    if (donViValue !== null) {
+      return list.slice().sort((a, b) => {
+        const aVal = (a.donViBanHanh || '').toLowerCase();
+        const bVal = (b.donViBanHanh || '').toLowerCase();
+        const target = donViValue.toLowerCase();
+
+        const aMatch = aVal === target ? 1 : 0;
+        const bMatch = bVal === target ? 1 : 0;
+        if (aMatch !== bMatch) return bMatch - aMatch;
+
+        return isDesc
+          ? bVal.localeCompare(aVal, 'vi')
+          : aVal.localeCompare(bVal, 'vi');
+      });
+    }
+
+    // ===== SORT THEO PVT =====
+    const pvtValue = extractSortValue(sortMode, 'sort_pvt_');
+    if (pvtValue !== null) {
+      return list.slice().sort((a, b) => {
+        const aVal = (a.assignedPvtId || '').toLowerCase();
+        const bVal = (b.assignedPvtId || '').toLowerCase();
+        const target = pvtValue.toLowerCase();
+
+        const aMatch = aVal === target ? 1 : 0;
+        const bMatch = bVal === target ? 1 : 0;
+        if (aMatch !== bMatch) return bMatch - aMatch;
+
+        const aName = (a.assignedPvtName || '').toLowerCase();
+        const bName = (b.assignedPvtName || '').toLowerCase();
+        return isDesc
+          ? bName.localeCompare(aName, 'vi')
+          : aName.localeCompare(bName, 'vi');
+      });
+    }
+
+    // ===== SORT THEO TRẠNG THÁI TIẾN ĐỘ =====
+    if (sortMode === 'sort_status_priority') {
+      const order: Record<string, number> = {
+        QUA_HAN: 1,
+        SAP_DEN_HAN: 2,
+        DANG_XU_LY: 3,
+        HOAN_THANH: 4,
+      };
+      return list.slice().sort((a, b) => {
+        const sa = resolveDispatchStatus(a);
+        const sb = resolveDispatchStatus(b);
+        return (order[sa] || 99) - (order[sb] || 99);
+      });
+    }
+
+    if (sortMode === 'sort_status_overdue_first') {
+      return list.slice().sort((a, b) => {
+        const sa = resolveDispatchStatus(a);
+        const sb = resolveDispatchStatus(b);
+        if (sa === 'QUA_HAN' && sb !== 'QUA_HAN') return -1;
+        if (sb === 'QUA_HAN' && sa !== 'QUA_HAN') return 1;
+        return 0;
+      });
+    }
+
+    if (sortMode === 'sort_status_completed_last') {
+      return list.slice().sort((a, b) => {
+        const sa = resolveDispatchStatus(a);
+        const sb = resolveDispatchStatus(b);
+        if (sa === 'HOAN_THANH' && sb !== 'HOAN_THANH') return 1;
+        if (sb === 'HOAN_THANH' && sa !== 'HOAN_THANH') return -1;
+        return 0;
+      });
+    }
+
+    // ===== SORT CHUNG =====
+    if (sortMode === 'oldest') {
+      return list.slice().sort((a, b) => {
+        const da = new Date(a.ngayGui || a.ngayPhatHanh || 0).getTime();
+        const db = new Date(b.ngayGui || b.ngayPhatHanh || 0).getTime();
+        return da - db;
+      });
+    }
+
+    // Default: newest
+    return list.slice().sort((a, b) => {
+      const da = new Date(a.ngayGui || a.ngayPhatHanh || 0).getTime();
+      const db = new Date(b.ngayGui || b.ngayPhatHanh || 0).getTime();
+      return db - da;
+    });
   }, [dispatches, filters, pvtList]);
 
   useEffect(() => {
@@ -416,6 +517,32 @@ export const VienTruongDashboard: React.FC = () => {
       showToast(err?.message || 'Lỗi', 'error');
     }
   };
+  const handleHardDeleteChuyenDe = async (chuyenDe: Dispatch) => {
+    try {
+      const ok = await apiClient.hardDeleteDispatch(chuyenDe.id);
+
+      if (ok) {
+        showToast(
+          `🗑️ Đã xóa vĩnh viễn chuyên đề "${chuyenDe.soCongVan}"`,
+          'success'
+        );
+
+        // Đóng các state liên quan
+        if (chuyenDeDetail?.id === chuyenDe.id) setChuyenDeDetail(null);
+        if (chuyenDeToEdit?.id === chuyenDe.id) setChuyenDeToEdit(null);
+        setIsChuyenDeModalOpen(false);
+
+        // Reload danh sách
+        reload();
+      } else {
+        showToast('Không thể xóa chuyên đề', 'error');
+        throw new Error('Không thể xóa chuyên đề');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Lỗi khi xóa chuyên đề', 'error');
+      throw err; // Ném lại để modal catch
+    }
+  };
   // ⭐ Đếm số chuyên đề trong kết quả
   const chuyenDeCount = useMemo(
     () => filteredDispatches.filter(d => isChuyenDe(d)).length,
@@ -447,6 +574,9 @@ export const VienTruongDashboard: React.FC = () => {
             approveCount={approveCount}
             isMobileOpen={isMobileSidebarOpen}
             onCloseMobile={() => setIsMobileSidebarOpen(false)}
+            // ⭐ THÊM 2 dòng này
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           />
 
           <div className="flex-1 min-w-0 w-full space-y-5">
@@ -603,6 +733,7 @@ export const VienTruongDashboard: React.FC = () => {
                     deptList={deptList}
                     totalResults={filteredDispatches.length}
                     chuyenDeCount={chuyenDeCount}
+                    dispatches={dispatches}
                   />
 
                   {/* BẢNG */}
@@ -832,6 +963,7 @@ export const VienTruongDashboard: React.FC = () => {
         onSaved={() => {
           reload();
         }}
+        onDelete={handleHardDeleteChuyenDe}
         onSave={async (formData: any) => {
           try {
             const { __attachments, __assignPvt, __assignTp, ...dispatchData } = formData;
@@ -891,6 +1023,7 @@ export const VienTruongDashboard: React.FC = () => {
           }
         }}
       />
+
 
       {/* ⭐ FIX: DRAWER CHI TIẾT CHUYÊN ĐỀ — TÁCH RIÊNG STATE */}
       <ChuyenDeDrawer

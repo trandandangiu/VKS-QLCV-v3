@@ -387,6 +387,7 @@ export const apiClient = {
       }
       throw new Error(`Không tải được file (${res.status})`);
     }
+    
 
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -563,6 +564,7 @@ export const apiClient = {
     const data = await request<any>('/stats/chart');
     return data.success ? data : null;
   },
+  
 
   // ============================================
   // 7. NOTIFICATIONS
@@ -627,4 +629,12 @@ export const apiClient = {
       return { success: false, message: err?.message || 'Lỗi kết nối' };
     }
   },
+
+  async hardDeleteDispatch(id: string): Promise<boolean> {
+  const data = await request<{ success: boolean }>(
+    `/dispatches/${id}/hard-delete`,
+    { method: 'DELETE' }
+  );
+  return !!data.success;
+},
 };

@@ -104,7 +104,7 @@ export const Login: React.FC = () => {
               <span className="h-px w-full bg-gradient-to-r from-transparent via-amber-300/80 to-transparent" />
             </div>
 
-            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold uppercase tracking-[0.08em] sm:tracking-[0.14em] text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-200 to-amber-400 drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)] leading-snug">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold uppercase tracking-[0.05em] sm:tracking-[0.1em] text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-200 to-amber-400 drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)] leading-tight whitespace-nowrap">
               Hệ thống báo cáo công việc
             </h2>
           </div>
