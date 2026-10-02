@@ -106,7 +106,7 @@ export const NotificationBell: React.FC = () => {
   return (
     <>
       <div className="relative" ref={dropdownRef}>
-        <button
+        {/* <button
           onClick={() => setIsOpen(!isOpen)}
           className="relative p-2 rounded-xl hover:bg-white/10 transition cursor-pointer"
           title="Thông báo"
@@ -120,7 +120,7 @@ export const NotificationBell: React.FC = () => {
           )}
 
 
-        </button>
+        </button> */}
 
         {/* Dropdown */}
         {isOpen && (
