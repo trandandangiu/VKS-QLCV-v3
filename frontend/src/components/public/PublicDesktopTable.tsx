@@ -6,7 +6,7 @@ import {
   Paperclip, Target, UserCheck, CornerDownRight, FileText,
 } from 'lucide-react';
 import { Dispatch } from '../../types/dispatch';
-import { resolveDispatchStatus } from '../../services/excelService';
+import { resolveDispatchStatus, calculateTimeRemaining } from '../../services/excelService';
 import { isChuyenDe } from '../../utils/chuyenDe';
 
 interface Props {
@@ -106,40 +106,53 @@ export const PublicDesktopTable: React.FC<Props> = ({
   // ============================================
   const renderStatusBadge = (disp: Dispatch) => {
     const status = resolveDispatchStatus(disp);
-    const text = disp.thoiHanXuLy || '';
 
+    // ⭐ TÍNH ĐỘNG TEXT từ hạn xử lý — KHÔNG lấy từ DB
+    const timing = calculateTimeRemaining(
+      disp.hanBaoCaoXuLy || '',
+      disp.trangThai,
+      ''
+    );
+    const text = timing.text;
+
+    // ─── HOÀN THÀNH ───
     if (status === 'HOAN_THANH') {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span>{text || 'Hoàn thành'}</span>
+          <span>Hoàn thành</span>
         </span>
       );
     }
+
+    // ─── QUÁ HẠN ───
     if (status === 'QUA_HAN') {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
           <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-          <span>{text || 'Quá hạn'}</span>
+          <span>{text}</span>                 {/* ⭐ "Quá hạn X ngày" */}
         </span>
       );
     }
+
+    // ─── SẮP ĐẾN HẠN (bao gồm "Đến hạn" khi days = 0) ───
     if (status === 'SAP_DEN_HAN') {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
           <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-          <span>{text || 'Sắp hạn'}</span>
+          <span>{text}</span>                 {/* ⭐ "Đến hạn" hoặc "Còn X ngày" */}
         </span>
       );
     }
+
+    // ─── ĐANG XỬ LÝ ───
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
         <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-        <span>{text || 'Đang xử lý'}</span>
+        <span>{text}</span>                   {/* ⭐ "Còn X ngày" */}
       </span>
     );
   };
-
   // ============================================
   // CỘT: LOẠI VĂN BẢN
   // ============================================
@@ -191,12 +204,7 @@ export const PublicDesktopTable: React.FC<Props> = ({
     );
   };
 
-  // ============================================
-  // ⭐ CỘT: ĐƠN VỊ THỰC HIỆN — "Phòng 1" + Tên TP
-  // ============================================
-  // ============================================
-  // CỘT: ĐƠN VỊ THỰC HIỆN — Chỉ hiện tên phòng
-  // ============================================
+
   // ============================================
   // CỘT: ĐƠN VỊ THỰC HIỆN — Chỉ hiện tên phòng
   // ============================================
@@ -411,15 +419,16 @@ export const PublicDesktopTable: React.FC<Props> = ({
                     {renderLoaiVanBan(disp)}
                   </td>
 
-                  {/* 6. ĐƠN VỊ BAN HÀNH */}
-                  <td className="px-2 py-4 border-r border-slate-100 align-top">
+                  {/* 6. ĐƠN VỊ BAN HÀNH — sửa align-top → align-middle */}
+                  <td className="px-2 py-4 border-r border-slate-100 align-middle">
                     {renderDonViBanHanh(disp)}
                   </td>
 
-                  {/* 7. PHÓ VIỆN TRƯỞNG PHỤ TRÁCH */}
-                  <td className="px-2 py-4 border-r border-slate-200 align-top">
+                  {/* 7. PHÓ VIỆN TRƯỞNG PHỤ TRÁCH — sửa align-top → align-middle */}
+                  <td className="px-2 py-4 border-r border-slate-200 align-middle">
                     {renderPvt(disp)}
                   </td>
+
 
                   {/* 8. ĐƠN VỊ THỰC HIỆN — Phòng + Tên TP */}
                   <td className="px-2 py-4 border-r-2 border-slate-300 align-top">

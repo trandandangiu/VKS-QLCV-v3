@@ -43,7 +43,7 @@ const GENERAL_SORT_OPTIONS = [
 const STATUS_SORT_OPTIONS = [
 
   { value: 'sort_status_overdue_first', label: 'Quá hạn ' },
-  { value: 'sort_status_completed_last', label: 'Hoàn thành xuống cuối' },
+  { value: 'sort_status_completed_last', label: 'Hoàn thành ' },
 ];
 
 export const VtFilterBar: React.FC<VtFilterBarProps> = ({

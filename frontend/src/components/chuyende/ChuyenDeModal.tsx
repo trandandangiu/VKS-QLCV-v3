@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   X, FileText, Save, UserCheck, CornerDownRight,
   Calendar, Clock, Users, Paperclip, AlertCircle,
-  Trash2,
+  Trash2, CheckCircle2,
 } from 'lucide-react';
 import { ColumnDefinition, Dispatch } from '../../types/dispatch';
 import { apiClient } from '../../services/apiClient';
@@ -14,12 +14,14 @@ import {
   ChuyenDeMilestone,
   initMilestones,
   getChuyenDeData,
+  validateChuyenDe,
 } from '../../utils/chuyenDe';
 import {
   ChuyenDeMilestoneEditor,
   MilestoneDraft,
 } from './ChuyenDeMilestoneEditor';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useNavigate } from 'react-router-dom';
 
 interface ChuyenDeModalProps {
   isOpen: boolean;
@@ -28,6 +30,7 @@ interface ChuyenDeModalProps {
   onSave: (data: any) => Promise<boolean> | boolean | void;
   onSaved?: () => void;
   onDelete?: (chuyenDe: Dispatch) => void;
+  showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 interface DepartmentOption {
@@ -53,13 +56,22 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
   onSave,
   onSaved,
   onDelete,
+  showToast: propShowToast,
 }) => {
   const { allUsers } = useAuth();
+  const navigate = useNavigate();
 
+  // ═══════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [formData, setFormData] = useState({ ...DEFAULT_FORM });
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Toast nội bộ (fallback nếu parent không truyền)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -73,7 +85,19 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
   const [selectedPvtId, setSelectedPvtId] = useState('');
   const [selectedTpId, setSelectedTpId] = useState('');
 
+  // ⭐ Hàm showToast — dùng props nếu có, không thì fallback local
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    if (propShowToast) {
+      propShowToast(msg, type);
+      return;
+    }
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // ═══════════════════════════════════════════════
   // LOAD DEPARTMENTS
+  // ═══════════════════════════════════════════════
   useEffect(() => {
     if (!isOpen) return;
     const load = async () => {
@@ -100,7 +124,9 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
     load();
   }, [isOpen]);
 
+  // ═══════════════════════════════════════════════
   // LOAD CHUYÊN ĐỀ KHI EDIT
+  // ═══════════════════════════════════════════════
   useEffect(() => {
     if (!isOpen) return;
 
@@ -163,12 +189,19 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
   if (!isOpen) return null;
 
   const pvtUsers = allUsers.filter(u => u.role === 'PHO_VIEN_TRUONG');
-  const allTpUsers = allUsers.filter(u => u.role === 'TRUONG_PHONG');
+
+  // ⭐ FIX #1: Chấp nhận cả 2 role TRUONG_THONG + TRUONG_PHONG (giống DispatchModal)
+  const allTpUsers = allUsers.filter(
+    u => u.role === 'TRUONG_THONG' as any || u.role === 'TRUONG_PHONG'
+  );
+
   const filteredTpUsers = selectedDeptCode
     ? allTpUsers.filter(u => u.roomCode === selectedDeptCode)
     : allTpUsers;
 
-  // HANDLE DELETE (XÓA CỨNG)
+  // ═══════════════════════════════════════════════
+  // HANDLE DELETE
+  // ═══════════════════════════════════════════════
   const handleConfirmDelete = async () => {
     if (!chuyenDeToEdit || !onDelete) return;
 
@@ -192,41 +225,35 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
     }
   };
 
+  // ═══════════════════════════════════════════════
   // SUBMIT
+  // ═══════════════════════════════════════════════
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (isSubmitting) return;
 
-    if (!formData.soCongVan?.trim()) {
-      setErrorMsg('Vui lòng nhập Số / Ký hiệu chuyên đề');
-      return;
-    }
-    if (!formData.tenCongVan?.trim()) {
-      setErrorMsg('Vui lòng nhập Nội dung chuyên đề');
-      return;
-    }
-    if (!formData.donViBanHanh?.trim()) {
-      setErrorMsg('Vui lòng chọn Đơn vị ban hành');
-      return;
-    }
-
-    if (milestones.length === 0) {
-      setErrorMsg('Phải có ít nhất 1 mốc thời hạn');
-      return;
-    }
-    for (let i = 0; i < milestones.length; i++) {
-      const m = milestones[i];
-      if (!m.ten.trim()) {
-        setErrorMsg(`Vui lòng nhập tên cho mốc ${i + 1}`);
-        return;
-      }
-      if (!m.han) {
-        setErrorMsg(`Vui lòng nhập hạn cho mốc ${i + 1}`);
-        return;
-      }
-    }
-
     setErrorMsg(null);
+    setSuccessMsg(null);
+
+    // ─── 1. VALIDATE ───
+    const validationError = validateChuyenDe({
+      soCongVan: formData.soCongVan,
+      tenCongVan: formData.tenCongVan,
+      donViBanHanh: formData.donViBanHanh,
+      milestones: milestones.map(m => ({ ten: m.ten, han: m.han })),
+    });
+
+    if (validationError) {
+      showToast(validationError.message, 'error');
+      setErrorMsg(validationError.message);
+      setTimeout(() => {
+        const form = document.querySelector('form');
+        form?.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+      return;
+    }
+
+    // ─── 2. LƯU ───
     setIsSubmitting(true);
 
     try {
@@ -258,6 +285,9 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
       const pvtUser = pvtUsers.find(u => u.id === selectedPvtId);
       const tpUser = filteredTpUsers.find(u => u.id === selectedTpId);
 
+      // ⭐ FIX #2: Lấy phòng đã chọn để fallback
+      const selectedDept = departments.find(d => d.code === selectedDeptCode);
+
       const success = await onSave({
         ...formData,
         loaiCongVan: 'CHUYEN_DE',
@@ -270,6 +300,8 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
           },
         },
         __attachments: attachments,
+
+        // ⭐ PVT (giữ nguyên)
         __assignPvt: pvtUser
           ? {
               pvtId: pvtUser.id,
@@ -278,30 +310,67 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
               isPrimary: true,
             }
           : undefined,
-        __assignTp: tpUser
-          ? {
+
+        // ⭐ FIX #3: __assignTp có fallback giống DispatchModal
+        __assignTp: (() => {
+          const roomCode = selectedDeptCode || tpUser?.roomCode || '';
+
+          if (tpUser) {
+            return {
               tpId: tpUser.id,
               tpName: tpUser.fullName,
-              roomCode: tpUser.roomCode || '',
+              roomCode,
               isPrimary: true,
-            }
-          : undefined,
+            };
+          }
+
+          // Fallback: chọn phòng nhưng chưa gán Trưởng phòng
+          if (selectedDept) {
+            return {
+              tpId: selectedDept.id,
+              tpName: selectedDept.name,
+              roomCode: selectedDept.code,
+              isPrimary: true,
+            };
+          }
+
+          return undefined;
+        })(),
       });
 
       if (success === false) {
+        showToast('Không thể lưu. Vui lòng kiểm tra lại dữ liệu.', 'error');
         setErrorMsg('Không thể lưu. Vui lòng kiểm tra lại dữ liệu.');
         return;
       }
-      onSaved?.();
+
+      // ─── 3. THÀNH CÔNG ───
+      showToast(
+        isEdit ? '✅ Đã cập nhật chuyên đề!' : '✅ Đã tạo chuyên đề mới!',
+        'success'
+      );
+
+      if (onSaved) onSaved();
       onClose();
+
+      // Nhảy ra /vt sau 300ms
+      setTimeout(() => {
+        navigate('/vt');
+      }, 300);
+
     } catch (err: any) {
       console.error('Lỗi submit chuyên đề:', err);
-      setErrorMsg(err?.message || 'Có lỗi xảy ra khi lưu. Vui lòng thử lại.');
+      const errMsg = err?.message || 'Có lỗi xảy ra khi lưu. Vui lòng thử lại.';
+      showToast(errMsg, 'error');
+      setErrorMsg(errMsg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // ═══════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════
   return (
     <>
       <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -437,14 +506,16 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
                 <Field label="ĐƠN VỊ THỰC HIỆN">
                   <select
                     value={selectedDeptCode}
+                    // ⭐ FIX #4: Auto chọn Trưởng phòng khi chọn phòng (giống DispatchModal)
                     onChange={e => {
                       const code = e.target.value;
                       setSelectedDeptCode(code);
-                      if (code) {
-                        const tps = allTpUsers.filter(u => u.roomCode === code);
-                        if (!tps.find(t => t.id === selectedTpId)) {
-                          setSelectedTpId('');
-                        }
+
+                      const matchedTp = allTpUsers.find(u => u.roomCode === code);
+                      if (matchedTp) {
+                        setSelectedTpId(matchedTp.id);
+                      } else {
+                        setSelectedTpId('');
                       }
                     }}
                     className="w-full h-9 px-3 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white cursor-pointer"
@@ -452,7 +523,7 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
                     <option value="">-- Chọn phòng --</option>
                     {departments.map(d => (
                       <option key={d.id} value={d.code}>
-                        {d.name} ({d.code})
+                        {d.name}
                       </option>
                     ))}
                   </select>
@@ -547,10 +618,34 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
         onConfirm={handleConfirmDelete}
         onCancel={() => setShowDeleteConfirm(false)}
       />
+
+      {/* ⭐ TOAST — chỉ hiện khi không có propShowToast */}
+      {!propShowToast && toast && (
+        <div className="fixed bottom-6 right-6 z-[80] animate-fadeIn">
+          <div
+            className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${
+              toast.type === 'success'
+                ? 'bg-slate-900 text-white border-slate-700'
+                : toast.type === 'error'
+                ? 'bg-rose-600 text-white border-rose-700'
+                : 'bg-blue-600 text-white border-blue-700'
+            }`}
+          >
+            {toast.type === 'success' && (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            )}
+            {toast.type === 'error' && <AlertCircle className="w-4 h-4" />}
+            <span>{toast.msg}</span>
+          </div>
+        </div>
+      )}
     </>
   );
 };
 
+// ═══════════════════════════════════════════════
+// FIELD WRAPPER
+// ═══════════════════════════════════════════════
 const Field: React.FC<{
   label: string;
   required?: boolean;

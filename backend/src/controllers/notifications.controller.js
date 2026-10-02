@@ -55,4 +55,18 @@ export const notificationsController = {
       next(err);
     }
   },
+
+  async getUnreadNotifications(req, res, next) {
+    try {
+      const limit = parseInt(req.query.limit) || 20;
+      const result = await notificationsService.getUnreadNotifications(
+        req.user,
+        limit
+      );
+      res.json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  },
+
 };

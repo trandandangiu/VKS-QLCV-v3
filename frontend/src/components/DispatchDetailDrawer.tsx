@@ -251,7 +251,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
   const statusInfo = calculateTimeRemaining(
     d.hanBaoCaoXuLy,
     d.trangThai,
-    d.thoiHanXuLy
+
   );
 
   const statusTone =
@@ -577,38 +577,14 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
               icon={FileText}
               title="Thông tin công văn"
               action={
-                canEdit && onUpdate ? (
-                  isEditing ? (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={handleCancelEdit}
-                        className="p-1 rounded hover:bg-slate-200 text-slate-500 cursor-pointer"
-                        title="Hủy"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={handleSave}
-                        disabled={isSaving || !isDirty}
-                        className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 cursor-pointer"
-                        title="Lưu"
-                      >
-                        {isSaving ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Check className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="p-1 rounded hover:bg-slate-200 text-slate-500 cursor-pointer"
-                      title="Sửa"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  )
+                canEdit && onUpdate && !isEditing ? (
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="p-1 rounded hover:bg-slate-200 text-slate-500 cursor-pointer"
+                    title="Sửa"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
                 ) : null
               }
             >
@@ -909,12 +885,14 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
 
           {/* ════════ FOOTER ════════ */}
           <div className="px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+            {/* ─── Cụm bên trái: Nút hành động chính ─── */}
             <div className="flex items-center gap-2">
               {!isCompleted && canEdit && onMarkComplete && (
                 <button
                   onClick={handleMarkComplete}
                   disabled={isCompleting || isDeleting || isReopening}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer disabled:opacity-50"
+                  title="Đánh dấu hoàn thành"
                 >
                   {isCompleting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -929,7 +907,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 <button
                   onClick={handleReopen}
                   disabled={isReopening || isDeleting || isCompleting}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer disabled:opacity-50"
                   title="Mở lại công văn để tiếp tục xử lý"
                 >
                   {isReopening ? (
@@ -942,8 +920,8 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
               )}
 
               {isCompleted && (!canEdit || !onReopen) && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  <CheckCircle2 className="w-4 h-4" />
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-700 bg-emerald-50 border border-emerald-200">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
                   Đã hoàn thành
                 </span>
               )}
@@ -952,7 +930,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 <button
                   onClick={handleDelete}
                   disabled={isDeleting || isCompleting || isReopening}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white transition cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer disabled:opacity-50"
                   title="Xoá công văn (ẩn khỏi danh sách)"
                 >
                   {isDeleting ? (
@@ -965,12 +943,33 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
               )}
             </div>
 
-            <button
-              onClick={onClose}
-              className="px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer"
-            >
-              Đóng
-            </button>
+            {/* ─── Cụm bên phải: Lưu (khi edit) + Đóng ─── */}
+            <div className="flex items-center gap-2">
+              {/* ⭐ Khi đang edit → CHỈ hiện nút Lưu (bỏ Hủy vì đã có Đóng) */}
+              {isEditing && canEdit && onUpdate && (
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving || !isDirty}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-700 hover:bg-emerald-50 border border-emerald-300 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Lưu thay đổi"
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  Lưu thay đổi
+                </button>
+              )}
+
+              {/* Nút Đóng — luôn hiện */}
+              <button
+                onClick={onClose}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -980,10 +979,10 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
         <div className="fixed bottom-6 right-6 z-[70]">
           <div
             className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
-              ? 'bg-slate-900 text-white border-slate-700'
-              : toast.type === 'error'
-                ? 'bg-rose-600 text-white border-rose-700'
-                : 'bg-blue-600 text-white border-blue-700'
+                ? 'bg-slate-900 text-white border-slate-700'
+                : toast.type === 'error'
+                  ? 'bg-rose-600 text-white border-rose-700'
+                  : 'bg-blue-600 text-white border-blue-700'
               }`}
           >
             {toast.type === 'success' && (
@@ -997,7 +996,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     </>
   );
 };
-
 // ============================================
 // REUSABLE SUB-COMPONENTS
 // ============================================

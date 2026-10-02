@@ -107,4 +107,16 @@ router.patch('/:id/read', notificationsController.markAsRead);
  */
 router.delete('/:id', notificationsController.deleteNotification);
 
+/**
+ * @swagger
+ * /api/notifications/unread:
+ *   get:
+ *     tags: [Notifications]
+ *     summary: Danh sách thông báo CHƯA ĐỌC (dùng cho dropdown chuông)
+ *     responses:
+ *       200:
+ *         description: OK
+ */
+router.get('/unread', notificationsController.getUnreadNotifications);
+
 export default router;

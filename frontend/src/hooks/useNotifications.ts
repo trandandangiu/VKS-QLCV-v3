@@ -74,7 +74,7 @@ export function useNotifications() {
 
       // 5. Rung (mobile)
       if ('vibrate' in navigator) {
-        try { navigator.vibrate?.([200, 100, 200]); } catch {}
+        try { navigator.vibrate?.([200, 100, 200]); } catch { }
       }
     },
   });
@@ -124,6 +124,24 @@ export function useNotifications() {
     }
   }, []);
 
+  const markAllAsReadOnOpen = useCallback(async () => {
+    // Nếu không còn gì chưa đọc → không cần gọi API
+    if (unreadCount === 0) return;
+
+    try {
+      // 1. Gọi API mark-all-read
+      await apiClient.markAllNotificationsRead?.();
+
+      // 2. Ẩn hết thông báo khỏi danh sách hiển thị
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+
+      // 3. Reset badge về 0
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('Lỗi đánh dấu đã đọc:', err);
+    }
+  }, [unreadCount]);
+
   return {
     notifications,
     unreadCount,
@@ -134,4 +152,6 @@ export function useNotifications() {
     markAllAsRead,
     reload: loadInitial,
   };
+
+
 }

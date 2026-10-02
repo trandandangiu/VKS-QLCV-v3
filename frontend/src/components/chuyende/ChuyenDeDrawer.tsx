@@ -21,7 +21,6 @@ import {
   markMilestoneComplete,
   resolveChuyenDeStatus,
   formatChuyenDeDate,
-  initMilestones,
   validateChuyenDe,
   ChuyenDeMilestone,
 } from '../../utils/chuyenDe';
@@ -96,10 +95,10 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
     ghiChu: '',
   });
 
-  // ⭐ Milestones (dùng chung cho cả xem + edit)
+  // Milestones (dùng chung cho cả xem + edit)
   const [milestones, setMilestones] = useState<MilestoneDraft[]>([]);
 
-  // ⭐ Assignments trong edit mode
+  // Assignments trong edit mode
   const [selectedPvtId, setSelectedPvtId] = useState('');
   const [selectedTpId, setSelectedTpId] = useState('');
   const [selectedDeptCode, setSelectedDeptCode] = useState('');
@@ -110,25 +109,30 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
     setTimeout(() => setToast(null), 2500);
   };
 
-  // ⭐ Danh sách PVT / TP
+  // ⭐ Danh sách PVT / TP — chấp nhận cả TRUONG_THONG + TRUONG_PHONG (giống DispatchModal)
   const pvtUsers = useMemo(
     () => allUsers.filter(u => u.role === 'PHO_VIEN_TRUONG'),
     [allUsers]
   );
   const allTpUsers = useMemo(
-    () => allUsers.filter(u => u.role === 'TRUONG_PHONG'),
+    () =>
+      allUsers.filter(
+        u => (u.role as any) === 'TRUONG_THONG' || u.role === 'TRUONG_PHONG'
+      ),
     [allUsers]
   );
   const filteredTpUsers = selectedDeptCode
     ? allTpUsers.filter(u => u.roomCode === selectedDeptCode)
     : allTpUsers;
 
+  // ⭐ Điều kiện cho phép edit — giống DispatchDetailDrawer
+  const canEditInfo = canEdit && !readOnly && !!onUpdate;
+
   // ⭐ Sync khi prop chuyenDe thay đổi
   useEffect(() => {
     if (chuyenDe) {
       setLocalCD(chuyenDe);
 
-      // Sync form
       setForm({
         soCongVan: chuyenDe.soCongVan || '',
         tenCongVan: chuyenDe.tenCongVan || '',
@@ -138,7 +142,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
         ghiChu: chuyenDe.ghiChu || '',
       });
 
-      // ⭐ Sync milestones vào state (dùng chung cho cả xem + edit)
       const data = getChuyenDeData(chuyenDe);
       setMilestones(
         data.milestones.map(m => ({
@@ -148,13 +151,12 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
         }))
       );
 
-      // ⭐ Sync assignment
       setSelectedPvtId(chuyenDe.assignedPvtId || '');
       setSelectedTpId(chuyenDe.assignedTpId || '');
 
-      // Tìm department code từ tên
-      const matchedDept = departments.find(d => d.name === chuyenDe.donViBanHanh);
-      setSelectedDeptCode(matchedDept?.code || '');
+      // ⭐ Đọc roomCode trực tiếp từ dispatchTps — không map qua tên
+      const roomCode = (chuyenDe as any).dispatchTps?.[0]?.roomCode || '';
+      setSelectedDeptCode(roomCode);
 
       setIsEditing(false);
       setIsDirty(false);
@@ -203,26 +205,37 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
     }
   }, [chuyenDe?.id]);
 
-  // ⭐ ESC — đóng edit trước, đóng drawer sau
+  // ⭐ ESC — đóng edit trước, đóng drawer sau (giống DispatchDetailDrawer)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (isEditing) {
           handleCancelEdit();
         } else {
-          onClose();
+          handleClose();
         }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, isEditing, localCD]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, isEditing, localCD, isDirty]);
 
   // ⭐ Update field
   const updateField = (key: keyof typeof form, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));
     setIsDirty(true);
     if (formError) setFormError(null);
+  };
+
+  // ⭐ Đóng drawer có cảnh báo (giống Dispatch)
+  const handleClose = () => {
+    if (isEditing && isDirty) {
+      if (!window.confirm('Bạn có thay đổi chưa lưu. Đóng và bỏ thay đổi?')) {
+        return;
+      }
+    }
+    onClose();
   };
 
   // ⭐ Hủy edit
@@ -237,15 +250,17 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
       ghiChu: localCD.ghiChu || '',
     });
 
-    // Reset milestones
     const data = getChuyenDeData(localCD);
     setMilestones(
       data.milestones.map(m => ({ id: m.id, ten: m.ten, han: m.han }))
     );
 
-    // Reset assignment
     setSelectedPvtId(localCD.assignedPvtId || '');
     setSelectedTpId(localCD.assignedTpId || '');
+
+    // ⭐ Reset selectedDeptCode từ roomCode
+    const roomCode = (localCD as any).dispatchTps?.[0]?.roomCode || '';
+    setSelectedDeptCode(roomCode);
 
     setIsEditing(false);
     setIsDirty(false);
@@ -273,14 +288,12 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
     setFormError(null);
 
     try {
-      // ⭐ Build milestones cuối cùng (giữ nguyên trạng thái cũ, thêm mới nếu có)
       const existingMilestones = getChuyenDeData(localCD).milestones;
       const finalMilestones: ChuyenDeMilestone[] = milestones.map((m, idx) => {
         const existing = existingMilestones.find(e => e.id === m.id);
         if (existing) {
           return { ...existing, ten: m.ten, han: m.han };
         }
-        // Mốc mới thêm → mốc đầu active, còn lại chờ
         return {
           id: m.id || `m_${Date.now()}_${idx}`,
           ten: m.ten,
@@ -291,7 +304,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
         };
       });
 
-      // Hạn tổng = hạn của mốc cuối
       const lastMilestone = finalMilestones[finalMilestones.length - 1];
       const hanBaoCaoXuLy = lastMilestone?.han || localCD.hanBaoCaoXuLy;
 
@@ -309,12 +321,15 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
         },
       };
 
-      // ⭐ Update dispatch cơ bản
+      // 1. Update dispatch cơ bản
       await onUpdate(localCD.id, payload);
 
-      // ⭐ Update phân công nếu có thay đổi
+      // 2. Update phân công nếu có thay đổi
       const pvtChanged = selectedPvtId !== (localCD.assignedPvtId || '');
       const tpChanged = selectedTpId !== (localCD.assignedTpId || '');
+
+      let newPvtName = localCD.assignedPvtName;
+      let newTpName = localCD.assignedTpName;
 
       if (pvtChanged && selectedPvtId) {
         const pvt = pvtUsers.find(u => u.id === selectedPvtId);
@@ -328,6 +343,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                 isPrimary: true,
               }],
             });
+            newPvtName = pvt.fullName;
           } catch (err) {
             console.error('Lỗi cập nhật PVT:', err);
           }
@@ -335,32 +351,48 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
       }
 
       if (tpChanged && selectedTpId) {
-        const tp = filteredTpUsers.find(u => u.id === selectedTpId)
+        let tp = filteredTpUsers.find(u => u.id === selectedTpId)
           || allTpUsers.find(u => u.id === selectedTpId);
+
+        // ⭐ Fallback: nếu không có TP user nhưng có chọn phòng → dùng dept
+        if (!tp && selectedDeptCode) {
+          const dept = departments.find(dd => dd.code === selectedDeptCode);
+          if (dept) {
+            tp = {
+              id: dept.id,
+              fullName: dept.name,
+              roomCode: dept.code,
+            } as any;
+          }
+        }
+
         if (tp) {
           try {
             await apiClient.assignToTps(localCD.id, {
               tps: [{
                 tpId: tp.id,
                 tpName: tp.fullName,
-                roomCode: tp.roomCode || '',
+                roomCode: tp.roomCode || selectedDeptCode || '',
                 isPrimary: true,
               }],
             });
+            newTpName = tp.fullName;
           } catch (err) {
             console.error('Lỗi cập nhật TP:', err);
           }
         }
       }
 
-      // ⭐ Update local state
+      // ⭐ Update local state ĐẦY ĐỦ — giống DispatchDetailDrawer
       setLocalCD(prev =>
         prev
           ? {
             ...prev,
             ...payload,
             assignedPvtId: pvtChanged ? selectedPvtId : prev.assignedPvtId,
+            assignedPvtName: newPvtName,
             assignedTpId: tpChanged ? selectedTpId : prev.assignedTpId,
+            assignedTpName: newTpName,
           }
           : prev
       );
@@ -413,7 +445,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
           : prev
       );
 
-      // Sync lại milestones state
       setMilestones(
         updatedMilestones.map(m => ({ id: m.id, ten: m.ten, han: m.han }))
       );
@@ -453,13 +484,12 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
   const progress = getMilestoneProgress(localCD);
   const displayMilestones = getChuyenDeData(localCD).milestones;
   const isCompleted = localCD.trangThai === 'HOAN_THANH';
-  const canEditInfo = canEdit && !readOnly && !!onUpdate;
 
   return (
     <>
       <div
         className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex justify-end"
-        onClick={onClose}
+        onClick={handleClose}
       >
         <div
           className="bg-white w-full sm:max-w-2xl h-full shadow-2xl flex flex-col overflow-hidden"
@@ -485,7 +515,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                 )}
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="text-white/80 hover:text-white p-2 rounded-lg shrink-0 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -514,19 +544,20 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
               </div>
             )}
 
-            {/* ═══ SECTION 1: THÔNG TIN CHUNG — CÓ CÂY BÚT ═══ */}
+            {/* ═══ SECTION 1: THÔNG TIN CHUNG ═══ */}
             <Section
               icon={FileText}
               title="Thông tin chung"
               action={
                 canEditInfo ? (
                   isEditing ? (
+                    // ⭐ EDIT MODE: X + ✓ ngay trong header (giống Dispatch)
                     <div className="flex items-center gap-1">
                       <button
                         onClick={handleCancelEdit}
                         disabled={isSaving}
                         className="p-1 rounded hover:bg-slate-200 text-slate-500 cursor-pointer disabled:opacity-50"
-                        title="Hủy"
+                        title="Hủy (ESC)"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -544,6 +575,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                       </button>
                     </div>
                   ) : (
+                    // ⭐ VIEW MODE: Pencil
                     <button
                       onClick={() => setIsEditing(true)}
                       className="p-1 rounded hover:bg-slate-200 text-slate-500 cursor-pointer"
@@ -665,7 +697,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
               }
             >
               {isEditing ? (
-                // ⭐ EDIT MODE: Dùng ChuyenDeMilestoneEditor
                 <div className="space-y-3">
                   <ChuyenDeMilestoneEditor
                     milestones={milestones}
@@ -675,10 +706,8 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                     }}
                     disabled={isSaving}
                   />
-
                 </div>
               ) : (
-                // ⭐ VIEW MODE: Hiển thị danh sách mốc
                 <>
                   {displayMilestones.length === 0 ? (
                     <div className="text-center py-4 text-slate-400 text-[11px] italic">
@@ -843,7 +872,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
             {(isEditing || localCD.assignedPvtName || localCD.assignedTpName) && (
               <Section icon={UserCheck} title="Phân công xử lý">
                 {isEditing ? (
-                  // ⭐ EDIT MODE
                   <div className="space-y-3">
                     <Field label="Phó viện trưởng phụ trách" icon={UserCheck}>
                       <select
@@ -871,8 +899,13 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                           onChange={e => {
                             const code = e.target.value;
                             setSelectedDeptCode(code);
-                            // ⭐ KHÔNG ghi đè donViBanHanh nữa — 2 trường độc lập
-                            setSelectedTpId('');
+                            // ⭐ Auto chọn Trưởng phòng khi chọn phòng (giống DispatchModal)
+                            const matchedTp = allTpUsers.find(u => u.roomCode === code);
+                            if (matchedTp) {
+                              setSelectedTpId(matchedTp.id);
+                            } else {
+                              setSelectedTpId('');
+                            }
                             setIsDirty(true);
                           }}
                           className={inputCls}
@@ -880,7 +913,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                           <option value="">-- Chọn phòng --</option>
                           {departments.map(d => (
                             <option key={d.id} value={d.code}>
-                              {d.name} ({d.code})
+                              {d.name}
                             </option>
                           ))}
                         </select>
@@ -907,7 +940,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                     </div>
                   </div>
                 ) : (
-                  // ⭐ VIEW MODE
                   <>
                     {localCD.assignedPvtName && (
                       <Field label="Phó viện trưởng phụ trách" icon={UserCheck}>
@@ -933,8 +965,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
             {/* ═══ SECTION 4: FILES ═══ */}
             <Section
               icon={Paperclip}
-              title={`File đính kèm${attachments.length ? ` (${attachments.length})` : ''
-                }`}
+              title={`File đính kèm${attachments.length ? ` (${attachments.length})` : ''}`}
             >
               {loadingFiles ? (
                 <div className="flex items-center justify-center py-6 text-slate-400 gap-2">
@@ -984,46 +1015,37 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
 
           {/* ═══════════ FOOTER ═══════════ */}
           <div className="px-4 py-3 bg-white border-t border-slate-200 shrink-0 flex items-center justify-between gap-2">
-            {isEditing ? (
-              <>
-                <span className="text-[11px] text-slate-500 italic">
+            {/* Cụm bên trái: nút Lưu (chỉ hiện khi đang edit) */}
+            <div className="flex items-center gap-2">
+              {isEditing && canEditInfo && (
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving || !isDirty}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-700 hover:bg-emerald-50 border border-emerald-300 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Lưu thay đổi"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      Lưu thay đổi
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
 
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleCancelEdit}
-                    disabled={isSaving}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer disabled:opacity-50"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving || !isDirty}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 transition cursor-pointer active:scale-95 disabled:opacity-50"
-                  >
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Đang lưu...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-3.5 h-3.5" />
-                        Lưu thay đổi
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <button
-                onClick={onClose}
-                className="ml-auto px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer"
-              >
-                Đóng
-              </button>
-            )}
+            {/* Cụm bên phải: nút Đóng */}
+            <button
+              onClick={handleClose}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer"
+            >
+              Đóng
+            </button>
           </div>
         </div>
       </div>

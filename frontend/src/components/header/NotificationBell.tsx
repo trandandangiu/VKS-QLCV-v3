@@ -1,7 +1,7 @@
 // frontend/src/components/header/NotificationBell.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, X, CheckCheck, ArrowRight } from 'lucide-react';
+import { Bell, X, CheckCheck, ArrowRight, Inbox } from 'lucide-react';
 import { useNotifications } from '../../hooks/useNotifications';
 import { formatRelativeTime } from '../../utils/format';
 
@@ -16,10 +16,11 @@ export const NotificationBell: React.FC = () => {
     latestNotification,
     markAsRead,
     markAllAsRead,
+    markAllAsReadOnOpen,   // ⭐ THÊM
     isConnected,
   } = useNotifications();
 
-  // ⭐ Toast to hơn, có nút "Xem ngay"
+  // Toast hiện khi có thông báo mới
   const [toast, setToast] = useState<{
     id: string;
     title: string;
@@ -36,7 +37,6 @@ export const NotificationBell: React.FC = () => {
         dispatchId: latestNotification.dispatchId,
       });
 
-      // Tự đóng sau 8 giây
       const t = setTimeout(() => setToast(null), 8000);
       return () => clearTimeout(t);
     }
@@ -53,74 +53,74 @@ export const NotificationBell: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // ⭐ Xử lý click notification — điều hướng rõ ràng
-  const handleClickNotification = async (n: any) => {
-    // 1. Đánh dấu đã đọc
-    if (!n.isRead) {
-      await markAsRead(n.id);
-    }
+  // ⭐ KHI MỞ CHUÔNG → TỰ ĐỘNG ĐÁNH DẤU TẤT CẢ ĐÃ ĐỌC
+  const handleToggleOpen = async () => {
+    const willOpen = !isOpen;
+    setIsOpen(willOpen);
 
-    // 2. Đóng dropdown + toast
-    setIsOpen(false);
-    setToast(null);
-
-    // 3. Điều hướng
-    if (n.dispatchId) {
-      // ⭐ Điều hướng đến trang chi tiết công văn
-      navigate(`/dispatches/${n.dispatchId}`);
-    } else if (n.referenceType === 'dispatch' && n.referenceId) {
-      navigate(`/dispatches/${n.referenceId}`);
-    } else {
-      // Không có dispatch → điều hướng theo type
-      switch (n.type) {
-        case 'TASK_ASSIGNED':
-          navigate('/');
-          break;
-        default:
-          navigate('/');
-      }
+    // Chỉ khi MỞ và có thông báo chưa đọc → đánh dấu đã đọc
+    if (willOpen && unreadCount > 0) {
+      // Đợi 1 nhịp cho animation mở xong → mới ẩn badge
+      setTimeout(() => {
+        markAllAsReadOnOpen();
+      }, 500);
     }
   };
 
-  // ⭐ Xử lý click toast "Xem ngay"
-  const handleToastView = async () => {
-    if (!toast) return;
-
-    // Đánh dấu đã đọc
-    try {
-      await markAsRead(toast.id);
-    } catch {
-      /* ignore */
+  const handleClickNotification = async (n: any) => {
+    if (!n.isRead) {
+      await markAsRead(n.id);
     }
-
-    const dispatchId = toast.dispatchId;
+    setIsOpen(false);
     setToast(null);
 
-    if (dispatchId) {
-      navigate(`/dispatches/${dispatchId}`);
+    if (n.dispatchId) {
+      navigate(`/dispatches/${n.dispatchId}`);
+    } else if (n.referenceType === 'dispatch' && n.referenceId) {
+      navigate(`/dispatches/${n.referenceId}`);
     } else {
       navigate('/');
     }
   };
 
+  const handleToastView = async () => {
+    if (!toast) return;
+    try {
+      await markAsRead(toast.id);
+    } catch {}
+    const dispatchId = toast.dispatchId;
+    setToast(null);
+    if (dispatchId) navigate(`/dispatches/${dispatchId}`);
+    else navigate('/');
+  };
+
+  // ⭐ LỌC: Chỉ hiển thị thông báo CHƯA ĐỌC trong dropdown
+  const unreadNotifications = notifications.filter(n => !n.isRead);
+
   return (
     <>
       <div className="relative" ref={dropdownRef}>
-        {/* <button
-          onClick={() => setIsOpen(!isOpen)}
+        <button
+          onClick={handleToggleOpen}
           className="relative p-2 rounded-xl hover:bg-white/10 transition cursor-pointer"
           title="Thông báo"
         >
           <Bell className="w-5 h-5 text-white" />
 
+          {/* Badge đỏ — chỉ hiện khi có thông báo chưa đọc */}
           {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white/90 animate-pulse">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
 
-
-        </button> */}
+          {isConnected && (
+            <span
+              className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-white"
+              title="Đang nhận thông báo realtime"
+            />
+          )}
+        </button>
 
         {/* Dropdown */}
         {isOpen && (
@@ -128,24 +128,17 @@ export const NotificationBell: React.FC = () => {
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-slate-700" />
-                <span className="font-bold text-slate-900 text-sm">Thông báo</span>
-                {unreadCount > 0 && (
+                <span className="font-bold text-slate-900 text-sm">
+                  Thông báo mới
+                </span>
+                {unreadNotifications.length > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">
-                    {unreadCount} mới
+                    {unreadNotifications.length}
                   </span>
                 )}
               </div>
 
               <div className="flex items-center gap-1">
-                {unreadCount > 0 && (
-                  <button
-                    onClick={markAllAsRead}
-                    className="p-1.5 rounded-lg hover:bg-slate-200 transition cursor-pointer"
-                    title="Đánh dấu tất cả đã đọc"
-                  >
-                    <CheckCheck className="w-4 h-4 text-slate-600" />
-                  </button>
-                )}
                 <button
                   onClick={() => setIsOpen(false)}
                   className="p-1.5 rounded-lg hover:bg-slate-200 transition cursor-pointer"
@@ -156,31 +149,24 @@ export const NotificationBell: React.FC = () => {
             </div>
 
             <div className="max-h-96 overflow-y-auto">
-              {notifications.length === 0 ? (
+              {/* ⭐ CHỈ HIỂN THỊ THÔNG BÁO CHƯA ĐỌC */}
+              {unreadNotifications.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-sm">
-                  <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  Chưa có thông báo nào
+                  <Inbox className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <div className="font-medium">Không có thông báo mới</div>
+                  <div className="text-xs mt-1">Các thông báo đã xem sẽ tự động ẩn</div>
                 </div>
               ) : (
-                notifications.slice(0, 20).map(n => (
+                unreadNotifications.slice(0, 20).map(n => (
                   <button
                     key={n.id}
                     onClick={() => handleClickNotification(n)}
-                    className={`w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-slate-50 active:bg-slate-100 transition cursor-pointer ${!n.isRead ? 'bg-blue-50/40' : ''
-                      }`}
+                    className="w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-slate-50 active:bg-slate-100 transition cursor-pointer bg-blue-50/30"
                   >
                     <div className="flex items-start gap-3">
-                      <div
-                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.isRead ? 'bg-blue-600' : 'bg-slate-300'
-                          }`}
-                      />
+                      <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-blue-600" />
                       <div className="flex-1 min-w-0">
-                        <div
-                          className={`text-sm ${!n.isRead
-                              ? 'font-bold text-slate-900'
-                              : 'font-medium text-slate-700'
-                            }`}
-                        >
+                        <div className="text-sm font-bold text-slate-900">
                           {n.title}
                         </div>
                         {n.content && (
@@ -203,11 +189,26 @@ export const NotificationBell: React.FC = () => {
                 ))
               )}
             </div>
+
+            {/* Footer: nút đánh dấu tất cả đã đọc */}
+            {unreadNotifications.length > 0 && (
+              <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex justify-center">
+                <button
+                  onClick={async () => {
+                    await markAllAsReadOnOpen();
+                  }}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  Đánh dấu tất cả đã đọc
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* ⭐ TOAST NỔI BẬT — góc trên bên phải */}
+      {/* Toast — giữ nguyên */}
       {toast && (
         <div className="fixed top-20 right-4 z-[60] max-w-sm animate-slideInRight">
           <div className="bg-white rounded-2xl shadow-2xl border-l-4 border-red-600 border border-slate-200 overflow-hidden">
@@ -229,7 +230,6 @@ export const NotificationBell: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Nút hành động */}
                   <div className="flex items-center gap-2 mt-3">
                     <button
                       onClick={handleToastView}

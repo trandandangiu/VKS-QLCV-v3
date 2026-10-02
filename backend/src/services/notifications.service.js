@@ -57,7 +57,6 @@ export const notificationsService = {
       throw { status: 403, message: 'Không có quyền' };
     }
 
-    // ⭐ Chỉ update nếu chưa đọc
     if (!notif.isRead) {
       await prisma.notification.update({
         where: { id: notificationId },
@@ -68,7 +67,6 @@ export const notificationsService = {
       });
     }
 
-    // ⭐ Đếm lại số chưa đọc — CHÍNH XÁC
     const unreadCount = await prisma.notification.count({
       where: { userId: currentUser.id, isRead: false },
     });
@@ -120,7 +118,6 @@ export const notificationsService = {
       where: { id: notificationId },
     });
 
-    // ⭐ Đếm lại unreadCount sau khi xóa
     const unreadCount = await prisma.notification.count({
       where: { userId: currentUser.id, isRead: false },
     });
@@ -141,5 +138,26 @@ export const notificationsService = {
     });
 
     return { unreadCount: count };
+  },
+
+  // ============================================
+  // 6. LẤY THÔNG BÁO CHƯA ĐỌC (CHO DROPDOWN CHUÔNG)
+  // ============================================
+  async getUnreadNotifications(currentUser, limit = 20) {
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userId: currentUser.id,
+        isRead: false,
+      },
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const unreadCount = notifications.length;
+
+    return {
+      notifications,
+      unreadCount,
+    };
   },
 };

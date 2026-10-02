@@ -11,9 +11,11 @@ import {
 } from '../services/excelService';
 import { AttachmentUploader, AttachmentItem } from './attachments/AttachmentUploader';
 import { apiClient } from '../services/apiClient';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AgencyCombobox } from './ui/AgencyCombobox';
-import { DocumentTypeCombobox } from './ui/DocumentTypeCombobox';   // ⭐ THÊM
+import { DocumentTypeCombobox } from './ui/DocumentTypeCombobox';
+// ⭐ THÊM
 
 interface DispatchModalProps {
   isOpen: boolean;
@@ -29,6 +31,7 @@ interface DepartmentOption {
   code: string;
   name: string;
 }
+
 
 const DEFAULT_FORM: Partial<Dispatch> = {
   ngayGui: new Date().toISOString().slice(0, 10),
@@ -570,7 +573,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold">
-                {dispatchToEdit ? 'Chỉnh sửa công việc' : 'Thêm mới công việc gửi Lãnh đạo'}
+                {dispatchToEdit ? 'Chỉnh sửa công văn' : 'Tạo công văn'}
               </h2>
               <p className="text-xs text-red-100">
                 {dispatchToEdit
@@ -981,6 +984,9 @@ const DateInput: React.FC<DateInputProps> = ({
   className,
   disabled,
 }) => {
+  // ⭐ Ref trỏ tới input date ẩn (native picker của trình duyệt)
+  const nativeInputRef = React.useRef<HTMLInputElement>(null);
+
   const displayValue = React.useMemo(() => {
     if (!value) return '';
     const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -1033,19 +1039,99 @@ const DateInput: React.FC<DateInputProps> = ({
     }
   };
 
+  // ⭐ Bấm icon lịch → mở native date picker
+  const openNativePicker = () => {
+    if (disabled) return;
+    const nativeInput = nativeInputRef.current;
+    if (!nativeInput) return;
+
+    // Cách 1: Dùng showPicker() (Chrome/Edge mới hỗ trợ)
+    if (typeof (nativeInput as any).showPicker === 'function') {
+      try {
+        (nativeInput as any).showPicker();
+        return;
+      } catch (err) {
+        // Fallback nếu lỗi
+      }
+    }
+
+    // Cách 2: Fallback — focus + click
+    nativeInput.focus();
+    nativeInput.click();
+  };
+
+  // ⭐ Khi user chọn ngày từ native picker
+  const handleNativeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = e.target.value; // YYYY-MM-DD
+    if (newVal) {
+      onChange(newVal);
+    }
+  };
+
   return (
-    <input
-      type="text"
-      inputMode="numeric"
-      placeholder="DD/MM/YYYY"
-      value={text}
-      onChange={e => handleChange(e.target.value)}
-      onFocus={() => setFocused(true)}
-      onBlur={handleBlur}
-      disabled={disabled}
-      maxLength={10}
-      className={className}
-    />
+    <div className="relative">
+      {/* Input text hiển thị DD/MM/YYYY — cho phép gõ tay */}
+      <input
+        type="text"
+        inputMode="numeric"
+        placeholder="DD/MM/YYYY"
+        value={text}
+        onChange={e => handleChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={handleBlur}
+        disabled={disabled}
+        maxLength={10}
+        className={className}
+        style={{ paddingRight: '32px' }}   // ⭐ chừa chỗ cho icon
+      />
+
+      {/* ⭐ Nút icon lịch SVG — bấm mở native date picker */}
+      <button
+        type="button"
+        onClick={openNativePicker}
+        disabled={disabled}
+        tabIndex={-1}
+        title="Chọn ngày từ lịch"
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-slate-400 hover:text-red-600 hover:bg-slate-100 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {/* Icon lịch SVG */}
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      </button>
+
+      {/* ⭐ Input date ẩn — native picker của trình duyệt */}
+      <input
+        ref={nativeInputRef}
+        type="date"
+        value={value || ''}
+        onChange={handleNativeChange}
+        disabled={disabled}
+        tabIndex={-1}
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0,
+          pointerEvents: 'none',   // ⭐ KHÔNG cho click trực tiếp — chỉ mở qua nút icon
+        }}
+      />
+    </div>
   );
 };
 

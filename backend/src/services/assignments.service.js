@@ -135,7 +135,7 @@ export const assignmentsService = {
           userId: vt.id,
           dispatchId,
           type: 'TASK_ASSIGNED',
-          title: '📋 Phân công mới',
+          title: 'Thông báo mới',
           content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho ${pvtNames}`,
         });
       }
@@ -337,8 +337,8 @@ export const assignmentsService = {
           userId: vt.id,
           dispatchId,
           type: 'TASK_ASSIGNED',
-          title: '📋 Phân công mới',
-          content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho ${tpNames}`,
+          title: 'Thông báo mới',
+          content: ` `,
         });
       }
 

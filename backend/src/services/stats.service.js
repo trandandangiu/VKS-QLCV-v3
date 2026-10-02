@@ -7,8 +7,10 @@ export const statsService = {
   // ============================================
   async getVTOverview(currentUser) {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const in3Days = new Date();
     in3Days.setDate(in3Days.getDate() + 3);
+    in3Days.setHours(23, 59, 59, 999);
 
     // Tổng quan
     const [
@@ -32,7 +34,10 @@ export const statsService = {
       prisma.dispatch.count({ where: { trangThai: 'CHO_VT_DUYET', deletedAt: null } }),
       prisma.dispatch.count({
         where: {
-          hanBaoCaoXuLy: { lt: today },
+          hanBaoCaoXuLy: {
+            gte: today,              // ⭐ Bao gồm hôm nay
+            lte: in3Days,
+          },
           trangThai: { not: 'HOAN_THANH' },
           deletedAt: null,
         },
@@ -86,8 +91,8 @@ export const statsService = {
         ).length;
         const avgProgress = pvtTotal > 0
           ? Math.round(
-              pvtDispatches.reduce((sum, d) => sum + (d.tienDo || 0), 0) / pvtTotal
-            )
+            pvtDispatches.reduce((sum, d) => sum + (d.tienDo || 0), 0) / pvtTotal
+          )
           : 0;
 
         return {
@@ -139,8 +144,8 @@ export const statsService = {
         ).length;
         const avgProgress = tpTotal > 0
           ? Math.round(
-              tpDispatches.reduce((sum, d) => sum + (d.tienDo || 0), 0) / tpTotal
-            )
+            tpDispatches.reduce((sum, d) => sum + (d.tienDo || 0), 0) / tpTotal
+          )
           : 0;
 
         return {

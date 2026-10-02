@@ -129,29 +129,9 @@ export const parseDateSafely = (dateVal: any): Date | null => {
 export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai'] => {
   if (!d) return 'DANG_XU_LY';
 
-  // ⭐ CHECK CHUYÊN ĐỀ TRƯỚC — dùng logic mốc active
-  if (isChuyenDe(d)) {
-    const phase = getChuyenDePhase(d);
-    switch (phase.phase) {
-      case 'HOAN_THANH':
-        return 'HOAN_THANH';
-      case 'QUA_HAN':
-        return 'QUA_HAN';
-      case 'SAP_DEN_HAN':
-        return 'SAP_DEN_HAN';
-      case 'DANG_THUC_HIEN':
-      case 'CHUAN_BI':
-      default:
-        return 'DANG_XU_LY';
-    }
-  }
-
-  // ============================================
-  // CÔNG VĂN THƯỜNG — xử lý như cũ
-  // ============================================
   const thoiHanText = String(d.thoiHanXuLy || '').trim().toLowerCase();
 
-  // 1. Đã hoàn thành
+  // 1. HOÀN THÀNH
   if (
     d.trangThai === 'HOAN_THANH' ||
     thoiHanText.includes('hoàn thành') ||
@@ -162,12 +142,12 @@ export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai
     return 'HOAN_THANH';
   }
 
-  // 2. Chờ ý kiến Lãnh đạo
+  // 2. CHỜ Ý KIẾN LÃNH ĐẠO
   if (d.trangThai === 'CHO_Y_KIEN_LANH_DAO' || thoiHanText.includes('chờ ý kiến')) {
     return 'CHO_Y_KIEN_LANH_DAO';
   }
 
-  // 3. Quá hạn (từ text)
+  // 3. QUÁ HẠN (theo text)
   if (
     d.trangThai === 'QUA_HAN' ||
     thoiHanText.includes('quá hạn') ||
@@ -177,7 +157,7 @@ export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai
     return 'QUA_HAN';
   }
 
-  // 4. Sắp đến hạn (từ text)
+  // 4. SẮP ĐẾN HẠN (theo text)
   if (
     d.trangThai === 'SAP_DEN_HAN' ||
     thoiHanText.includes('sắp đến hạn') ||
@@ -191,7 +171,7 @@ export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai
     return 'SAP_DEN_HAN';
   }
 
-  // 5. Tính từ hạn báo cáo
+  // 5. TÍNH THEO HẠN — QUY TẮC MỚI
   if (d.hanBaoCaoXuLy) {
     const dDate = parseDateSafely(d.hanBaoCaoXuLy);
     if (dDate) {
@@ -201,13 +181,18 @@ export const resolveDispatchStatus = (d: Partial<Dispatch>): Dispatch['trangThai
       const diffMs = dDate.getTime() - today.getTime();
       const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
-      if (diffDays < 0) return 'QUA_HAN';
-      if (diffDays <= 3) return 'SAP_DEN_HAN';
-      return 'DANG_XU_LY';
+      if (diffDays < 0) {
+        return 'QUA_HAN';
+      } else if (diffDays <= 3) {
+        return 'SAP_DEN_HAN';
+      } else {
+        return 'DANG_XU_LY';
+      }
     }
   }
 
-  return d.trangThai || 'DANG_XU_LY';
+  // ⭐ FALLBACK CUỐI — BẮT BUỘC PHẢI CÓ
+  return (d.trangThai as Dispatch['trangThai']) || 'DANG_XU_LY';
 };
 
 // ============================================
@@ -265,9 +250,9 @@ export const calculateTimeRemaining = (
   if (diffDays < 0) {
     return { text: `Quá hạn ${Math.abs(diffDays)} ngày`, status: 'QUA_HAN' };
   } else if (diffDays === 0) {
-    return { text: 'Hạn chót hôm nay', status: 'SAP_DEN_HAN' };
+    return { text: 'Hạn cuối', status: 'SAP_DEN_HAN' };
   } else if (diffDays <= 3) {
-    return { text: `Còn ${diffDays} ngày (Khẩn)`, status: 'SAP_DEN_HAN' };
+    return { text: `Còn ${diffDays} ngày`, status: 'SAP_DEN_HAN' };
   } else {
     return { text: `Còn ${diffDays} ngày`, status: 'DANG_XU_LY' };
   }
