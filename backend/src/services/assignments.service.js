@@ -109,8 +109,8 @@ export const assignmentsService = {
           userId: pvt.pvtId,
           dispatchId,
           type: 'TASK_ASSIGNED',
-          title: '📋 Công văn mới được giao',
-          content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho bạn${
+          title: ' Công văn mới được chuyển tới',
+          content: `${currentUser.fullName} đã chuyển công văn ${dispatch.soCongVan} cho bạn${
             vtChiDao ? `: "${vtChiDao}"` : ''
           }`,
         });
