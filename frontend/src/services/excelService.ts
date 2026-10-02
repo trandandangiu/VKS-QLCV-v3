@@ -250,11 +250,11 @@ export const calculateTimeRemaining = (
   if (diffDays < 0) {
     return { text: `Quá hạn ${Math.abs(diffDays)} ngày`, status: 'QUA_HAN' };
   } else if (diffDays === 0) {
-    return { text: 'Hạn cuối', status: 'SAP_DEN_HAN' };
+    return { text: 'Đến hạn', status: 'SAP_DEN_HAN' };
   } else if (diffDays <= 3) {
-    return { text: `Còn ${diffDays} ngày`, status: 'SAP_DEN_HAN' };
+    return { text: `Sắp đến hạn`, status: 'SAP_DEN_HAN' };
   } else {
-    return { text: `Còn ${diffDays} ngày`, status: 'DANG_XU_LY' };
+    return { text: `Đang xử lý`, status: 'DANG_XU_LY' };
   }
 };
 

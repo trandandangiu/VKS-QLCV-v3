@@ -572,7 +572,7 @@ export const PublicHome: React.FC = () => {
 
   const getWorkspaceLabel = (): string => {
     if (currentUser?.role === 'ADMIN') return 'Bảng quản trị';
-    return 'Bàn làm việc';
+    return 'Cập nhật';
   };
 
   return (
@@ -665,7 +665,7 @@ export const PublicHome: React.FC = () => {
                               </div>
                               <div className="flex-1 text-left min-w-0">
                                 <div className="text-xs font-bold text-slate-800 group-hover:text-red-700 transition">
-                                  Trang công khai
+                                  Xem văn bản
                                 </div>
                                 <div className="text-[10px] text-slate-500 truncate">
                                   
