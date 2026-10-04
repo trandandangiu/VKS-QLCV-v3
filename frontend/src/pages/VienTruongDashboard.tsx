@@ -528,25 +528,9 @@ export const VienTruongDashboard: React.FC = () => {
       <main className="flex-1 max-w-[1680px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5 pb-24 sm:pb-5">
         {/* ⭐ Mobile sticky toolbar */}
         <div className="lg:hidden sticky top-0 z-30 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2 bg-slate-100/95 backdrop-blur-md border-b border-slate-200 mb-3 flex items-center gap-2">
-          <button
-            onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 shadow-sm cursor-pointer active:scale-95 transition"
-          >
-            {isMobileSidebarOpen ? '✕' : '☰'}
-            <span>{isMobileSidebarOpen ? 'Đóng' : 'Menu'}</span>
-          </button>
 
-          <button
-            onClick={() => {
-              setDispatchToEdit(null);
-              setIsAddEditModalOpen(true);
-            }}
-            className="ml-auto flex items-center gap-1.5 px-3 py-2 text-white rounded-lg text-xs font-bold shadow-sm cursor-pointer active:scale-95 transition"
-            style={{ backgroundColor: '#B71C1C' }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Tạo mới
-          </button>
+
+
         </div>
 
         <div className="flex flex-col lg:flex-row gap-5 items-start">

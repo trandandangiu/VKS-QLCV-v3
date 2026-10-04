@@ -565,7 +565,7 @@ export const PublicHeroSection: React.FC<PublicHeroSectionProps> = ({
         onSelect={id => onSelectTp?.(id)}
         onClose={() => setMobileSheet(null)}
         canClick={canClickTpCard}
-        title="Trưởng phòng phụ trách"
+        title="Trưởng phòng "
       />
     </div>
   );

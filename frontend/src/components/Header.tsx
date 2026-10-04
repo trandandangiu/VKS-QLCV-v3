@@ -48,7 +48,7 @@ export const Header: React.FC = () => {
               {/* Tiêu đề — ngắn trên mobile */}
               <h1 className="text-xs sm:text-base lg:text-xl font-black tracking-wide uppercase text-white leading-tight">
                 <span className="hidden sm:inline">Theo dõi tiến độ xử lý công văn</span>
-                <span className="sm:hidden">Tiến độ công văn</span>
+                <span className="sm:hidden">Theo dõi tiến độ xử lý công văn</span>
               </h1>
             </div>
           </Link>
