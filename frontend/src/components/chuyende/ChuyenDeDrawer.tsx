@@ -637,54 +637,23 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
               </Field>
 
               {/* Ngày + Người */}
-              <div className="grid grid-cols-2 gap-2">
-                <MiniField label="Ngày tiếp nhận" icon={Calendar}>
-                  {isEditing ? (
-                    <input
-                      type="date"
-                      value={form.ngayGui}
-                      onChange={e => updateField('ngayGui', e.target.value)}
-                      className={inputCls}
-                    />
-                  ) : (
-                    <span className="text-slate-800">
-                      {formatChuyenDeDate(localCD.ngayGui)}
-                    </span>
-                  )}
-                </MiniField>
-                <MiniField label="Người thực hiện" icon={User}>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={form.nguoiThucHien}
-                      onChange={e => updateField('nguoiThucHien', e.target.value)}
-                      className={inputCls}
-                      placeholder="Họ tên cán bộ..."
-                    />
-                  ) : (
-                    <span className="text-slate-800">
-                      {localCD.nguoiThucHien || '—'}
-                    </span>
-                  )}
-                </MiniField>
-              </div>
-
-              {/* Ghi chú */}
-              <Field label="Ghi chú" icon={Info}>
+              {/* Ngày tiếp nhận */}
+              <Field label="Ngày tiếp nhận" icon={Calendar}>
                 {isEditing ? (
-                  <textarea
-                    rows={2}
-                    value={form.ghiChu}
-                    onChange={e => updateField('ghiChu', e.target.value)}
+                  <input
+                    type="date"
+                    value={form.ngayGui}
+                    onChange={e => updateField('ngayGui', e.target.value)}
                     className={inputCls}
-                    placeholder="Ghi chú..."
                   />
                 ) : (
-                  <span className="text-slate-600">
-                    {localCD.ghiChu || '—'}
+                  <span className="text-slate-800">
+                    {formatChuyenDeDate(localCD.ngayGui)}
                   </span>
                 )}
               </Field>
+
+
             </Section>
 
             {/* ═══ SECTION 2: MỐC THỜI HẠN ═══ */}
@@ -692,7 +661,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
               icon={Clock}
               title={
                 isEditing
-                  ? `Chuỗi mốc thời hạn (${milestones.length}) — Đang sửa`
+                  ? `Chuỗi mốc thời hạn (${milestones.length}) `
                   : `Chuỗi mốc thời hạn (${displayMilestones.length})`
               }
             >
@@ -789,10 +758,10 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                               <div className="flex items-center gap-2 min-w-0">
                                 <span
                                   className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${isDone
-                                      ? 'bg-emerald-600 text-white'
-                                      : isActive
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-slate-300 text-slate-600'
+                                    ? 'bg-emerald-600 text-white'
+                                    : isActive
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-slate-300 text-slate-600'
                                     }`}
                                 >
                                   {isDone ? '✓' : idx + 1}
@@ -869,67 +838,25 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
             </Section>
 
             {/* ═══ SECTION 3: PHÂN CÔNG ═══ */}
-            {(isEditing || localCD.assignedPvtName || localCD.assignedTpName) && (
-              <Section icon={UserCheck} title="Phân công xử lý">
-                {isEditing ? (
-                  <div className="space-y-3">
-                    <Field label="Phó viện trưởng phụ trách" icon={UserCheck}>
-                      <select
-                        value={selectedPvtId}
-                        onChange={e => {
-                          setSelectedPvtId(e.target.value);
-                          setIsDirty(true);
-                        }}
-                        className={inputCls}
-                      >
-                        <option value="">-- Chưa phân công --</option>
-                        {pvtUsers.map(u => (
-                          <option key={u.id} value={u.id}>
-                            {u.roomCode ? `${u.roomCode} - ` : ''}
-                            {u.fullName}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <Field label="Đơn vị thực hiện" icon={Building2}>
+            {(isEditing ||
+              localCD.assignedPvtName ||
+              localCD.assignedTpName ||
+              localCD.nguoiThucHien ||
+              localCD.ghiChu) && (
+                <Section icon={UserCheck} title="Phân công xử lý">
+                  {isEditing ? (
+                    <div className="space-y-3">
+                      <Field label="Phó viện trưởng phụ trách" icon={UserCheck}>
                         <select
-                          value={selectedDeptCode}
+                          value={selectedPvtId}
                           onChange={e => {
-                            const code = e.target.value;
-                            setSelectedDeptCode(code);
-                            // ⭐ Auto chọn Trưởng phòng khi chọn phòng (giống DispatchModal)
-                            const matchedTp = allTpUsers.find(u => u.roomCode === code);
-                            if (matchedTp) {
-                              setSelectedTpId(matchedTp.id);
-                            } else {
-                              setSelectedTpId('');
-                            }
-                            setIsDirty(true);
-                          }}
-                          className={inputCls}
-                        >
-                          <option value="">-- Chọn phòng --</option>
-                          {departments.map(d => (
-                            <option key={d.id} value={d.code}>
-                              {d.name}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-
-                      <Field label="Trưởng phòng thực hiện" icon={CornerDownRight}>
-                        <select
-                          value={selectedTpId}
-                          onChange={e => {
-                            setSelectedTpId(e.target.value);
+                            setSelectedPvtId(e.target.value);
                             setIsDirty(true);
                           }}
                           className={inputCls}
                         >
                           <option value="">-- Chưa phân công --</option>
-                          {filteredTpUsers.map(u => (
+                          {pvtUsers.map(u => (
                             <option key={u.id} value={u.id}>
                               {u.roomCode ? `${u.roomCode} - ` : ''}
                               {u.fullName}
@@ -937,30 +864,115 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                           ))}
                         </select>
                       </Field>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Field label="Đơn vị thực hiện" icon={Building2}>
+                          <select
+                            value={selectedDeptCode}
+                            onChange={e => {
+                              const code = e.target.value;
+                              setSelectedDeptCode(code);
+                              // ⭐ Auto chọn Trưởng phòng khi chọn phòng (giống DispatchModal)
+                              const matchedTp = allTpUsers.find(u => u.roomCode === code);
+                              if (matchedTp) {
+                                setSelectedTpId(matchedTp.id);
+                              } else {
+                                setSelectedTpId('');
+                              }
+                              setIsDirty(true);
+                            }}
+                            className={inputCls}
+                          >
+                            <option value="">-- Chọn phòng --</option>
+                            {departments.map(d => (
+                              <option key={d.id} value={d.code}>
+                                {d.name}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+
+                        <Field label="Trưởng phòng" icon={CornerDownRight}>
+                          <select
+                            value={selectedTpId}
+                            onChange={e => {
+                              setSelectedTpId(e.target.value);
+                              setIsDirty(true);
+                            }}
+                            className={inputCls}
+                          >
+                            <option value="">-- Chưa phân công --</option>
+                            {filteredTpUsers.map(u => (
+                              <option key={u.id} value={u.id}>
+                                {u.roomCode ? `${u.roomCode} - ` : ''}
+                                {u.fullName}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                      </div>
+
+                      {/* ⭐ Người thực hiện */}
+                      <Field label="Người thực hiện" icon={User}>
+                        <input
+                          type="text"
+                          value={form.nguoiThucHien}
+                          onChange={e => updateField('nguoiThucHien', e.target.value)}
+                          className={inputCls}
+                          placeholder="Họ tên cán bộ / Kiểm sát viên..."
+                        />
+                      </Field>
+
+                      {/* ⭐ Ghi chú */}
+                      <Field label="Ghi chú" icon={Info}>
+                        <textarea
+                          rows={2}
+                          value={form.ghiChu}
+                          onChange={e => updateField('ghiChu', e.target.value)}
+                          className={inputCls}
+                          placeholder="Ghi chú xử lý..."
+                        />
+                      </Field>
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    {localCD.assignedPvtName && (
-                      <Field label="Phó viện trưởng phụ trách" icon={UserCheck}>
-                        <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-50 text-purple-800 border border-purple-200 rounded-md font-semibold">
-                          <UserCheck className="w-3.5 h-3.5" />
-                          {localCD.assignedPvtName}
-                        </span>
-                      </Field>
-                    )}
-                    {localCD.assignedTpName && (
-                      <Field label="Trưởng phòng thực hiện" icon={CornerDownRight}>
-                        <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md font-semibold">
-                          <CornerDownRight className="w-3.5 h-3.5" />
-                          {localCD.assignedTpName}
-                        </span>
-                      </Field>
-                    )}
-                  </>
-                )}
-              </Section>
-            )}
+                  ) : (
+                    <>
+                      {localCD.assignedPvtName && (
+                        <Field label="Phó viện trưởng phụ trách" icon={UserCheck}>
+                          <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-50 text-purple-800 border border-purple-200 rounded-md font-semibold">
+                            <UserCheck className="w-3.5 h-3.5" />
+                            {localCD.assignedPvtName}
+                          </span>
+                        </Field>
+                      )}
+
+                      {localCD.assignedTpName && (
+                        <Field label="Trưởng phòng" icon={CornerDownRight}>
+                          <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md font-semibold">
+                            <CornerDownRight className="w-3.5 h-3.5" />
+                            {localCD.assignedTpName}
+                          </span>
+                        </Field>
+                      )}
+
+                      {/* ⭐ Người thực hiện */}
+                      {localCD.nguoiThucHien && (
+                        <Field label="Người thực hiện" icon={User}>
+                          <span className="text-slate-800 font-medium">
+                            {localCD.nguoiThucHien}
+                          </span>
+                        </Field>
+                      )}
+
+                      {/* ⭐ Ghi chú */}
+                      {localCD.ghiChu && (
+                        <Field label="Ghi chú" icon={Info}>
+                          <span className="text-slate-600">{localCD.ghiChu}</span>
+                        </Field>
+                      )}
+                    </>
+                  )}
+                </Section>
+              )}
 
             {/* ═══ SECTION 4: FILES ═══ */}
             <Section
@@ -1055,8 +1067,8 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
         <div className="fixed bottom-6 right-6 z-[70]">
           <div
             className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
-                ? 'bg-slate-900 text-white border-slate-700'
-                : 'bg-rose-600 text-white border-rose-700'
+              ? 'bg-slate-900 text-white border-slate-700'
+              : 'bg-rose-600 text-white border-rose-700'
               }`}
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />

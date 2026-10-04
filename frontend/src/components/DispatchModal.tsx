@@ -577,7 +577,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
               </h2>
               <p className="text-xs text-red-100">
                 {dispatchToEdit
-                  ? `Đang sửa: ${dispatchToEdit.soCongVan}`
+                  ? `: ${dispatchToEdit.soCongVan}`
                   : ''}
               </p>
             </div>

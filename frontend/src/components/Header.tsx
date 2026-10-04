@@ -41,7 +41,7 @@ export const Header: React.FC = () => {
                   VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
                 </span>
                 <span className="sm:hidden">
-                  VKSND TP.HCM
+                  VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
                 </span>
               </div>
 

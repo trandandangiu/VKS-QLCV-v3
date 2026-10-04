@@ -620,7 +620,7 @@ const ChuyenDeDetailInner: React.FC = () => {
 
                 <div>
                   <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Trưởng phòng thực hiện
+                    Trưởng phòng
                   </div>
                   {chuyenDe.assignedTpName ? (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg font-semibold text-sm">

@@ -389,7 +389,7 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
                   {chuyenDeToEdit ? 'Chỉnh sửa chuyên đề' : 'Tạo chuyên đề'}
                 </h2>
                 <p className="text-xs text-teal-100">
-                  {chuyenDeToEdit ? `Đang sửa: ${chuyenDeToEdit.soCongVan}` : ''}
+                  {chuyenDeToEdit ? `: ${chuyenDeToEdit.soCongVan}` : ''}
                 </p>
               </div>
             </div>

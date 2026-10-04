@@ -113,7 +113,7 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
   const getDashboardButtonLabel = (): string => {
     const pos = (currentUser.position || '').trim();
     if (currentUser.role === 'ADMIN') return 'Bảng quản trị';
-    if (pos) return `Bàn làm việc`;
+    if (pos) return `Cập nhật`;
     switch (currentUser.role) {
       case 'VIEN_TRUONG': return 'Bàn làm việc Viện trưởng';
       case 'PHO_VIEN_TRUONG': return 'Bàn làm việc Phó Viện trưởng';
@@ -216,7 +216,7 @@ export const UserMenuDropdown: React.FC<UserMenuDropdownProps> = ({
               </div>
               <div className="flex-1 text-left min-w-0">
                 <div className="text-xs font-bold text-slate-800 group-hover:text-red-700 transition">
-                  Trang tiến độ công khai
+                  Xem văn bản
                 </div>
                 <div className="text-[10px] text-slate-500 truncate">
 
