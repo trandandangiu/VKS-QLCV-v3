@@ -132,7 +132,7 @@ export const PvtTpMobileSheet: React.FC<PvtTpMobileSheetProps> = ({
                                                 {displayName}
                                             </span>
                                             {card.roomCode && (
-                                                <span className="text-sm font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                <span className="text-sm font-mono font-black text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded">
                                                     {card.roomCode}
                                                 </span>
                                             )}

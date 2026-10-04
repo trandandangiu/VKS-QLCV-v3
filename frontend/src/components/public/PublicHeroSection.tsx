@@ -187,7 +187,7 @@ export const PublicHeroSection: React.FC<PublicHeroSectionProps> = ({
               THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN
             </h1>
             <h1 className="sm:hidden text-base font-black tracking-tight leading-tight">
-              Tiến độ công văn
+              THEO DÕI TIẾN ĐỘ XỬ LÝ CÔNG VĂN
             </h1>
 
             <div className="flex items-center gap-3 text-[11px] sm:text-xs text-red-100 flex-wrap">
