@@ -94,7 +94,7 @@ export const Login: React.FC = () => {
               />
             </div>
 
-            <h3 className="text-xs sm:text-sm lg:text-base font-semibold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-amber-100 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] mb-3 leading-relaxed max-w-xl text-center">
+            <h3 className="text-[10px] xs:text-xs sm:text-sm lg:text-base font-semibold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-amber-100 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] mb-3 leading-relaxed max-w-xl text-center whitespace-nowrap">
               VIỆN KIỂM SÁT NHÂN DÂN THÀNH PHỐ HỒ CHÍ MINH
             </h3>
 
