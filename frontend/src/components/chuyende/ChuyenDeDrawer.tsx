@@ -5,6 +5,7 @@ import {
   UserCheck, CornerDownRight, FileText, Paperclip,
   Eye, Save, Pencil, Check, Calendar,
   Building2, User, Hash, Info,
+  Trash2,
 } from 'lucide-react';
 import { Dispatch } from '../../types/dispatch';
 import { apiClient } from '../../services/apiClient';
@@ -31,6 +32,7 @@ interface ChuyenDeDrawerProps {
   onUpdate?: (id: string, updates: Partial<Dispatch>) => Promise<void>;
   canEdit?: boolean;
   readOnly?: boolean;
+  onDelete?: (cd: Dispatch) => void | Promise<void>;  // ⭐ THÊM
 }
 
 interface Attachment {
@@ -70,6 +72,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
   onUpdate,
   canEdit = false,
   readOnly = false,
+  onDelete,  // ⭐ THÊM
 }) => {
   const { allUsers } = useAuth();
 
@@ -77,6 +80,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);  // ⭐ THÊM
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   // ⭐ Edit mode state
@@ -462,6 +466,34 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
     }
   };
 
+  // ⭐ XOÁ CỨNG chuyên đề
+  const handleDelete = async () => {
+    if (!localCD || !onDelete) return;
+    if (
+      !window.confirm(
+        `⚠️ XOÁ VĨNH VIỄN chuyên đề "${localCD.soCongVan}"?\n\n` +
+        `Hành động này KHÔNG THỂ hoàn tác và sẽ xoá toàn bộ:\n` +
+        `• Thông tin chuyên đề\n` +
+        `• Các mốc thời hạn\n` +
+        `• File đính kèm\n` +
+        `• Lịch sử xử lý\n` +
+        `• Phân công liên quan`
+      )
+    )
+      return;
+
+    setIsDeleting(true);
+    try {
+      await onDelete(localCD);
+      showToast('Đã xoá vĩnh viễn chuyên đề', 'success');
+      setTimeout(() => onClose(), 400);
+    } catch (err: any) {
+      showToast(err?.message || 'Không thể xoá chuyên đề', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // ⭐ Mở file
   const handleOpenFile = (att: Attachment) => {
     const token = apiClient.getToken();
@@ -551,7 +583,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
               action={
                 canEditInfo ? (
                   isEditing ? (
-                    // ⭐ EDIT MODE: X + ✓ ngay trong header (giống Dispatch)
                     <div className="flex items-center gap-1">
                       <button
                         onClick={handleCancelEdit}
@@ -575,7 +606,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                       </button>
                     </div>
                   ) : (
-                    // ⭐ VIEW MODE: Pencil
                     <button
                       onClick={() => setIsEditing(true)}
                       className="p-1 rounded hover:bg-slate-200 text-slate-500 cursor-pointer"
@@ -587,7 +617,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                 ) : null
               }
             >
-              {/* Số công văn */}
               <Field label="Số / Ký hiệu" icon={Hash}>
                 {isEditing ? (
                   <input
@@ -604,7 +633,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                 )}
               </Field>
 
-              {/* Nội dung */}
               <Field label="Nội dung chuyên đề" icon={FileText}>
                 {isEditing ? (
                   <textarea
@@ -621,7 +649,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                 )}
               </Field>
 
-              {/* Đơn vị ban hành */}
               <Field label="Đơn vị ban hành" icon={Building2}>
                 {isEditing ? (
                   <AgencyCombobox
@@ -636,8 +663,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                 )}
               </Field>
 
-              {/* Ngày + Người */}
-              {/* Ngày tiếp nhận */}
               <Field label="Ngày tiếp nhận" icon={Calendar}>
                 {isEditing ? (
                   <input
@@ -652,8 +677,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                   </span>
                 )}
               </Field>
-
-
             </Section>
 
             {/* ═══ SECTION 2: MỐC THỜI HẠN ═══ */}
@@ -872,7 +895,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                             onChange={e => {
                               const code = e.target.value;
                               setSelectedDeptCode(code);
-                              // ⭐ Auto chọn Trưởng phòng khi chọn phòng (giống DispatchModal)
                               const matchedTp = allTpUsers.find(u => u.roomCode === code);
                               if (matchedTp) {
                                 setSelectedTpId(matchedTp.id);
@@ -912,7 +934,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                         </Field>
                       </div>
 
-                      {/* ⭐ Người thực hiện */}
                       <Field label="Người thực hiện" icon={User}>
                         <input
                           type="text"
@@ -923,7 +944,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                         />
                       </Field>
 
-                      {/* ⭐ Ghi chú */}
                       <Field label="Ghi chú" icon={Info}>
                         <textarea
                           rows={2}
@@ -954,7 +974,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                         </Field>
                       )}
 
-                      {/* ⭐ Người thực hiện */}
                       {localCD.nguoiThucHien && (
                         <Field label="Người thực hiện" icon={User}>
                           <span className="text-slate-800 font-medium">
@@ -963,7 +982,6 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                         </Field>
                       )}
 
-                      {/* ⭐ Ghi chú */}
                       {localCD.ghiChu && (
                         <Field label="Ghi chú" icon={Info}>
                           <span className="text-slate-600">{localCD.ghiChu}</span>
@@ -1027,8 +1045,30 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
 
           {/* ═══════════ FOOTER ═══════════ */}
           <div className="px-4 py-3 bg-white border-t border-slate-200 shrink-0 flex items-center justify-between gap-2">
-            {/* Cụm bên trái: nút Lưu (chỉ hiện khi đang edit) */}
+            {/* Cụm bên trái: nút Xoá (khi không edit) + nút Lưu (khi đang edit) */}
             <div className="flex items-center gap-2">
+              {/* ⭐ NÚT XOÁ — chỉ hiện khi KHÔNG edit */}
+              {!isEditing && canEditInfo && onDelete && (
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting || isSaving}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer disabled:opacity-50"
+                  title="Xoá vĩnh viễn chuyên đề này"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Đang xoá...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Xoá
+                    </>
+                  )}
+                </button>
+              )}
+
               {isEditing && canEditInfo && (
                 <button
                   onClick={handleSave}

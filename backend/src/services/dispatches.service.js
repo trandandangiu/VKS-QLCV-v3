@@ -380,6 +380,9 @@ export const dispatchesService = {
   // ============================================
   // 4. CẬP NHẬT
   // ============================================
+  // ============================================
+  // 4. CẬP NHẬT
+  // ============================================
   async updateDispatch(dispatchId, data, currentUser) {
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
@@ -425,7 +428,7 @@ export const dispatchesService = {
       'nguoiThucHien',
       'ghiChu',
       'mucDoKhan',
-      'loaiCongVan',      // ⭐ THÊM DÒNG NÀY
+      'loaiCongVan',
       'customFields',
       'tags',
     ];
@@ -444,6 +447,61 @@ export const dispatchesService = {
       }
     });
 
+    // ⭐═══════════════════════════════════════════════════════════
+    // ⭐ SPECIAL HANDLING: trangThai + tienDo
+    // ⭐ Cho phép ChuyenDeDrawer cập nhật khi hoàn thành mốc
+    // ⭐═══════════════════════════════════════════════════════════
+    const VALID_STATUSES = [
+      'MOI_TAO',
+      'DANG_XU_LY',
+      'HOAN_THANH',
+      'QUA_HAN',
+      'SAP_DEN_HAN',
+      'CHO_Y_KIEN_LANH_DAO',
+      'CHO_PVT_XU_LY',
+      'CHO_TP_XU_LY',
+      'CHO_PVT_DUYET',
+      'CHO_VT_DUYET',
+      'CHO_TRINH_VT',
+      'VT_TRA_LAI',
+      'PVT_TRA_LAI',
+    ];
+
+    if (data.trangThai !== undefined) {
+      if (!VALID_STATUSES.includes(data.trangThai)) {
+        throw {
+          status: 400,
+          message: `Trạng thái không hợp lệ: "${data.trangThai}"`,
+        };
+      }
+      updateData.trangThai = data.trangThai;
+    }
+
+    if (data.tienDo !== undefined) {
+      const tienDoNum = parseInt(data.tienDo, 10);
+      if (isNaN(tienDoNum) || tienDoNum < 0 || tienDoNum > 100) {
+        throw {
+          status: 400,
+          message: 'Tiến độ phải là số nguyên từ 0 đến 100',
+        };
+      }
+      updateData.tienDo = tienDoNum;
+    }
+
+    // ⭐ Nếu set HOAN_THANH → tự động set completedAt
+    if (data.trangThai === 'HOAN_THANH' && dispatch.trangThai !== 'HOAN_THANH') {
+      updateData.completedAt = new Date();
+    }
+
+    // ⭐ Nếu rời khỏi HOAN_THANH → xóa completedAt
+    if (
+      data.trangThai !== undefined &&
+      data.trangThai !== 'HOAN_THANH' &&
+      dispatch.trangThai === 'HOAN_THANH'
+    ) {
+      updateData.completedAt = null;
+    }
+
     const updated = await prisma.dispatch.update({
       where: { id: dispatchId },
       data: updateData,
@@ -457,6 +515,10 @@ export const dispatchesService = {
         action: 'UPDATE_DISPATCH',
         entityType: 'dispatch',
         entityId: dispatchId,
+        oldValue: {
+          trangThai: dispatch.trangThai,
+          tienDo: dispatch.tienDo,
+        },
         newValue: updateData,
       },
     });
@@ -467,33 +529,104 @@ export const dispatchesService = {
   // ============================================
   // 5. XÓA MỀM
   // ============================================
-  async deleteDispatch(dispatchId, currentUser) {
+  // ============================================
+  // 5b. XÓA CỨNG (HARD DELETE) ⭐ THÊM MỚI
+  // Xóa vĩnh viễn khỏi DB, cascade tất cả bảng liên quan
+  // ============================================
+  async hardDeleteDispatch(dispatchId, currentUser) {
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
-    });
-
-    if (!dispatch || dispatch.deletedAt) {
-      throw { status: 404, message: 'Không tìm thấy công văn' };
-    }
-
-    await prisma.dispatch.update({
-      where: { id: dispatchId },
-      data: { deletedAt: new Date() },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        userId: currentUser.id,
-        userName: currentUser.fullName,
-        action: 'DELETE_DISPATCH',
-        entityType: 'dispatch',
-        entityId: dispatchId,
+      include: {
+        _count: {
+          select: {
+            attachments: true,
+            reports: true,
+            dispatchPvts: true,
+            dispatchTps: true,
+          },
+        },
       },
     });
 
-    return { success: true, message: 'Đã xóa công văn' };
-  },
+    if (!dispatch) {
+      throw { status: 404, message: 'Không tìm thấy công văn' };
+    }
 
+    // ⭐ Chỉ ADMIN hoặc VIEN_TRUONG mới được xóa cứng
+    const perms = currentUser.permissions || [];
+    const roles = currentUser.roles || [];
+    const canHardDelete =
+      perms.includes('dispatch:delete') ||
+      roles.includes('ADMIN') ||
+      roles.includes('VIEN_TRUONG');
+
+    if (!canHardDelete) {
+      throw {
+        status: 403,
+        message: 'Chỉ Admin hoặc Viện trưởng mới được xóa vĩnh viễn công văn',
+      };
+    }
+
+    // ⭐ Xóa file vật lý trên ổ đĩa (nếu có)
+    try {
+      const attachments = await prisma.attachment.findMany({
+        where: { dispatchId },
+        select: { filePath: true },
+      });
+
+      const fs = await import('fs');
+      for (const att of attachments) {
+        if (att.filePath && fs.existsSync(att.filePath)) {
+          try {
+            fs.unlinkSync(att.filePath);
+          } catch (fileErr) {
+            console.warn(
+              `⚠️ Không xóa được file: ${att.filePath}`,
+              fileErr.message
+            );
+          }
+        }
+      }
+    } catch (fsErr) {
+      console.warn('⚠️ Lỗi xóa file vật lý:', fsErr.message);
+    }
+
+    // ⭐ Xóa dispatch — Prisma tự cascade:
+    //   dispatch_pvts, dispatch_tps, assignments, attachments,
+    //   reports, rejections, notifications
+    // (theo schema.prisma: onDelete: Cascade)
+    await prisma.$transaction(async tx => {
+      // Audit log TRƯỚC khi xóa (vì entityId sẽ mất)
+      await tx.auditLog.create({
+        data: {
+          userId: currentUser.id,
+          userName: currentUser.fullName,
+          userRole: currentUser.roles?.[0] || 'ADMIN',
+          action: 'HARD_DELETE_DISPATCH',
+          entityType: 'dispatch',
+          entityId: dispatchId,
+          oldValue: {
+            soCongVan: dispatch.soCongVan,
+            tenCongVan: dispatch.tenCongVan,
+            donViBanHanh: dispatch.donViBanHanh,
+            trangThai: dispatch.trangThai,
+            soLanTraLai: dispatch.soLanTraLai,
+            counts: dispatch._count,
+          },
+        },
+      });
+
+      // Hard delete
+      await tx.dispatch.delete({
+        where: { id: dispatchId },
+      });
+    });
+
+    return {
+      success: true,
+      message: `Đã xóa vĩnh viễn công văn "${dispatch.soCongVan}"`,
+    };
+  },
   // ============================================
   // 6. THỐNG KÊ
   // ⭐ Cho phép KHÁCH truy cập

@@ -85,7 +85,17 @@ export const dispatchesController = {
       next(err);
     }
   },
-
+  async hardDeleteDispatch(req, res, next) {
+    try {
+      const result = await dispatchesService.hardDeleteDispatch(
+        req.params.id,
+        req.user
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
   // ============================================
   // 6. GET /api/dispatches/stats
   // ============================================

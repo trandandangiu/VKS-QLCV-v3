@@ -304,11 +304,11 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
         // ⭐ PVT (giữ nguyên)
         __assignPvt: pvtUser
           ? {
-              pvtId: pvtUser.id,
-              pvtName: pvtUser.fullName,
-              roomCode: pvtUser.roomCode || '',
-              isPrimary: true,
-            }
+            pvtId: pvtUser.id,
+            pvtName: pvtUser.fullName,
+            roomCode: pvtUser.roomCode || '',
+            isPrimary: true,
+          }
           : undefined,
 
         // ⭐ FIX #3: __assignTp có fallback giống DispatchModal
@@ -529,6 +529,36 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
                   </select>
                 </Field>
               </div>
+
+              {/* ⭐ THÊM: Người thực hiện */}
+              <div className="mt-3">
+                <Field label="NGƯỜI THỰC HIỆN">
+                  <input
+                    type="text"
+                    value={formData.nguoiThucHien}
+                    onChange={e =>
+                      setFormData({ ...formData, nguoiThucHien: e.target.value })
+                    }
+                    placeholder="Họ tên cán bộ / Kiểm sát viên..."
+                    className="w-full h-9 px-3 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  />
+                </Field>
+              </div>
+            </div>
+
+            {/* ⭐ THÊM: Ghi chú */}
+            <div className="pt-3 border-t border-slate-200">
+              <Field label="GHI CHÚ">
+                <textarea
+                  rows={2}
+                  value={formData.ghiChu}
+                  onChange={e =>
+                    setFormData({ ...formData, ghiChu: e.target.value })
+                  }
+                  placeholder="Ghi chú xử lý chuyên đề..."
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                />
+              </Field>
             </div>
 
             {/* ĐÍNH KÈM */}
@@ -623,13 +653,12 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
       {!propShowToast && toast && (
         <div className="fixed bottom-6 right-6 z-[80] animate-fadeIn">
           <div
-            className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${
-              toast.type === 'success'
+            className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
                 ? 'bg-slate-900 text-white border-slate-700'
                 : toast.type === 'error'
-                ? 'bg-rose-600 text-white border-rose-700'
-                : 'bg-blue-600 text-white border-blue-700'
-            }`}
+                  ? 'bg-rose-600 text-white border-rose-700'
+                  : 'bg-blue-600 text-white border-blue-700'
+              }`}
           >
             {toast.type === 'success' && (
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />

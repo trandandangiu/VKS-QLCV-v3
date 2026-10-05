@@ -907,6 +907,7 @@ export const VienTruongDashboard: React.FC = () => {
           setDetailDispatch(null);
           reload();
         }}
+
       />
 
       <VtPvtDetailDrawer
@@ -923,13 +924,12 @@ export const VienTruongDashboard: React.FC = () => {
       {toast && (
         <div className="fixed z-[100] bottom-20 left-1/2 -translate-x-1/2 sm:bottom-6 sm:left-auto sm:right-6 sm:translate-x-0 px-4 w-[calc(100%-2rem)] sm:w-auto max-w-sm">
           <div
-            className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border ${
-              toast.type === 'success'
-                ? 'bg-slate-900 text-white border-slate-700'
-                : toast.type === 'error'
-                  ? 'bg-rose-900 text-white border-rose-700'
-                  : 'bg-amber-900 text-white border-amber-700'
-            }`}
+            className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
+              ? 'bg-slate-900 text-white border-slate-700'
+              : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-700'
+                : 'bg-amber-900 text-white border-amber-700'
+              }`}
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="flex-1">{toast.message}</span>
@@ -1016,6 +1016,12 @@ export const VienTruongDashboard: React.FC = () => {
         canEdit={true}
         onUpdate={async (id, updates) => {
           await apiClient.updateDispatch(id, updates);
+          reload();
+        }}
+        onDelete={async (cd) => {                                 // ⭐ THÊM
+          const ok = await apiClient.hardDeleteDispatch(cd.id);   // ⭐ HARD DELETE
+          if (!ok) throw new Error('Không thể xoá chuyên đề');
+          setChuyenDeDetail(null);
           reload();
         }}
       />

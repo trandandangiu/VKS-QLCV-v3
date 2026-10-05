@@ -137,7 +137,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     ghiChu: '',
     assignedPvtId: '',
     assignedTpId: '',
-    assignedDeptCode: '',    // ⭐ THÊM
+    assignedDeptCode: '',
     nguoiThucHien: '',
   });
 
@@ -426,12 +426,17 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     }
   };
 
-  // ===== DELETE =====
+  // ===== DELETE (⭐ XOÁ CỨNG) =====
   const handleDelete = async () => {
     if (!onDelete) return;
     if (
       !window.confirm(
-        `Xoá công văn "${d.soCongVan}"?\n\nCông văn sẽ bị ẩn khỏi danh sách.`
+        `⚠️ XOÁ VĨNH VIỄN công văn "${d.soCongVan}"?\n\n` +
+        `Hành động này KHÔNG THỂ hoàn tác và sẽ xoá toàn bộ:\n` +
+        `• Thông tin công văn\n` +
+        `• File đính kèm\n` +
+        `• Lịch sử xử lý\n` +
+        `• Phân công liên quan`
       )
     )
       return;
@@ -439,7 +444,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
     setIsDeleting(true);
     try {
       await onDelete(d);
-      showToast('Đã xoá công văn', 'success');
+      showToast('Đã xoá vĩnh viễn công văn', 'success');
       setTimeout(() => onClose(), 400);
     } catch (err: any) {
       showToast(err?.message || 'Không thể xoá công văn', 'error');
@@ -673,7 +678,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 )}
               </Field>
 
-              {/* ⭐ ĐỔI: "Trưởng phòng thực hiện" → "Đơn vị thực hiện" */}
               <Field label="Đơn vị thực hiện">
                 {isEditing ? (
                   <select
@@ -682,7 +686,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                       const code = e.target.value;
                       updateField('assignedDeptCode', code);
 
-                      // Tự động tìm Trưởng phòng của phòng đó
                       const matchedTp = tpUsers.find(t => t.roomCode === code);
                       if (matchedTp) {
                         updateField('assignedTpId', matchedTp.id);
@@ -931,7 +934,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                   onClick={handleDelete}
                   disabled={isDeleting || isCompleting || isReopening}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer disabled:opacity-50"
-                  title="Xoá công văn (ẩn khỏi danh sách)"
+                  title="Xoá vĩnh viễn công văn này"
                 >
                   {isDeleting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -945,7 +948,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
 
             {/* ─── Cụm bên phải: Lưu (khi edit) + Đóng ─── */}
             <div className="flex items-center gap-2">
-              {/* ⭐ Khi đang edit → CHỈ hiện nút Lưu (bỏ Hủy vì đã có Đóng) */}
               {isEditing && canEdit && onUpdate && (
                 <button
                   onClick={handleSave}
@@ -962,7 +964,6 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 </button>
               )}
 
-              {/* Nút Đóng — luôn hiện */}
               <button
                 onClick={onClose}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 border border-slate-300 transition cursor-pointer"

@@ -201,14 +201,20 @@ router.put(
 );
 
 // ============================================
-// 6. DELETE /api/dispatches/:id
+// 6b. DELETE /api/dispatches/:id/hard-delete ⭐ THÊM MỚI
+// Xóa VĨNH VIỄN công văn — CHỈ ADMIN/VT
 // ============================================
 /**
  * @swagger
- * /api/dispatches/{id}:
- *   tags: [Dispatches]
+ * /api/dispatches/{id}/hard-delete:
  *   delete:
- *     summary: Xóa mềm công văn
+ *     tags: [Dispatches]
+ *     summary: Xóa VĨNH VIỄN công văn khỏi CSDL
+ *     description: |
+ *       ⚠️ Hành động KHÔNG THỂ hoàn tác.
+ *       Cascade xóa: assignments, attachments, reports, rejections,
+ *       dispatch_pvts, dispatch_tps, notifications.
+ *       Chỉ ADMIN hoặc VIEN_TRUONG mới được gọi.
  *     parameters:
  *       - in: path
  *         name: id
@@ -218,14 +224,17 @@ router.put(
  *     responses:
  *       200:
  *         description: Xóa thành công
+ *       403:
+ *         description: Không có quyền
+ *       404:
+ *         description: Không tìm thấy
  */
 router.delete(
-  '/:id',
-  authenticate,                          // ⭐ THÊM
+  '/:id/hard-delete',
+  authenticate,
   requirePermission('dispatch:delete'),
-  dispatchesController.deleteDispatch
+  dispatchesController.hardDeleteDispatch
 );
-
 // ============================================
 // 7. PATCH /api/dispatches/:id/complete
 // PVT/TP/VT tự đánh dấu hoàn thành — CẦN LOGIN
