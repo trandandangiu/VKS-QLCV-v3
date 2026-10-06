@@ -312,7 +312,11 @@ export const dispatchesService = {
     // 🔔 BROADCAST THÔNG BÁO CÔNG VĂN MỚI
     // Gửi cho tất cả VT, PVT, TP (trừ người tạo)
     // ═══════════════════════════════════════════
+    // ⭐ CHỈ BROADCAST 1 LẦN — gửi cho TẤT CẢ (user + khách)
+    // Không cần gửi riêng lẻ từng user nữa
+    // Vì SSE có thể dùng broadcast qua notification table
     try {
+      // 1. Tạo notification cho tất cả user VT/PVT/TP (lưu vào DB)
       const allUsers = await prisma.user.findMany({
         where: {
           deletedAt: null,
@@ -320,38 +324,55 @@ export const dispatchesService = {
           id: { not: currentUser.id },
         },
         include: {
-          userRoles: {
-            include: { role: true },
-          },
+          userRoles: { include: { role: true } },
         },
       });
 
       const targetUsers = allUsers.filter(u =>
-        u.userRoles.some(
-          ur =>
-            ur.role.code === 'VIEN_TRUONG' ||
-            ur.role.code === 'PHO_VIEN_TRUONG' ||
-            ur.role.code === 'TRUONG_PHONG'
+        u.userRoles.some(ur =>
+          ['VIEN_TRUONG', 'PHO_VIEN_TRUONG', 'TRUONG_PHONG'].includes(ur.role.code)
         )
       );
 
-      console.log(
-        `🔔 Broadcast công văn mới "${soCongVan}" đến ${targetUsers.length} users`
-      );
+      console.log(`🔔 Tạo notification cho ${targetUsers.length} users`);
 
-      for (const u of targetUsers) {
-        try {
-          await createAndPushNotification(null, {
-            userId: u.id,
-            dispatchId: dispatch.id,
-            type: 'DISPATCH_CREATED',
-            title: '📋 Công văn mới',
-            content: `${soCongVan} — "${tenCongVan}" (tạo bởi ${currentUser.fullName})`,
-          });
-        } catch (e) {
-          console.error(`❌ Lỗi notif cho ${u.id}:`, e.message);
-        }
-      }
+      // 2. Bulk insert notifications (nhanh hơn for-loop)
+      await prisma.notification.createMany({
+        data: targetUsers.map(u => ({
+          userId: u.id,
+          dispatchId: dispatch.id,
+          type: 'DISPATCH_CREATED',
+          title: '📋 Công văn mới',
+          content: `${soCongVan} — "${tenCongVan}" (tạo bởi ${currentUser.fullName})`,
+        })),
+      });
+
+      // 3. SSE realtime cho từng user
+      const { sseService } = await import('./sse.service.js');
+      targetUsers.forEach(u => {
+        sseService.sendToUser(u.id, 'notification', {
+          id: `temp-${Date.now()}-${u.id}`,
+          type: 'DISPATCH_CREATED',
+          title: '📋 Công văn mới',
+          content: `${soCongVan} — "${tenCongVan}"`,
+          dispatchId: dispatch.id,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        });
+      });
+
+      // 4. ⭐ WEB PUSH — broadcast cho TẤT CẢ thiết bị (user + khách)
+      const { pushService } = await import('./push.service.js');
+      const pushResult = await pushService.broadcast({
+        title: '📋 Công văn mới',
+        content: `${soCongVan} — "${tenCongVan}"`,
+        dispatchId: dispatch.id,
+        url: `/dispatches/${dispatch.id}`,
+      });
+
+      console.log(
+        `📢 [PUSH] Broadcast "${soCongVan}": sent=${pushResult.sent}, failed=${pushResult.failed}`
+      );
     } catch (notifErr) {
       console.error('❌ Lỗi broadcast:', notifErr.message);
     }

@@ -87,7 +87,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       const res = await apiClient.changePassword(oldPassword, newPassword);
       if (res.success) {
         setSuccess(true);
-        setTimeout(() => {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('current_user');
+        setTimeout(() => {  
           resetForm();
           onSuccess?.();
           onClose();
@@ -222,9 +224,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                       {[1, 2, 3, 4].map(level => (
                         <div
                           key={level}
-                          className={`h-1 flex-1 rounded-full transition-all ${
-                            level <= strength.level ? strength.color : 'bg-slate-200'
-                          }`}
+                          className={`h-1 flex-1 rounded-full transition-all ${level <= strength.level ? strength.color : 'bg-slate-200'
+                            }`}
                         />
                       ))}
                     </div>
@@ -235,8 +236,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                           strength.level <= 2
                             ? 'text-rose-600'
                             : strength.level === 3
-                            ? 'text-amber-600'
-                            : 'text-emerald-600'
+                              ? 'text-amber-600'
+                              : 'text-emerald-600'
                         }
                       >
                         {strength.label}
@@ -257,11 +258,10 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
                     placeholder="Nhập lại mật khẩu mới"
-                    className={`w-full px-3.5 py-2.5 pr-10 text-xs border rounded-xl focus:outline-none focus:ring-2 transition ${
-                      confirmPassword && confirmPassword !== newPassword
+                    className={`w-full px-3.5 py-2.5 pr-10 text-xs border rounded-xl focus:outline-none focus:ring-2 transition ${confirmPassword && confirmPassword !== newPassword
                         ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-500'
                         : 'border-slate-300 focus:ring-red-500/20 focus:border-red-500'
-                    }`}
+                      }`}
                   />
                   <button
                     type="button"

@@ -1,12 +1,12 @@
 import React from 'react';
 import { formatDate } from '../utils/format';
-import { 
-  Eye, 
-  Edit3, 
-  Trash2, 
-  Clock, 
-  AlertTriangle, 
-  CheckCircle2, 
+import {
+  Eye,
+  Edit3,
+  Trash2,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
   AlertCircle,
   Flame,
   Paperclip
@@ -85,7 +85,7 @@ export const DispatchTable: React.FC<DispatchTableProps> = ({
       case 'KHAN':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-            <AlertCircle className="w-3 h-3 text-amber-600" /> 
+            <AlertCircle className="w-3 h-3 text-amber-600" />
           </span>
         );
       default:
@@ -161,7 +161,7 @@ export const DispatchTable: React.FC<DispatchTableProps> = ({
               <span className="truncate">{fileName}</span>
             </a>
           ) : (
-            <span 
+            <span
               className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded max-w-[200px]"
               title={fileName}
             >
@@ -243,7 +243,7 @@ export const DispatchTable: React.FC<DispatchTableProps> = ({
   return (
     <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden">
       {/* Leadership Table Title Banner matching user's template */}
-      <div 
+      <div
         className="text-white text-center py-2.5 px-4 border-b shadow-xs"
         style={{ backgroundColor: '#B71C1C', borderColor: '#7F0E0E' }}
       >
@@ -257,33 +257,33 @@ export const DispatchTable: React.FC<DispatchTableProps> = ({
         <table className="w-full text-left border-collapse min-w-[1600px]">
           {/* Table Headers styled with light blue background like the sample image - Sticky Top */}
           <thead className="sticky top-0 z-10 shadow-2xs">
-            <tr className="bg-[#b9d1ea] text-[#0f2942] border-b-2 border-slate-400">
-              {/* Checkbox column */}
-              <th className="w-12 min-w-[48px] px-3 py-3.5 text-center border-r-2 border-slate-400">
+            <tr className="border-b-2 border-red-900 text-white">
+              {/* Cột checkbox */}
+              <th className="w-12 min-w-[48px] px-3 py-3 text-center border-r-2 border-red-800 select-none align-middle bg-[#B71C1C]">
                 <input
                   type="checkbox"
                   checked={isAllSelected}
                   onChange={onToggleSelectAll}
                   aria-label="Chọn tất cả công văn"
-                  className="rounded border-slate-400 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                 />
               </th>
 
-              {/* Dynamic Visible Columns */}
+              {/* Các cột động */}
               {visibleColumns.map(col => (
                 <th
                   key={col.id}
                   scope="col"
                   style={{ width: col.width, minWidth: col.width }}
                   onClick={() => onSort(col.id)}
-                  className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider border-r-2 border-slate-400 select-none cursor-pointer hover:bg-[#a6c3df] transition whitespace-nowrap text-center"
+                  className="px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none cursor-pointer hover:bg-[#8f1515] transition whitespace-nowrap text-center align-middle bg-[#B71C1C] text-white"
                 >
                   <span>{col.label}</span>
                 </th>
               ))}
 
-              {/* Actions Column */}
-              <th className="w-28 min-w-[110px] px-3 py-3.5 text-center text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+              {/* Cột thao tác */}
+              <th className="w-28 min-w-[110px] px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide whitespace-nowrap align-middle bg-[#B71C1C] text-white">
                 THAO TÁC
               </th>
             </tr>
@@ -314,17 +314,16 @@ export const DispatchTable: React.FC<DispatchTableProps> = ({
                 return (
                   <tr
                     key={dispatch.id}
-                    className={`transition-colors ${
-                      isSelected
+                    className={`transition-colors ${isSelected
                         ? 'bg-blue-50/70'
                         : isOverdue
-                        ? 'bg-rose-50/30 hover:bg-rose-50/60'
-                        : isCompleted
-                        ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
-                        : index % 2 === 0
-                        ? 'bg-white hover:bg-slate-50'
-                        : 'bg-slate-50/40 hover:bg-slate-100/60'
-                    }`}
+                          ? 'bg-rose-50/30 hover:bg-rose-50/60'
+                          : isCompleted
+                            ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
+                            : index % 2 === 0
+                              ? 'bg-white hover:bg-slate-50'
+                              : 'bg-slate-50/40 hover:bg-slate-100/60'
+                      }`}
                   >
                     {/* Checkbox */}
                     <td className="px-3 py-5 sm:py-6 text-center border-r border-slate-100 align-middle">

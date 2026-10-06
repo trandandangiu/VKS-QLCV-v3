@@ -2,6 +2,7 @@
 import bcrypt from 'bcrypt';
 import prisma from '../config/prisma.js';
 
+
 const DEFAULT_PASSWORD = 'vks@2026';
 const ROLES_REQUIRE_DEPARTMENT = ['TRUONG_PHONG'];
 
@@ -397,6 +398,20 @@ export const usersService = {
       }
     });
 
+    // ⭐ THÊM: Xử lý ĐỔI MẬT KHẨU khi admin sửa user
+    // Hỗ trợ cả field 'password' (từ frontend) lẫn 'newPassword'
+    const rawPassword = data.password || data.newPassword;
+    if (rawPassword && String(rawPassword).trim().length > 0) {
+      const pwd = String(rawPassword).trim();
+      if (pwd.length < 6) {
+        throw { status: 400, message: 'Mật khẩu phải có ít nhất 6 ký tự' };
+      }
+      updateData.passwordHash = await bcrypt.hash(pwd, 10);
+      // Reset TOTP khi admin đổi password
+      updateData.totpSecret = null;
+      updateData.totpEnabled = false;
+    }
+
     // ⭐ FIX: Sync roomCode khi đổi departmentId
     if (data.departmentId !== undefined) {
       if (data.departmentId === null) {
@@ -410,7 +425,6 @@ export const usersService = {
         }
       }
     } else if (data.roomCode !== undefined) {
-      // Cho phép set roomCode trực tiếp (nếu cần)
       updateData.roomCode =
         data.roomCode && data.roomCode !== 'null' ? data.roomCode : null;
     }
@@ -426,11 +440,15 @@ export const usersService = {
         data: {
           userId: currentUser.id,
           userName: currentUser.fullName,
-          action: 'UPDATE_USER',
+          action: updateData.passwordHash ? 'UPDATE_USER_PASSWORD' : 'UPDATE_USER',
           entityType: 'user',
           entityId: userId,
           oldValue: { fullName: existing.fullName, phone: existing.phone },
-          newValue: updateData,
+          newValue: {
+            ...updateData,
+            // Không log passwordHash ra audit
+            passwordHash: updateData.passwordHash ? '***' : undefined,
+          },
         },
       });
 

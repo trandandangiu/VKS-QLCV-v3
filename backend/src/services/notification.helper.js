@@ -3,30 +3,18 @@ import prisma from '../config/prisma.js';
 import { sseService } from './sse.service.js';
 import { pushService } from './push.service.js';
 
-/**
- * Tạo notification + push realtime (SSE + Web Push)
- *
- * @param tx - Prisma transaction (nullable)
- * @param params:
- *   - userId?: string        → gửi cho 1 user (optional)
- *   - broadcast?: boolean    → gửi cho TẤT CẢ (user + khách)
- *   - dispatchId?: string
- *   - type: string
- *   - title: string
- *   - content?: string
- *   - url?: string           → deep link khi click notification
- */
-// backend/src/services/notification.helper.js
-
 export async function createAndPushNotification(tx, params) {
   const client = tx || prisma;
 
   let notif = null;
+
+  // ⭐ CHỈ tạo notification record khi có userId cụ thể
+  // (broadcast thì không tạo record — chỉ gửi push)
   if (params.userId) {
     notif = await client.notification.create({
       data: {
         userId: params.userId,
-        dispatchId: params.dispatchId || null,   // ⭐ PHẢI CÓ
+        dispatchId: params.dispatchId || null,
         type: params.type,
         title: params.title,
         content: params.content || null,
@@ -36,7 +24,9 @@ export async function createAndPushNotification(tx, params) {
     });
   }
 
+  // ⭐ Push bất đồng bộ — không block request
   setImmediate(async () => {
+    // 1. SSE cho user cụ thể
     if (params.userId && notif) {
       try {
         sseService.sendToUser(params.userId, 'notification', {
@@ -44,7 +34,7 @@ export async function createAndPushNotification(tx, params) {
           type: notif.type,
           title: notif.title,
           content: notif.content,
-          dispatchId: notif.dispatchId,     // ⭐ PHẢI CÓ
+          dispatchId: notif.dispatchId,
           isRead: false,
           createdAt: notif.createdAt,
         });
@@ -53,23 +43,28 @@ export async function createAndPushNotification(tx, params) {
       }
     }
 
+    // 2. Web Push
     try {
       if (params.broadcast) {
-        await pushService.broadcast({
+        // ⭐ Broadcast cho TẤT CẢ (user + khách)
+        const result = await pushService.broadcast({
           title: notif?.title || params.title,
           content: notif?.content || params.content,
-          dispatchId: params.dispatchId,     // ⭐ PHẢI CÓ
+          dispatchId: params.dispatchId,
           notificationId: notif?.id,
-          url: params.dispatchId ? `/dispatches/${params.dispatchId}` : '/',
+          url: params.url || (params.dispatchId ? `/dispatches/${params.dispatchId}` : '/'),
         });
+        console.log(`📢 [PUSH] Broadcast done:`, result);
       } else if (params.userId) {
-        await pushService.sendToUser(params.userId, {
+        // Gửi cho 1 user cụ thể (tất cả thiết bị của user đó)
+        const result = await pushService.sendToUser(params.userId, {
           title: notif?.title || params.title,
           content: notif?.content || params.content,
-          dispatchId: params.dispatchId,     // ⭐ PHẢI CÓ
+          dispatchId: params.dispatchId,
           notificationId: notif?.id,
-          url: params.dispatchId ? `/dispatches/${params.dispatchId}` : '/',
+          url: params.url || (params.dispatchId ? `/dispatches/${params.dispatchId}` : '/'),
         });
+        console.log(`📤 [PUSH] Sent to user ${params.userId}:`, result);
       }
     } catch (err) {
       console.error('❌ Web Push lỗi:', err.message);

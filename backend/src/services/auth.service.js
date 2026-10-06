@@ -146,6 +146,7 @@ export const authService = {
   // CHANGE PASSWORD — User tự đổi
   // ============================================
   async changePassword(userId, oldPassword, newPassword) {
+    
     // 1. Validate input
     if (!oldPassword || !newPassword) {
       throw { status: 400, message: 'Vui lòng nhập đầy đủ mật khẩu cũ và mới' };
@@ -166,7 +167,6 @@ export const authService = {
     if (!/[0-9]/.test(newPassword)) {
       throw { status: 400, message: 'Mật khẩu mới phải có ít nhất 1 chữ số' };
     }
-
     if (oldPassword === newPassword) {
       throw { status: 400, message: 'Mật khẩu mới phải khác mật khẩu cũ' };
     }
@@ -196,8 +196,8 @@ export const authService = {
         data: {
           passwordHash: newHash,
           // Reset TOTP khi đổi password (bảo mật)
-          totpSecret: null,
-          totpEnabled: false,
+          // totpSecret: null,
+          // totpEnabled: false,
         },
       });
 

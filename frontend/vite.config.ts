@@ -79,7 +79,10 @@ export default defineConfig({
 
       // Tắt PWA trong dev (tránh cache lỗi khi code)
       devOptions: {
-        enabled: false,
+        enabled: true,   // ⭐ BẬT để test PWA trên localhost
+        type: 'module',
+        navigateFallback: 'index.html',
+
       },
     }),
   ],

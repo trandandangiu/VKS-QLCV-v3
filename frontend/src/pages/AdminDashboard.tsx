@@ -551,8 +551,10 @@ export const AdminDashboard: React.FC = () => {
     const payload: any = { fullName: editFullName };
     if (editPassword.trim()) payload.password = editPassword.trim();
     if (editingUser.role === 'TRUONG_PHONG') payload.pvtManagerId = editPvtManager;
+    console.log('📤 [handleSaveUser] payload:', payload);  // ← Thêm dòng nà
 
     const res = await apiClient.updateUser(editingUser.id, payload);
+    console.log('📥 [handleSaveUser] response:', res);     // ← Thêm dòng này
     if (res) {
       showToast(`Đã cập nhật thông tin tài khoản ${res.username}`);
       setEditingUser(null);
