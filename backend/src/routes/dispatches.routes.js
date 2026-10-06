@@ -199,7 +199,12 @@ router.put(
   requirePermission('dispatch:update:all', 'dispatch:update:assigned'),
   dispatchesController.updateDispatch
 );
-
+router.delete(
+  '/:id',
+  authenticate,
+  requirePermission('dispatch:delete'),
+  dispatchesController.deleteDispatch
+);
 // ============================================
 // 6b. DELETE /api/dispatches/:id/hard-delete ⭐ THÊM MỚI
 // Xóa VĨNH VIỄN công văn — CHỈ ADMIN/VT

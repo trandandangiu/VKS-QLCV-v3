@@ -378,26 +378,25 @@ export const dispatchesService = {
     }
 
     // ⭐ BROADCAST cho TẤT CẢ (user login + khách đã subscribe push)
+    // ═══════════════════════════════════════════
+    // 🔔 PUSH NOTIFICATION — chỉ 1 thông báo duy nhất
+    // ═══════════════════════════════════════════
     try {
       await createAndPushNotification(null, {
         userId: null,
         broadcast: true,
         dispatchId: dispatch.id,
         type: 'DISPATCH_CREATED',
-        title: '📋 Công văn mới',
-        content: `${soCongVan} — "${tenCongVan}"`,
-        url: '/',
+        title: 'Có thông báo mới',
       });
-      console.log(
-        `📢 [PUSH] Đã broadcast công văn mới "${soCongVan}" cho tất cả thiết bị`
-      );
+
+      console.log(`📢 [PUSH] Đã gửi thông báo công văn mới "${soCongVan}"`);
     } catch (err) {
-      console.error('❌ Lỗi broadcast push cho khách:', err.message);
+      console.error('❌ Lỗi push notification:', err.message);
     }
 
     return dispatch;
   },
-
   // ============================================
   // 4. CẬP NHẬT
   // ============================================
@@ -792,87 +791,55 @@ export const dispatchesService = {
   // ============================================
   // 8. MỞ LẠI CÔNG VĂN (UNDO HOÀN THÀNH)
   // ============================================
-  async reopenDispatch(dispatchId, currentUser, note) {
-    if (!currentUser || !currentUser.id) {
-      throw { status: 401, message: 'Chưa đăng nhập' };
-    }
-
+  // ============================================
+  // 5. XÓA MỀM (SOFT DELETE)
+  // ============================================
+  async deleteDispatch(dispatchId, currentUser) {
     const dispatch = await prisma.dispatch.findUnique({
       where: { id: dispatchId },
-      include: {
-        dispatchPvts: true,
-        dispatchTps: true,
-      },
     });
 
     if (!dispatch || dispatch.deletedAt) {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    if (dispatch.trangThai !== 'HOAN_THANH') {
-      throw {
-        status: 400,
-        message: 'Công văn chưa hoàn thành, không thể mở lại',
-      };
-    }
-
     // Check quyền
     const perms = currentUser.permissions || [];
-    const isVtOrAdmin =
-      perms.includes('dispatch:view:all') ||
-      currentUser.roles?.includes('VIEN_TRUONG') ||
-      currentUser.roles?.includes('ADMIN');
+    const isAdmin = currentUser.roles?.includes('ADMIN');
+    const isVt = currentUser.roles?.includes('VIEN_TRUONG');
 
-    const isAssignedPvt = dispatch.dispatchPvts.some(
-      dp => dp.pvtId === currentUser.id
-    );
-    const isAssignedTp = dispatch.dispatchTps.some(
-      dt => dt.tpId === currentUser.id
-    );
-
-    if (!isVtOrAdmin && !isAssignedPvt && !isAssignedTp) {
-      throw { status: 403, message: 'Bạn không có quyền mở lại công văn này' };
+    if (!perms.includes('dispatch:delete') && !isAdmin && !isVt) {
+      throw { status: 403, message: 'Không có quyền xóa công văn' };
     }
 
-    // ⭐ Quyết định trạng thái mở lại
-    let restoreStatus = 'DANG_XU_LY';
-
-    if (dispatch.dispatchTps?.length > 0) {
-      restoreStatus = 'CHO_PVT_DUYET';
-    } else if (dispatch.dispatchPvts?.length > 0) {
-      restoreStatus = 'CHO_TP_XU_LY';
-    }
-
-    const updated = await prisma.$transaction(async tx => {
-      const result = await tx.dispatch.update({
+    // Soft delete
+    await prisma.$transaction(async (tx) => {
+      await tx.dispatch.update({
         where: { id: dispatchId },
         data: {
-          trangThai: restoreStatus,
-          tienDo: 0,
-          completedAt: null,
-          baoCaoTienDo: note || dispatch.baoCaoTienDo,
+          deletedAt: new Date(),
         },
       });
 
+      // Audit log
       await tx.auditLog.create({
         data: {
           userId: currentUser.id,
           userName: currentUser.fullName,
-          action: 'REOPEN_DISPATCH',
+          action: 'DELETE_DISPATCH',
           entityType: 'dispatch',
           entityId: dispatchId,
-          oldValue: { trangThai: 'HOAN_THANH' },
-          newValue: { trangThai: restoreStatus, note },
+          oldValue: {
+            soCongVan: dispatch.soCongVan,
+            tenCongVan: dispatch.tenCongVan,
+          },
         },
       });
-
-      return result;
     });
 
     return {
       success: true,
-      message: 'Đã mở lại công văn',
-      dispatch: updated,
+      message: `Đã xóa công văn "${dispatch.soCongVan}"`,
     };
   },
 };

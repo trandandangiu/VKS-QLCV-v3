@@ -1,6 +1,5 @@
 // backend/src/services/assignments.service.js
 import prisma from '../config/prisma.js';
-import { createAndPushNotification } from './notification.helper.js';
 
 export const assignmentsService = {
   // ============================================
@@ -86,7 +85,7 @@ export const assignmentsService = {
         },
       });
 
-      // ⭐ Log + thông báo cho TỪNG PVT
+      // ⭐ Log cho TỪNG PVT
       for (const pvt of pvts) {
         await tx.assignment.create({
           data: {
@@ -102,41 +101,6 @@ export const assignmentsService = {
             hanXuLy: hanBaoCaoXuLy ? new Date(hanBaoCaoXuLy) : null,
             status: 'PENDING',
           },
-        });
-
-        // ⭐ Gửi notification + push realtime cho PVT được giao
-        await createAndPushNotification(tx, {
-          userId: pvt.pvtId,
-          dispatchId,
-          type: 'TASK_ASSIGNED',
-          title: ' Công văn mới được chuyển tới',
-          content: `${currentUser.fullName} đã chuyển công văn ${dispatch.soCongVan} cho bạn${
-            vtChiDao ? `: "${vtChiDao}"` : ''
-          }`,
-        });
-      }
-
-      // ⭐⭐ THÔNG BÁO CHO TẤT CẢ VT KHÁC (trừ người giao)
-      const allVienTruongs = await tx.user.findMany({
-        where: {
-          deletedAt: null,
-          active: true,
-          id: { not: currentUser.id }, // trừ người giao
-          userRoles: {
-            some: { role: { code: 'VIEN_TRUONG' } },
-          },
-        },
-        select: { id: true, fullName: true },
-      });
-
-      const pvtNames = pvts.map(p => p.pvtName).join(', ');
-      for (const vt of allVienTruongs) {
-        await createAndPushNotification(tx, {
-          userId: vt.id,
-          dispatchId,
-          type: 'TASK_ASSIGNED',
-          title: 'Thông báo mới',
-          content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho ${pvtNames}`,
         });
       }
 
@@ -285,7 +249,7 @@ export const assignmentsService = {
         });
       }
 
-      // ⭐ Log + thông báo cho TỪNG TP
+      // ⭐ Log cho TỪNG TP
       for (const tp of tps) {
         await tx.assignment.create({
           data: {
@@ -300,45 +264,6 @@ export const assignmentsService = {
             chiDao: pvtChiDao,
             status: 'PENDING',
           },
-        });
-
-        // ⭐ Gửi notification + push cho TP
-        await createAndPushNotification(tx, {
-          userId: tp.tpId,
-          dispatchId,
-          type: 'TASK_ASSIGNED',
-          title: '📋 Công văn mới được giao',
-          content: `${currentUser.fullName} đã giao công văn ${dispatch.soCongVan} cho bạn${
-            pvtChiDao ? `: "${pvtChiDao}"` : ''
-          }`,
-        });
-      }
-
-      // ⭐⭐ THÔNG BÁO CHO TẤT CẢ VT
-      // Nếu chính VT đang giao → trừ VT đó (biết rồi)
-      // Nếu PVT đang giao → gửi cho HẾT VT (để theo dõi)
-      const vtFilter = isVienTruong
-        ? { id: { not: currentUser.id } }
-        : {};
-
-      const allVienTruongs = await tx.user.findMany({
-        where: {
-          deletedAt: null,
-          active: true,
-          userRoles: { some: { role: { code: 'VIEN_TRUONG' } } },
-          ...vtFilter,
-        },
-        select: { id: true, fullName: true },
-      });
-
-      const tpNames = tps.map(t => t.tpName).join(', ');
-      for (const vt of allVienTruongs) {
-        await createAndPushNotification(tx, {
-          userId: vt.id,
-          dispatchId,
-          type: 'TASK_ASSIGNED',
-          title: 'Thông báo mới',
-          content: ` `,
         });
       }
 
@@ -481,15 +406,6 @@ export const assignmentsService = {
         },
       });
 
-      // Thông báo + push cho PVT
-      await createAndPushNotification(tx, {
-        userId: tp.assignedByPvtId,
-        dispatchId,
-        type: 'REPORT_SUBMITTED',
-        title: '📝 Trưởng phòng đã báo cáo',
-        content: `TP ${currentUser.fullName} đã gửi báo cáo cho công văn ${dispatch.soCongVan}`,
-      });
-
       await tx.auditLog.create({
         data: {
           userId: currentUser.id,
@@ -576,15 +492,6 @@ export const assignmentsService = {
             status: 'PENDING',
           },
         });
-
-        // Thông báo + push cho VT
-        await createAndPushNotification(tx, {
-          userId: vt.id,
-          dispatchId,
-          type: 'REPORT_SUBMITTED',
-          title: '📤 PVT đã trình công văn',
-          content: `${currentUser.fullName} đã trình công văn ${dispatch.soCongVan} lên Viện trưởng`,
-        });
       }
 
       await tx.auditLog.create({
@@ -634,17 +541,6 @@ export const assignmentsService = {
           completedAt: new Date(),
         },
       });
-
-      // Thông báo cho PVT
-      for (const pvt of dispatch.dispatchPvts) {
-        await createAndPushNotification(tx, {
-          userId: pvt.pvtId,
-          dispatchId,
-          type: 'APPROVED',
-          title: '✅ Viện trưởng đã đồng ý',
-          content: `Công văn ${dispatch.soCongVan} đã được Viện trưởng đồng ý`,
-        });
-      }
 
       await tx.auditLog.create({
         data: {
@@ -707,14 +603,6 @@ export const assignmentsService = {
             reason,
             category: 'CONTENT',
           },
-        });
-
-        await createAndPushNotification(tx, {
-          userId: primaryPvt.pvtId,
-          dispatchId,
-          type: 'REJECTED',
-          title: '❌ Viện trưởng không đồng ý',
-          content: `Công văn ${dispatch.soCongVan}: ${reason}`,
         });
       }
 
@@ -802,14 +690,6 @@ export const assignmentsService = {
               reason,
               category: 'CONTENT',
             },
-          });
-
-          await createAndPushNotification(tx, {
-            userId: tp.tpId,
-            dispatchId,
-            type: 'REJECTED',
-            title: '❌ PVT không đồng ý',
-            content: `Công văn ${dispatch.soCongVan}: ${reason}`,
           });
         }
       }
