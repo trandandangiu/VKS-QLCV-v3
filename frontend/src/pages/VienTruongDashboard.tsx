@@ -17,23 +17,11 @@ import { MobileFab } from '../components/vt/MobileFab';
 import { VtFilters, DEFAULT_VT_FILTERS } from '../types/vt';
 import { formatDate } from '../utils/format';
 import { resolveDispatchStatus } from '../services/excelService';
-
-// VT Components
-import { VtHeroHeader } from '../components/vt/VtHeroHeader';
-import { VtKpiGrid } from '../components/vt/VtKpiGrid';
-import { VtPvtLeaderboard } from '../components/vt/VtPvtLeaderboard';
-import { VtDeptHeatmap } from '../components/vt/VtDeptHeatmap';
 import { ChuyenDeModal } from '../components/chuyende/ChuyenDeModal';
 import { ChuyenDeDrawer } from '../components/chuyende/ChuyenDeDrawer';
 import { isChuyenDe } from '../utils/chuyenDe';
-import {
-  VtTrendChart,
-  VtTopPvtChart,
-  VtDeptChart,
-} from '../components/vt/VtAdvancedCharts';
 import { VtFilterBar } from '../components/vt/VtFilterBar';
 import { VtPvtDetailDrawer } from '../components/vt/VtPvtDetailDrawer';
-import { VtSidebar, VtSidebarTab } from '../components/vt/VtSidebar';
 
 import {
   CheckCircle2,
@@ -102,22 +90,6 @@ export const VienTruongDashboard: React.FC = () => {
   } = useVtDashboard(allUsers);
 
   const [filters, setFilters] = useState<VtFilters>(DEFAULT_VT_FILTERS);
-  const [activeSidebarTab, setActiveSidebarTab] = useState<VtSidebarTab>('action-all');
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('vt_sidebar_collapsed') === '1';
-    }
-    return false;
-  });
-
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed(prev => {
-      const next = !prev;
-      localStorage.setItem('vt_sidebar_collapsed', next ? '1' : '0');
-      return next;
-    });
-  };
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Modal states
@@ -146,16 +118,6 @@ export const VienTruongDashboard: React.FC = () => {
   const pvtList = useMemo(
     () => allUsers.filter(u => u.role === 'PHO_VIEN_TRUONG'),
     [allUsers]
-  );
-
-  const pendingCount = useMemo(
-    () => dispatches.filter(d => !d.assignedPvtId && d.trangThai !== 'HOAN_THANH').length,
-    [dispatches]
-  );
-
-  const approveCount = useMemo(
-    () => dispatches.filter(d => d.trangThai === 'CHO_VT_DUYET').length,
-    [dispatches]
   );
 
   const deptList = useMemo(() => {
@@ -445,17 +407,6 @@ export const VienTruongDashboard: React.FC = () => {
     }
   };
 
-  // ⭐ Handler sửa — phân loại chuyên đề vs công văn
-  const handleEditItem = (d: Dispatch) => {
-    if (isChuyenDe(d)) {
-      setChuyenDeToEdit(d);
-      setIsChuyenDeModalOpen(true);
-    } else {
-      setDispatchToEdit(d);
-      setIsAddEditModalOpen(true);
-    }
-  };
-
   // ⭐ Handler xóa — phân loại chuyên đề vs công văn
   const handleDeleteItem = async (d: Dispatch) => {
     const isCD = isChuyenDe(d);
@@ -511,13 +462,6 @@ export const VienTruongDashboard: React.FC = () => {
     [filteredDispatches]
   );
 
-  // ⭐ Check xem có đang ở tab bảng không (để hiện FAB)
-  const isTableTab =
-    activeSidebarTab === 'action-all' ||
-    activeSidebarTab === 'action-assigned' ||
-    activeSidebarTab === 'action-pending' ||
-    activeSidebarTab === 'action-approve';
-
   // ============================================
   // RENDER
   // ============================================
@@ -527,223 +471,103 @@ export const VienTruongDashboard: React.FC = () => {
 
       <main className="flex-1 max-w-[1680px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5 pb-24 sm:pb-5">
         {/* ⭐ Mobile sticky toolbar */}
-        <div className="lg:hidden sticky top-0 z-30 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2 bg-slate-100/95 backdrop-blur-md border-b border-slate-200 mb-3 flex items-center gap-2">
+        <div className="lg:hidden sticky top-0 z-30 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2 bg-slate-100/95 backdrop-blur-md border-b border-slate-200 mb-3 flex items-center gap-2" />
 
+        <div className="w-full space-y-3 sm:space-y-5">
+          {/* ═══ HEADER BẢNG CÔNG VĂN ═══ */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-2xl px-4 sm:px-5 py-3 sm:py-4 border border-slate-200 shadow-xs">
+            <div className="flex items-baseline gap-2.5 min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                Tất cả công văn
+              </h1>
+              <span className="shrink-0 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                {filteredDispatches.length}
+              </span>
+            </div>
 
+            {/* Actions — chỉ hiện từ sm */}
+            <div className="hidden sm:flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => exportDispatchesToExcel(filteredDispatches, DEFAULT_COLUMNS)}
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Xuất Excel
+              </button>
 
-        </div>
+              <button
+                onClick={() => {
+                  setChuyenDeToEdit(null);
+                  setIsChuyenDeModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Tạo chuyên đề
+              </button>
 
-        <div className="flex flex-col lg:flex-row gap-5 items-start">
-          <VtSidebar
-            activeTab={activeSidebarTab}
-            onChangeTab={setActiveSidebarTab}
-            pendingCount={pendingCount}
-            approveCount={approveCount}
-            isMobileOpen={isMobileSidebarOpen}
-            onCloseMobile={() => setIsMobileSidebarOpen(false)}
-            isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              <button
+                onClick={() => { setDispatchToEdit(null); setIsAddEditModalOpen(true); }}
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-xs font-semibold text-white rounded-lg shadow-sm hover:shadow transition cursor-pointer active:scale-95"
+                style={{ backgroundColor: '#B71C1C' }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Tạo công văn
+              </button>
+            </div>
+          </div>
+
+          {/* ═══ FILTER ═══ */}
+          <VtFilterBar
+            filters={filters}
+            onChange={setFilters}
+            pvtList={pvtList}
+            deptList={deptList}
+            totalResults={filteredDispatches.length}
+            chuyenDeCount={chuyenDeCount}
+            dispatches={dispatches}
           />
 
-          <div className="flex-1 min-w-0 w-full space-y-3 sm:space-y-5">
+          {/* ═══ BẢNG / CARD LIST — responsive ═══ */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            {/* Desktop / Tablet: table */}
+            <div className="hidden md:block">
+              <PublicDesktopTable
+                dispatches={filteredDispatches}
+                currentPage={1}
+                pageSize={filteredDispatches.length || 20}
+                selectedPvtId={null}
+                onSelectDispatch={handleOpenDetail}
+                onViewFiles={handleViewFiles}
+              />
+            </div>
 
-            {/* TAB: BÁO CÁO — TỔNG QUAN */}
-            {activeSidebarTab === 'report-overview' && (
-              <>
-                <VtHeroHeader
-                  userName={currentUser?.fullName || 'Viện trưởng'}
-                  summary={summary}
-                  onRefresh={reload}
-                  isLoading={isLoading}
-                />
-                <VtKpiGrid
-                  summary={summary}
-                  onCardClick={key => {
-                    if (key === 'overdue') {
-                      setFilters({ ...DEFAULT_VT_FILTERS, status: 'QUA_HAN' });
-                      setActiveSidebarTab('action-all');
-                    } else if (key === 'due-soon') {
-                      setFilters({ ...DEFAULT_VT_FILTERS, status: 'SAP_DEN_HAN' });
-                      setActiveSidebarTab('action-all');
-                    } else if (key === 'completed') {
-                      setFilters({ ...DEFAULT_VT_FILTERS, status: 'HOAN_THANH' });
-                      setActiveSidebarTab('action-all');
-                    } else if (key === 'assigned') {
-                      setActiveSidebarTab('action-assigned');
-                    } else if (key === 'total') {
-                      setActiveSidebarTab('action-all');
-                    }
-                  }}
-                />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  <VtTrendChart data={trendData} />
-                  <VtTopPvtChart pvtStats={pvtStats} />
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  <VtPvtLeaderboard
-                    pvtStats={pvtStats}
-                    onSelectPvt={pvt => setPvtDetailStat(pvt)}
-                  />
-                  <VtDeptHeatmap heatmapData={heatmapData} tpStats={tpStats} />
-                </div>
-                <VtDeptChart tpStats={tpStats} />
-              </>
-            )}
-
-            {/* TAB: BÁO CÁO — THEO PHÒNG BAN */}
-            {activeSidebarTab === 'report-by-dept' && (
-              <>
-                <VtHeroHeader
-                  userName={currentUser?.fullName || 'Viện trưởng'}
-                  summary={summary}
-                  onRefresh={reload}
-                  isLoading={isLoading}
-                />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  <VtDeptHeatmap heatmapData={heatmapData} tpStats={tpStats} />
-                  <VtDeptChart tpStats={tpStats} />
-                </div>
-              </>
-            )}
-
-            {/* TAB: BÁO CÁO — THEO THỜI GIAN */}
-            {activeSidebarTab === 'report-by-time' && (
-              <>
-                <VtHeroHeader
-                  userName={currentUser?.fullName || 'Viện trưởng'}
-                  summary={summary}
-                  onRefresh={reload}
-                  isLoading={isLoading}
-                />
-                <VtTrendChart data={trendData} />
-              </>
-            )}
-
-            {/* TAB: BÁO CÁO — XẾP HẠNG PVT */}
-            {activeSidebarTab === 'report-leaderboard' && (
-              <>
-                <VtHeroHeader
-                  userName={currentUser?.fullName || 'Viện trưởng'}
-                  summary={summary}
-                  onRefresh={reload}
-                  isLoading={isLoading}
-                />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  <VtPvtLeaderboard
-                    pvtStats={pvtStats}
-                    onSelectPvt={pvt => setPvtDetailStat(pvt)}
-                  />
-                  <VtTopPvtChart pvtStats={pvtStats} />
-                </div>
-              </>
-            )}
-
-            {/* TAB: THAO TÁC — BẢNG CÔNG VĂN */}
-            {isTableTab && (
-              <>
-                {/* Header — responsive: desktop có 3 nút, mobile chỉ title */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white rounded-2xl px-4 sm:px-5 py-3 sm:py-4 border border-slate-200 shadow-xs">
-                  <div className="flex items-baseline gap-2.5 min-w-0">
-                    <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">
-                      {activeSidebarTab === 'action-all' && 'Tất cả công văn'}
-                      {activeSidebarTab === 'action-assigned' && 'Đã phân công'}
-                      {activeSidebarTab === 'action-pending' && 'Chờ phân công PVT'}
-                      {activeSidebarTab === 'action-approve' && 'Chờ phê duyệt'}
-                    </h1>
-                    <span className="shrink-0 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                      {filteredDispatches.length}
-                    </span>
-                  </div>
-
-                  {/* Actions — chỉ hiện từ sm */}
-                  <div className="hidden sm:flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => exportDispatchesToExcel(filteredDispatches, DEFAULT_COLUMNS)}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Xuất Excel
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setChuyenDeToEdit(null);
-                        setIsChuyenDeModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Tạo chuyên đề
-                    </button>
-
-                    <button
-                      onClick={() => { setDispatchToEdit(null); setIsAddEditModalOpen(true); }}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-xs font-semibold text-white rounded-lg shadow-sm hover:shadow transition cursor-pointer active:scale-95"
-                      style={{ backgroundColor: '#B71C1C' }}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Tạo công văn
-                    </button>
-                  </div>
-                </div>
-
-                {/* Filter */}
-                <VtFilterBar
-                  filters={filters}
-                  onChange={setFilters}
-                  pvtList={pvtList}
-                  deptList={deptList}
-                  totalResults={filteredDispatches.length}
-                  chuyenDeCount={chuyenDeCount}
-                  dispatches={dispatches}
-                />
-
-                {/* ⭐ BẢNG / CARD LIST — responsive */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                  {/* Desktop / Tablet: table */}
-                  <div className="hidden md:block">
-                    <PublicDesktopTable
-                      dispatches={filteredDispatches}
-                      currentPage={1}
-                      pageSize={filteredDispatches.length || 20}
-                      selectedPvtId={null}
-                      onSelectDispatch={handleOpenDetail}
-                      onViewFiles={handleViewFiles}
-                    />
-                  </div>
-
-                  {/* Mobile: card list */}
-                  <div className="md:hidden">
-                    <PublicMobileCardList
-                      dispatches={filteredDispatches}
-                      onSelectDispatch={handleOpenDetail}
-                      onViewFiles={handleViewFiles}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
+            {/* Mobile: card list */}
+            <div className="md:hidden">
+              <PublicMobileCardList
+                dispatches={filteredDispatches}
+                onSelectDispatch={handleOpenDetail}
+                onViewFiles={handleViewFiles}
+              />
+            </div>
           </div>
         </div>
       </main>
 
-      {/* ⭐ FAB cho mobile — chỉ hiện ở tab bảng */}
-      {isTableTab && (
-        <MobileFab
-          onCreateCongVan={() => {
-            setDispatchToEdit(null);
-            setIsAddEditModalOpen(true);
-          }}
-          onCreateChuyenDe={() => {
-            setChuyenDeToEdit(null);
-            setIsChuyenDeModalOpen(true);
-          }}
-          onExport={() => exportDispatchesToExcel(filteredDispatches, DEFAULT_COLUMNS)}
-        />
-      )}
+      {/* ⭐ FAB cho mobile */}
+      <MobileFab
+        onCreateCongVan={() => {
+          setDispatchToEdit(null);
+          setIsAddEditModalOpen(true);
+        }}
+        onCreateChuyenDe={() => {
+          setChuyenDeToEdit(null);
+          setIsChuyenDeModalOpen(true);
+        }}
+        onExport={() => exportDispatchesToExcel(filteredDispatches, DEFAULT_COLUMNS)}
+      />
 
-      {/* Modal giao TP trực tiếp */}
+      {/* ═══ MODALS ═══ */}
       <AssignTpModal
         isOpen={isAssignTpDirectOpen}
         onClose={() => setIsAssignTpDirectOpen(false)}
@@ -907,7 +731,6 @@ export const VienTruongDashboard: React.FC = () => {
           setDetailDispatch(null);
           reload();
         }}
-
       />
 
       <VtPvtDetailDrawer
@@ -920,16 +743,17 @@ export const VienTruongDashboard: React.FC = () => {
         }}
       />
 
-      {/* ⭐ Toast — mobile căn giữa, desktop bottom-right */}
+      {/* ⭐ Toast */}
       {toast && (
         <div className="fixed z-[100] bottom-20 left-1/2 -translate-x-1/2 sm:bottom-6 sm:left-auto sm:right-6 sm:translate-x-0 px-4 w-[calc(100%-2rem)] sm:w-auto max-w-sm">
           <div
-            className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
-              ? 'bg-slate-900 text-white border-slate-700'
-              : toast.type === 'error'
-                ? 'bg-rose-900 text-white border-rose-700'
-                : 'bg-amber-900 text-white border-amber-700'
-              }`}
+            className={`px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold border ${
+              toast.type === 'success'
+                ? 'bg-slate-900 text-white border-slate-700'
+                : toast.type === 'error'
+                  ? 'bg-rose-900 text-white border-rose-700'
+                  : 'bg-amber-900 text-white border-amber-700'
+            }`}
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="flex-1">{toast.message}</span>
@@ -1018,8 +842,8 @@ export const VienTruongDashboard: React.FC = () => {
           await apiClient.updateDispatch(id, updates);
           reload();
         }}
-        onDelete={async (cd) => {                                 // ⭐ THÊM
-          const ok = await apiClient.hardDeleteDispatch(cd.id);   // ⭐ HARD DELETE
+        onDelete={async (cd) => {
+          const ok = await apiClient.hardDeleteDispatch(cd.id);
           if (!ok) throw new Error('Không thể xoá chuyên đề');
           setChuyenDeDetail(null);
           reload();

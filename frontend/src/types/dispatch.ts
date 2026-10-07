@@ -20,6 +20,7 @@ export type UrgencyLevel = 'HOA_TOC' | 'THUONG_KHAN' | 'KHAN' | 'THUONG';
 export interface Dispatch {
   id: string;
   ngayGui: string;          // NGÀY GỬI
+  ngayVanBan: string;
   soCongVan: string;        // SỐ CÔNG VĂN (Mã định danh đối chiếu)
   ngayPhatHanh: string;     // NGÀY PHÁT HÀNH
   tenCongVan: string;       // TÊN CÔNG VĂN
@@ -28,12 +29,12 @@ export interface Dispatch {
   donViBanHanh: string;     // ĐƠN VỊ BAN HÀNH
   nguoiThucHien: string;    // NGƯỜI THỰC HIỆN
   ghiChu: string;           // GHI CHÚ
-  
+
   // Trạng thái & nâng cao phục vụ Lãnh đạo
   trangThai?: DispatchStatus;
   mucDoKhan?: UrgencyLevel;
   tienDo?: number;          // 0 - 100%
-  
+
   // Phân công & Chỉ đạo điều hành
   assignedPvtId?: string;   // ID hoặc mã của PVT được giao (vd: u_pvt_1 hoặc PVT1)
   assignedPvtName?: string; // Tên PVT phụ trách
@@ -45,7 +46,7 @@ export interface Dispatch {
 
   // Các cột linh hoạt người dùng có thể tùy biến thêm
   customFields?: Record<string, any>;
-  
+
   createdAt: string;
   updatedAt: string;
 }

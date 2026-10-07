@@ -36,9 +36,7 @@ interface VtSidebarProps {
   approveCount?: number;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
-  // ⭐ THÊM 2 dòng này
-  isCollapsed?: boolean;
-  onToggleCollapse?: () => void;
+
 }
 
 // src/components/vt/VtSidebar.tsx
@@ -49,78 +47,33 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
   onChangeTab,
   isMobileOpen,
   onCloseMobile,
-  isCollapsed = false,
-  onToggleCollapse,
 }) => {
   const handleClick = (tab: VtSidebarTab) => {
     onChangeTab(tab);
     onCloseMobile();
   };
 
-  // ⭐ Nếu collapsed → chỉ hiện cột hẹp với icon
-  if (isCollapsed) {
-    return (
-      <aside className="hidden lg:flex w-14 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm flex-col items-center py-3 gap-2">
-        {/* Nút mở rộng */}
-        <button
-          onClick={onToggleCollapse}
-          className="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 flex items-center justify-center transition cursor-pointer"
-          title="Mở rộng menu"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        {/* Icon các tab */}
-        <button
-          onClick={() => handleClick('action-all')}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${activeTab === 'action-all'
-              ? 'bg-red-600 text-white'
-              : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          title="Tất cả công văn"
-        >
-          <FileText className="w-4 h-4" />
-        </button>
-      </aside>
-    );
-  }
-
   return (
     <aside
       className={`w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${isMobileOpen ? 'block' : 'hidden lg:block'
         }`}
     >
-      {/* Header đỏ — THÊM NÚT THU GỌN */}
+      {/* Header đỏ — KHÔNG còn nút thu gọn */}
       <div
-        className="px-4 py-3.5 text-white flex items-center justify-between"
+        className="px-4 py-3.5 text-white flex items-center gap-2.5"
         style={{
           backgroundColor: '#B71C1C',
           backgroundImage: 'linear-gradient(135deg, #B71C1C 0%, #7F0E0E 100%)',
         }}
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-white/20 border border-white/25 flex items-center justify-center shrink-0">
-            <Building className="w-4 h-4 text-amber-300" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-black text-white truncate uppercase tracking-wide">
-              QUẢN LÝ CÔNG VĂN
-            </div>
+        <div className="w-8 h-8 rounded-xl bg-white/20 border border-white/25 flex items-center justify-center shrink-0">
+          <Building className="w-4 h-4 text-amber-300" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-black text-white truncate uppercase tracking-wide">
+            QUẢN LÝ CÔNG VĂN
           </div>
         </div>
-
-        {/* ⭐ Nút thu gọn */}
-        <button
-          onClick={onToggleCollapse}
-          className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition cursor-pointer shrink-0"
-          title="Thu gọn menu"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
       </div>
 
       {/* MENU */}
@@ -137,7 +90,6 @@ export const VtSidebar: React.FC<VtSidebarProps> = ({
     </aside>
   );
 };
-
 // ... (giữ nguyên MenuItem ở dưới)
 
 // ============================================

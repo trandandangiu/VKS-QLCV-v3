@@ -244,6 +244,7 @@ export const dispatchesService = {
       soCongVan,
       tenCongVan,
       ngayGui,
+      ngayVanBan,
       ngayPhatHanh,
       hanBaoCaoXuLy,
       donViBanHanh,
@@ -277,6 +278,7 @@ export const dispatchesService = {
         soCongVan,
         tenCongVan,
         ngayGui: ngayGui ? new Date(ngayGui) : new Date(),
+        ngayVanBan: ngayVanBan ? new Date(ngayVanBan) : null,
         ngayPhatHanh: ngayPhatHanh ? new Date(ngayPhatHanh) : null,
         hanBaoCaoXuLy: hanBaoCaoXuLy ? new Date(hanBaoCaoXuLy) : null,
         donViBanHanh,
@@ -442,6 +444,7 @@ export const dispatchesService = {
       'soCongVan',
       'tenCongVan',
       'ngayGui',
+      'ngayVanBan',
       'ngayPhatHanh',
       'hanBaoCaoXuLy',
       'donViBanHanh',
@@ -457,6 +460,7 @@ export const dispatchesService = {
       if (data[field] !== undefined) {
         if (
           field === 'ngayGui' ||
+          field === 'ngayVanBan' ||
           field === 'ngayPhatHanh' ||
           field === 'hanBaoCaoXuLy'
         ) {

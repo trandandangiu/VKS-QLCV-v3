@@ -35,6 +35,7 @@ interface DepartmentOption {
 
 const DEFAULT_FORM: Partial<Dispatch> = {
   ngayGui: new Date().toISOString().slice(0, 10),
+  ngayVanBan: '',
   soCongVan: '',
   ngayPhatHanh: new Date().toISOString().slice(0, 10),
   tenCongVan: '',
@@ -619,6 +620,14 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                 value={formData.soCongVan || ''}
                 onChange={e => setFormData({ ...formData, soCongVan: e.target.value })}
                 placeholder=""
+                className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+              />
+            </Field>
+            {/* ⭐ NGÀY VĂN BẢN — MỚI */}
+            <Field label="NGÀY VĂN BẢN">
+              <DateInput
+                value={formData.ngayVanBan}
+                onChange={v => setFormData({ ...formData, ngayVanBan: v })}
                 className="w-full h-8 px-2.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               />
             </Field>

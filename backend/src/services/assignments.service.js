@@ -1,9 +1,11 @@
 // backend/src/services/assignments.service.js
 import prisma from '../config/prisma.js';
+import { createAndPushNotification } from './notification.helper.js';
 
 export const assignmentsService = {
   // ============================================
-  // 1. VT GIAO CHO 1-N PVT
+  // 1. VT GIAO/CHUYỂN PVT
+  //    Cho phép ở MỌI trạng thái (trừ công văn đã xóa)
   // ============================================
   async assignPvts(dispatchId, data, currentUser) {
     const { pvts, vtChiDao, hanBaoCaoXuLy, mucDoKhan } = data;
@@ -20,8 +22,24 @@ export const assignmentsService = {
       throw { status: 404, message: 'Không tìm thấy công văn' };
     }
 
-    if (dispatch.trangThai !== 'MOI_TAO' && dispatch.trangThai !== 'VT_TRA_LAI') {
-      throw { status: 400, message: 'Công văn không ở trạng thái có thể giao' };
+    // ⭐ Cho phép chuyển PVT ở mọi trạng thái
+    const validPvtStatuses = [
+      'MOI_TAO',
+      'CHO_PVT_XU_LY',
+      'CHO_TP_XU_LY',
+      'DANG_XU_LY',
+      'CHO_PVT_DUYET',
+      'CHO_VT_DUYET',
+      'PVT_TRA_LAI',
+      'VT_TRA_LAI',
+      'HOAN_THANH',
+    ];
+
+    if (!validPvtStatuses.includes(dispatch.trangThai)) {
+      throw {
+        status: 400,
+        message: `Công văn đang ở trạng thái "${dispatch.trangThai}", không thể giao PVT`,
+      };
     }
 
     // Validate PVT tồn tại + có role
@@ -69,11 +87,15 @@ export const assignmentsService = {
         })),
       });
 
-      // Cập nhật dispatch
+      // ⭐ Giữ nguyên HOAN_THANH nếu đang HOAN_THANH
+      const newStatus = dispatch.trangThai === 'HOAN_THANH'
+        ? 'HOAN_THANH'
+        : 'CHO_PVT_XU_LY';
+
       await tx.dispatch.update({
         where: { id: dispatchId },
         data: {
-          trangThai: 'CHO_PVT_XU_LY',
+          trangThai: newStatus,
           vtChiDao: vtChiDao || dispatch.vtChiDao,
           hanBaoCaoXuLy: hanBaoCaoXuLy
             ? new Date(hanBaoCaoXuLy)
@@ -85,7 +107,7 @@ export const assignmentsService = {
         },
       });
 
-      // ⭐ Log cho TỪNG PVT
+      // Log + thông báo cho TỪNG PVT
       for (const pvt of pvts) {
         await tx.assignment.create({
           data: {
@@ -102,9 +124,42 @@ export const assignmentsService = {
             status: 'PENDING',
           },
         });
+
+        await createAndPushNotification(tx, {
+          userId: pvt.pvtId,
+          dispatchId,
+          type: 'TASK_ASSIGNED',
+          title: '📋 Công văn được chuyển',
+          content: `${currentUser.fullName} đã chuyển công văn ${dispatch.soCongVan} cho bạn${
+            vtChiDao ? `: "${vtChiDao}"` : ''
+          }`,
+        });
       }
 
-      // Audit log
+      // Thông báo cho tất cả VT khác
+      const allVienTruongs = await tx.user.findMany({
+        where: {
+          deletedAt: null,
+          active: true,
+          id: { not: currentUser.id },
+          userRoles: {
+            some: { role: { code: 'VIEN_TRUONG' } },
+          },
+        },
+        select: { id: true, fullName: true },
+      });
+
+      const pvtNames = pvts.map(p => p.pvtName).join(', ');
+      for (const vt of allVienTruongs) {
+        await createAndPushNotification(tx, {
+          userId: vt.id,
+          dispatchId,
+          type: 'TASK_ASSIGNED',
+          title: '📋 Phân công mới',
+          content: `${currentUser.fullName} đã chuyển công văn ${dispatch.soCongVan} cho ${pvtNames}`,
+        });
+      }
+
       await tx.auditLog.create({
         data: {
           userId: currentUser.id,
@@ -126,7 +181,8 @@ export const assignmentsService = {
   },
 
   // ============================================
-  // 2. PVT GIAO CHO 1-N TP
+  // 2. PVT GIAO TP
+  //    Cho phép ở MỌI trạng thái (trừ công văn đã xóa)
   // ============================================
   async assignTps(dispatchId, data, currentUser) {
     const { tps, pvtChiDao, hanBaoCaoXuLy } = data;
@@ -155,7 +211,7 @@ export const assignmentsService = {
       throw { status: 403, message: 'Bạn không được giao công văn này' };
     }
 
-    // Check trạng thái
+    // ⭐ Cho phép giao TP ở mọi trạng thái
     const validStatuses = [
       'MOI_TAO',
       'CHO_PVT_XU_LY',
@@ -165,14 +221,8 @@ export const assignmentsService = {
       'CHO_VT_DUYET',
       'PVT_TRA_LAI',
       'VT_TRA_LAI',
+      'HOAN_THANH',
     ];
-
-    if (dispatch.trangThai === 'HOAN_THANH') {
-      throw {
-        status: 400,
-        message: 'Công văn đã hoàn thành, không thể giao Trưởng phòng',
-      };
-    }
 
     if (!validStatuses.includes(dispatch.trangThai)) {
       throw {
@@ -223,11 +273,15 @@ export const assignmentsService = {
         })),
       });
 
-      // Cập nhật dispatch
+      // ⭐ Giữ nguyên HOAN_THANH nếu đang HOAN_THANH
+      const newStatus = dispatch.trangThai === 'HOAN_THANH'
+        ? 'HOAN_THANH'
+        : 'CHO_TP_XU_LY';
+
       await tx.dispatch.update({
         where: { id: dispatchId },
         data: {
-          trangThai: 'CHO_TP_XU_LY',
+          trangThai: newStatus,
           pvtChiDao,
           assignedTpId: tps[0].tpId,
           assignedTpName: tps[0].tpName,
@@ -249,7 +303,7 @@ export const assignmentsService = {
         });
       }
 
-      // ⭐ Log cho TỪNG TP
+      // Log + thông báo cho TỪNG TP
       for (const tp of tps) {
         await tx.assignment.create({
           data: {
@@ -264,6 +318,42 @@ export const assignmentsService = {
             chiDao: pvtChiDao,
             status: 'PENDING',
           },
+        });
+
+        await createAndPushNotification(tx, {
+          userId: tp.tpId,
+          dispatchId,
+          type: 'TASK_ASSIGNED',
+          title: '📋 Công văn được chuyển',
+          content: `${currentUser.fullName} đã chuyển công văn ${dispatch.soCongVan} cho bạn${
+            pvtChiDao ? `: "${pvtChiDao}"` : ''
+          }`,
+        });
+      }
+
+      // Thông báo cho tất cả VT
+      const vtFilter = isVienTruong
+        ? { id: { not: currentUser.id } }
+        : {};
+
+      const allVienTruongs = await tx.user.findMany({
+        where: {
+          deletedAt: null,
+          active: true,
+          userRoles: { some: { role: { code: 'VIEN_TRUONG' } } },
+          ...vtFilter,
+        },
+        select: { id: true, fullName: true },
+      });
+
+      const tpNames = tps.map(t => t.tpName).join(', ');
+      for (const vt of allVienTruongs) {
+        await createAndPushNotification(tx, {
+          userId: vt.id,
+          dispatchId,
+          type: 'TASK_ASSIGNED',
+          title: '📋 Phân công mới',
+          content: `${currentUser.fullName} đã chuyển công văn ${dispatch.soCongVan} cho ${tpNames}`,
         });
       }
 
@@ -406,6 +496,14 @@ export const assignmentsService = {
         },
       });
 
+      await createAndPushNotification(tx, {
+        userId: tp.assignedByPvtId,
+        dispatchId,
+        type: 'REPORT_SUBMITTED',
+        title: '📝 Trưởng phòng đã báo cáo',
+        content: `TP ${currentUser.fullName} đã gửi báo cáo cho công văn ${dispatch.soCongVan}`,
+      });
+
       await tx.auditLog.create({
         data: {
           userId: currentUser.id,
@@ -467,7 +565,6 @@ export const assignmentsService = {
         },
       });
 
-      // Lấy VT đầu tiên (hoặc tất cả VT) để gửi thông báo
       const allVienTruongs = await tx.user.findMany({
         where: {
           deletedAt: null,
@@ -491,6 +588,14 @@ export const assignmentsService = {
             chiDao: pvtChiDao,
             status: 'PENDING',
           },
+        });
+
+        await createAndPushNotification(tx, {
+          userId: vt.id,
+          dispatchId,
+          type: 'REPORT_SUBMITTED',
+          title: '📤 PVT đã trình công văn',
+          content: `${currentUser.fullName} đã trình công văn ${dispatch.soCongVan} lên Viện trưởng`,
         });
       }
 
@@ -541,6 +646,16 @@ export const assignmentsService = {
           completedAt: new Date(),
         },
       });
+
+      for (const pvt of dispatch.dispatchPvts) {
+        await createAndPushNotification(tx, {
+          userId: pvt.pvtId,
+          dispatchId,
+          type: 'APPROVED',
+          title: '✅ Viện trưởng đã đồng ý',
+          content: `Công văn ${dispatch.soCongVan} đã được Viện trưởng đồng ý`,
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -603,6 +718,14 @@ export const assignmentsService = {
             reason,
             category: 'CONTENT',
           },
+        });
+
+        await createAndPushNotification(tx, {
+          userId: primaryPvt.pvtId,
+          dispatchId,
+          type: 'REJECTED',
+          title: '❌ Viện trưởng không đồng ý',
+          content: `Công văn ${dispatch.soCongVan}: ${reason}`,
         });
       }
 
@@ -690,6 +813,14 @@ export const assignmentsService = {
               reason,
               category: 'CONTENT',
             },
+          });
+
+          await createAndPushNotification(tx, {
+            userId: tp.tpId,
+            dispatchId,
+            type: 'REJECTED',
+            title: '❌ PVT không đồng ý',
+            content: `Công văn ${dispatch.soCongVan}: ${reason}`,
           });
         }
       }

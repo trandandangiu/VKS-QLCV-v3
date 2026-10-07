@@ -41,6 +41,7 @@ interface DepartmentOption {
 
 const DEFAULT_FORM = {
   ngayGui: new Date().toISOString().slice(0, 10),
+  ngayVanBan: '',
   soCongVan: '',
   tenCongVan: '',
   donViBanHanh: '',
@@ -135,6 +136,7 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
     if (chuyenDeToEdit) {
       setFormData({
         ngayGui: chuyenDeToEdit.ngayGui || new Date().toISOString().slice(0, 10),
+        ngayVanBan: chuyenDeToEdit.ngayVanBan || '',
         soCongVan: chuyenDeToEdit.soCongVan || '',
         tenCongVan: chuyenDeToEdit.tenCongVan || '',
         donViBanHanh: chuyenDeToEdit.donViBanHanh || '',
@@ -433,6 +435,17 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
                   />
                 </Field>
 
+                {/* ⭐ NGÀY VĂN BẢN */}
+                <Field label="NGÀY VĂN BẢN">
+                  <input
+                    type="date"
+                    value={formData.ngayVanBan}
+                    onChange={e => setFormData({ ...formData, ngayVanBan: e.target.value })}
+                    className="w-full h-9 px-3 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  />
+                </Field>
+
+
                 <Field label="NGÀY TIẾP NHẬN" required>
                   <input
                     type="date"
@@ -654,10 +667,10 @@ export const ChuyenDeModal: React.FC<ChuyenDeModalProps> = ({
         <div className="fixed bottom-6 right-6 z-[80] animate-fadeIn">
           <div
             className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
-                ? 'bg-slate-900 text-white border-slate-700'
-                : toast.type === 'error'
-                  ? 'bg-rose-600 text-white border-rose-700'
-                  : 'bg-blue-600 text-white border-blue-700'
+              ? 'bg-slate-900 text-white border-slate-700'
+              : toast.type === 'error'
+                ? 'bg-rose-600 text-white border-rose-700'
+                : 'bg-blue-600 text-white border-blue-700'
               }`}
           >
             {toast.type === 'success' && (

@@ -176,6 +176,7 @@ model Dispatch {
   // Thông tin
   tenCongVan    String    @map("ten_cong_van")
   ngayGui       DateTime? @map("ngay_gui") @db.Date
+  ngayVanBan   DateTime? @map("ngay_van_ban") @db.Date  
   ngayPhatHanh  DateTime? @map("ngay_phat_hanh") @db.Date
   hanBaoCaoXuLy DateTime? @map("han_bao_cao_xu_ly") @db.Date
   thoiHanXuLy   String?   @map("thoi_han_xu_ly")

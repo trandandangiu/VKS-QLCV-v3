@@ -133,6 +133,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
   const [form, setForm] = useState({
     tenCongVan: '',
     donViBanHanh: '',
+    ngayVanBan: '',
     hanBaoCaoXuLy: '',
     ghiChu: '',
     assignedPvtId: '',
@@ -158,6 +159,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
       setForm({
         tenCongVan: dispatch.tenCongVan || '',
         donViBanHanh: dispatch.donViBanHanh || '',
+        ngayVanBan: toDateInput(dispatch.ngayVanBan),
         hanBaoCaoXuLy: toDateInput(dispatch.hanBaoCaoXuLy),
         ghiChu: dispatch.ghiChu || '',
         assignedPvtId: dispatch.assignedPvtId || '',
@@ -307,6 +309,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
       const payload: Partial<Dispatch> = {
         tenCongVan: form.tenCongVan.trim(),
         donViBanHanh: form.donViBanHanh.trim(),
+        ngayVanBan: form.ngayVanBan || undefined,
         hanBaoCaoXuLy: form.hanBaoCaoXuLy || undefined,
         ghiChu: form.ghiChu,
         nguoiThucHien: form.nguoiThucHien.trim() || undefined,
@@ -625,10 +628,26 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                 )}
               </Field>
 
-              <div className="grid grid-cols-3 gap-2">
-                <MiniField label="Ngày ban hành">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <MiniField label="Ngày văn bản">
+                  {isEditing ? (
+                    <input
+                      type="date"
+                      value={form.ngayVanBan}
+                      onChange={e => updateField('ngayVanBan', e.target.value)}
+                      className={inputCls}
+                    />
+                  ) : (
+                    <span className="text-slate-800">
+                      {formatDateVN(d.ngayVanBan)}
+                    </span>
+                  )}
+                </MiniField>
+
+                <MiniField label="Ngày tiếp nhận">
                   <span className="text-slate-800">{formatDateVN(d.ngayGui)}</span>
                 </MiniField>
+
                 <MiniField label="Hạn báo cáo">
                   {isEditing ? (
                     <input
@@ -643,6 +662,7 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
                     </span>
                   )}
                 </MiniField>
+
                 <MiniField label="Tình trạng">
                   <span className={`font-bold ${statusTone}`}>
                     {statusInfo.text}
@@ -980,10 +1000,10 @@ export const DispatchDetailDrawer: React.FC<DispatchDetailDrawerProps> = ({
         <div className="fixed bottom-6 right-6 z-[70]">
           <div
             className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-bold border ${toast.type === 'success'
-                ? 'bg-slate-900 text-white border-slate-700'
-                : toast.type === 'error'
-                  ? 'bg-rose-600 text-white border-rose-700'
-                  : 'bg-blue-600 text-white border-blue-700'
+              ? 'bg-slate-900 text-white border-slate-700'
+              : toast.type === 'error'
+                ? 'bg-rose-600 text-white border-rose-700'
+                : 'bg-blue-600 text-white border-blue-700'
               }`}
           >
             {toast.type === 'success' && (

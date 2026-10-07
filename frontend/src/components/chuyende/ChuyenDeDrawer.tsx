@@ -94,6 +94,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
     soCongVan: '',
     tenCongVan: '',
     donViBanHanh: '',
+    ngayVanBan: '',
     ngayGui: '',
     nguoiThucHien: '',
     ghiChu: '',
@@ -141,6 +142,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
         soCongVan: chuyenDe.soCongVan || '',
         tenCongVan: chuyenDe.tenCongVan || '',
         donViBanHanh: chuyenDe.donViBanHanh || '',
+        ngayVanBan: toDateInput(chuyenDe.ngayVanBan),
         ngayGui: toDateInput(chuyenDe.ngayGui),
         nguoiThucHien: chuyenDe.nguoiThucHien || '',
         ghiChu: chuyenDe.ghiChu || '',
@@ -315,6 +317,7 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
         soCongVan: form.soCongVan.trim(),
         tenCongVan: form.tenCongVan.trim(),
         donViBanHanh: form.donViBanHanh.trim(),
+        ngayVanBan: form.ngayVanBan || undefined,
         ngayGui: form.ngayGui || undefined,
         nguoiThucHien: form.nguoiThucHien.trim() || undefined,
         ghiChu: form.ghiChu,
@@ -662,7 +665,21 @@ export const ChuyenDeDrawer: React.FC<ChuyenDeDrawerProps> = ({
                   </span>
                 )}
               </Field>
-
+              {/* ⭐ NGÀY VĂN BẢN */}
+              <Field label="Ngày văn bản" icon={Calendar}>
+                {isEditing ? (
+                  <input
+                    type="date"
+                    value={form.ngayVanBan}
+                    onChange={e => updateField('ngayVanBan', e.target.value)}
+                    className={inputCls}
+                  />
+                ) : (
+                  <span className="text-slate-800">
+                    {formatChuyenDeDate(localCD.ngayVanBan)}
+                  </span>
+                )}
+              </Field>
               <Field label="Ngày tiếp nhận" icon={Calendar}>
                 {isEditing ? (
                   <input

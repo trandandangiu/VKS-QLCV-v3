@@ -253,7 +253,7 @@ export const PublicDesktopTable: React.FC<Props> = ({
   };
 
   // ⭐ Số cột: 10 cột cơ bản + 1 cột File = 11
-  const totalCols = 10 + (showFileColumn ? 1 : 0);
+  const totalCols = 11 + (showFileColumn ? 1 : 0);
 
   return (
     <div
@@ -274,6 +274,12 @@ export const PublicDesktopTable: React.FC<Props> = ({
               className="w-[9%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
             >
               Số / Ký hiệu VB
+            </th>
+            <th
+              rowSpan={2}
+              className="w-[7%] px-2 py-3 text-[10px] font-bold uppercase tracking-wide border-r-2 border-red-800 select-none text-center align-middle bg-[#B71C1C]"
+            >
+              Ngày văn bản
             </th>
             <th
               rowSpan={2}
@@ -395,6 +401,13 @@ export const PublicDesktopTable: React.FC<Props> = ({
                         </span>
                       )}
                     </div>
+                  </td>
+
+                  {/* ⭐ 3. NGÀY VĂN BẢN — MỚI */}
+                  <td className="px-2 py-4 border-r border-slate-100 align-middle">
+                    <span className="text-[12px] text-slate-800 font-medium">
+                      {formatDate(disp.ngayVanBan) || '—'}
+                    </span>
                   </td>
 
                   {/* 3. Ngày tiếp nhận */}
